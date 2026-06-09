@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Default permissions for the KuroStep desktop widget","remote":{"urls":["https://song991123.github.io/KuroStep/"]},"local":true,"windows":["main","lyrics"],"permissions":["core:default","core:window:allow-close","core:window:allow-minimize","core:window:allow-start-dragging","core:window:allow-toggle-maximize"]}}

@@ -1,0 +1,80 @@
+:root {
+  color-scheme: light;
+  --bg-cream: #f7f5f0;
+  --text-charcoal: #2d2d2d;
+  --muted: #5a5a5a;
+  --point-gold: #e6b91e;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: transparent;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+body {
+  display: grid;
+  place-items: start center;
+  user-select: none;
+}
+
+.lyrics-overlay {
+  width: min(720px, 100vw);
+  padding: 24px 24px 16px;
+  text-align: center;
+  cursor: move;
+  -webkit-app-region: drag;
+  animation: floatDown 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.lyric-line,
+.lyric-translation {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow:
+    -1px -1px 0 var(--bg-cream),
+     1px -1px 0 var(--bg-cream),
+    -1px  1px 0 var(--bg-cream),
+     1px  1px 0 var(--bg-cream),
+     0 2px 8px rgb(0 0 0 / 10%);
+}
+
+.lyric-line {
+  color: var(--text-charcoal);
+  font-size: 18px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.lyric-translation {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 15px;
+  font-style: italic;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+@keyframes floatDown {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
