@@ -2,6 +2,8 @@
 
 재택 창작자가 오늘 작업, BGM, 플레이리스트, 재생 가사, 번역 메모를 한 창에서 확인하는 작은 macOS Tauri 데스크톱 위젯입니다.
 
+GitHub Pages: https://song991123.github.io/KuroStep/
+
 ## 폴더 구조
 
 ```txt
