@@ -160,25 +160,11 @@ display: grid;
 place-items: center;
 }
 .paw-print {
-position: relative;
-width: 16px;
-height: 14px;
-transform: rotate(-10deg);
-}
-.paw-print span {
-position: absolute;
 display: block;
-background-color: var(--cat-black);
+width: 14px;
+height: 14px;
+object-fit: contain;
 }
-.paw-print span:nth-child(1) {
-width: 9px; height: 7px;
-left: 3.5px; bottom: 0;
-border-radius: 40% 40% 50% 50%;
-}
-.paw-print span:nth-child(2) { width: 3.5px; height: 4.5px; left: 0; top: 4px; border-radius: 50%; transform: rotate(-30deg); }
-.paw-print span:nth-child(3) { width: 4px; height: 5px; left: 3px; top: 0; border-radius: 50%; transform: rotate(-10deg); }
-.paw-print span:nth-child(4) { width: 4px; height: 5px; right: 3px; top: 0; border-radius: 50%; transform: rotate(10deg); }
-.paw-print span:nth-child(5) { width: 3.5px; height: 4.5px; right: 0; top: 4px; border-radius: 50%; transform: rotate(30deg); }
 .cat-tail {
 position: absolute;
 width: 40px;
@@ -296,9 +282,7 @@ box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);
 <div class="cat-tail"></div>
 <div class="record">
 <span class="record-label">
-<span class="paw-print" aria-hidden="true">
-<span></span><span></span><span></span><span></span><span></span>
-</span>
+<img class="paw-print" src="./assets/paw-print.svg" alt="" aria-hidden="true">
 </span>
 </div>
 <div class="track-info">
