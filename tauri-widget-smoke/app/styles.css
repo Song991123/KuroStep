@@ -131,11 +131,16 @@ textarea {
 
 .widget-content {
   height: calc(100% - 30px);
-  overflow: hidden;
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+.widget-content::-webkit-scrollbar {
+  display: none;
 }
 
 .widget-section {
-  padding: 13px 16px;
+  padding: 11px 16px;
   border-bottom: 1px dotted var(--border-light);
   animation: shimmerBorder 1.2s ease-out forwards;
 }
@@ -159,12 +164,12 @@ textarea {
 }
 
 .section-head {
-  min-height: 26px;
+  min-height: 23px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 7px;
+  margin-bottom: 5px;
 }
 
 .section-title {
@@ -205,8 +210,8 @@ textarea {
 .button-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 9px;
+  gap: 5px;
+  margin-top: 7px;
 }
 
 .task-header {
@@ -267,7 +272,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 7px 0 2px;
+  padding: 5px 0 1px;
 }
 
 .record {
@@ -371,8 +376,8 @@ textarea {
 .track-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 5px;
+  margin-top: 7px;
 }
 
 .playlist-list {
@@ -384,7 +389,7 @@ textarea {
 }
 
 .playlist-item {
-  min-height: 28px;
+  min-height: 25px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -437,18 +442,53 @@ textarea {
   font-variant-numeric: tabular-nums;
 }
 
-.lyric-box {
+.lyric-display {
+  min-height: 50px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
   margin: 0 0 8px;
-  padding: 10px;
+  padding: 7px 10px;
   border-left: 3px solid var(--cat-black);
   border-radius: 6px;
   background-color: var(--panel-cream);
+  animation: slideUpFade 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards;
+  opacity: 0;
+}
+
+.lyric-time {
+  color: var(--point-gold);
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.lyric-lines {
+  min-width: 0;
+}
+
+.lyric-line,
+.lyric-translation {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lyric-line {
   color: var(--text-charcoal);
   font-size: 13px;
   font-style: italic;
+  font-weight: 650;
   line-height: 1.35;
-  animation: slideUpFade 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards;
-  opacity: 0;
+}
+
+.lyric-translation {
+  margin-top: 3px;
+  color: #5a5a5a;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 @keyframes slideUpFade {
@@ -473,8 +513,8 @@ textarea {
 
 .memo-input {
   width: 100%;
-  min-height: 44px;
-  max-height: 54px;
+  min-height: 38px;
+  max-height: 44px;
   border: 1px solid var(--border-light);
   border-radius: 6px;
   display: block;
