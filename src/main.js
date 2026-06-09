@@ -13,7 +13,7 @@ const DEMO_TRACK = {
   sourceId: "dQw4w9WgXcQ",
   durationSeconds: 214,
 };
-const YOUTUBE_APP_ORIGIN = "https://dev.local.kurostep-widget";
+const YOUTUBE_APP_ORIGIN = window.location.origin;
 
 const appState = {
   auth: readJson("kurostep.auth"),
