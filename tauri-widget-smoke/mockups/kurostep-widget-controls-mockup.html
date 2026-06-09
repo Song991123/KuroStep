@@ -164,7 +164,7 @@
     width: 60px;
     height: 60px;
     background:
-      radial-gradient(circle at center, var(--point-gold) 0 10px, transparent 11px),
+      radial-gradient(circle at center, transparent 0 10px, #111 11px 13px, transparent 14px),
       repeating-radial-gradient(circle at center, #1a1a1a 0 7px, #242321 8px 10px);
     border-radius: 50%;
     position: absolute;
@@ -174,87 +174,60 @@
     transition: transform 0.3s ease;
   }
 
-  .record::before,
-  .record::after {
-    content: '';
-    position: absolute;
-    top: -7px;
-    width: 16px;
-    height: 18px;
-    background-color: var(--cat-black);
-    clip-path: polygon(50% 0, 0 100%, 100% 100%);
-    transform-origin: bottom center;
-  }
-
-  .record::before {
-    left: 8px;
-    transform: rotate(-16deg);
-  }
-
-  .record::after {
-    right: 8px;
-    transform: rotate(16deg);
-  }
-
   .record-label {
     position: absolute;
-    inset: 20px;
+    inset: 19px;
     border-radius: 50%;
     background-color: var(--point-gold);
+    z-index: 2;
   }
 
   .paw-print {
     position: absolute;
-    right: 12px;
-    bottom: 13px;
-    width: 17px;
-    height: 16px;
-    transform: rotate(-18deg);
+    left: 50%;
+    top: 50%;
+    width: 16px;
+    height: 15px;
+    transform: translate(-50%, -50%) rotate(-14deg);
     opacity: 0.9;
+    z-index: 3;
   }
 
   .paw-print span {
     position: absolute;
     display: block;
-    background-color: var(--bg-cream);
+    background-color: var(--cat-black);
     border-radius: 50%;
   }
 
-  .paw-print span:nth-child(1) { width: 8px; height: 7px; left: 5px; bottom: 0; }
-  .paw-print span:nth-child(2) { width: 4px; height: 5px; left: 1px; top: 4px; }
+  .paw-print span:nth-child(1) { width: 8px; height: 7px; left: 4px; bottom: 0; }
+  .paw-print span:nth-child(2) { width: 4px; height: 5px; left: 0; top: 5px; }
   .paw-print span:nth-child(3) { width: 4px; height: 5px; left: 6px; top: 1px; }
-  .paw-print span:nth-child(4) { width: 4px; height: 5px; right: 1px; top: 4px; }
+  .paw-print span:nth-child(4) { width: 4px; height: 5px; right: 0; top: 5px; }
 
   .cat-tail {
     position: absolute;
-    width: 50px;
-    height: 44px;
-    left: 32px;
-    top: 3px;
+    width: 40px;
+    height: 12px;
+    background-color: var(--cat-black);
+    border-radius: 10px;
+    left: 45px;
+    top: 20px;
     z-index: 1;
-    transform-origin: 5px 38px;
-    transform: rotate(42deg) translate(-12px, 18px) scale(0.65);
-    transition:
-      opacity 0.18s ease,
-      transform 0.48s cubic-bezier(0.175, 0.885, 0.32, 1.16);
+    transform-origin: left center;
+    transform: rotate(45deg) translateY(10px);
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     opacity: 0;
   }
 
-  .cat-tail::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-top: 10px solid var(--cat-black);
-    border-right: 10px solid var(--cat-black);
-    border-radius: 0 40px 0 0;
-  }
-
+  .player-area:hover .record,
   .player-area.playing .record {
     animation: spin 4s linear infinite;
   }
 
+  .player-area:hover .cat-tail,
   .player-area.playing .cat-tail {
-    transform: rotate(-18deg) translate(-1px, 1px) scale(1);
+    transform: rotate(0deg) translateY(0);
     opacity: 1;
   }
 
