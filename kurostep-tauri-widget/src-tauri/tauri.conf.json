@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Tauri Widget Smoke",
+  "productName": "KuroStep Widget",
   "version": "0.1.0",
-  "identifier": "dev.local.tauri-widget-smoke",
+  "identifier": "dev.local.kurostep-widget",
   "build": {
     "beforeDevCommand": "",
     "beforeBuildCommand": "",
-    "frontendDist": "../app"
+    "frontendDist": "../src"
   },
   "app": {
     "macOSPrivateApi": true,
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Tauri Widget Smoke",
+        "title": "KuroStep Widget",
         "width": 380,
         "height": 660,
         "minWidth": 360,
@@ -35,6 +35,6 @@
   "bundle": {
     "active": true,
     "targets": "app",
-    "icon": []
+    "icon": ["icons/icon.png"]
   }
 }
