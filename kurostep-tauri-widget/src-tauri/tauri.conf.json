@@ -26,6 +26,23 @@
         "skipTaskbar": true,
         "center": true,
         "shadow": true
+      },
+      {
+        "label": "lyrics",
+        "title": "KuroStep Lyrics",
+        "url": "lyrics.html",
+        "width": 760,
+        "height": 128,
+        "minWidth": 420,
+        "minHeight": 96,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "center": true,
+        "shadow": false
       }
     ],
     "security": {

@@ -20,6 +20,7 @@ export function PlayerWidget(track) {
           <div class="track-actions">
             <button class="action-button" type="button">현재곡 변경</button>
             <button class="action-button" type="button">링크 열기</button>
+            <button class="action-button subtitle-toggle" id="subtitle-toggle" type="button" aria-pressed="false">자막 OFF</button>
           </div>
         </div>
       </div>

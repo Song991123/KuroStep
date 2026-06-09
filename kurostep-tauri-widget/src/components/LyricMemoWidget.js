@@ -3,20 +3,18 @@ import { escapeHtml } from "./html.js";
 
 export function LyricMemoWidget(lyricMemo) {
   return `
-    <section class="widget-section lyric-memo-widget" aria-labelledby="lyric-memo-title">
-      ${SectionHeader("LYRIC", "라인 선택")}
-      <div class="lyric-display" id="lyric-memo-title" aria-live="polite">
-        <span class="lyric-time">${escapeHtml(lyricMemo.timestamp)}</span>
-        <div class="lyric-lines">
-          <p class="lyric-line">"${escapeHtml(lyricMemo.line)}"</p>
-          <p class="lyric-translation">「${escapeHtml(lyricMemo.translation)}」</p>
-        </div>
-      </div>
+    <section class="widget-section lyric-memo-widget" aria-labelledby="translation-memo-title">
+      ${SectionHeader("TRANSLATION MEMO", "라인 선택")}
+      <p class="memo-context" id="translation-memo-title">
+        <span>${escapeHtml(lyricMemo.timestamp)}</span>
+        "${escapeHtml(lyricMemo.line)}"
+      </p>
       <label class="memo-label" for="translation-memo">한국어 번역 메모</label>
       <textarea class="memo-input" id="translation-memo" rows="2">${escapeHtml(lyricMemo.memo)}</textarea>
+      <p class="memo-save-state" id="memo-save-state" aria-live="polite"></p>
       <div class="button-row">
         <button class="action-button" type="button">메모 편집</button>
-        <button class="action-button primary" type="button">저장</button>
+        <button class="action-button primary" id="save-memo" type="button">저장</button>
       </div>
     </section>
   `;

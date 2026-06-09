@@ -36,9 +36,13 @@ textarea {
   font: inherit;
 }
 
+button {
+  -webkit-app-region: no-drag;
+}
+
 .widget-container {
   width: min(380px, 100vw);
-  height: min(660px, 100vh);
+  height: min(646px, 100vh);
   overflow: hidden;
   border: 1px solid rgb(45 45 45 / 6%);
   border-radius: 16px;
@@ -62,7 +66,7 @@ textarea {
 .mac-header {
   height: 30px;
   display: grid;
-  grid-template-columns: 64px 1fr 28px;
+  grid-template-columns: 64px 1fr 64px;
   align-items: center;
   gap: 8px;
   padding: 0 10px 0 16px;
@@ -75,12 +79,16 @@ textarea {
 .mac-dots {
   display: flex;
   gap: 6px;
+  -webkit-app-region: no-drag;
 }
 
 .mac-dot {
   width: 10px;
   height: 10px;
+  border: 0;
   border-radius: 50%;
+  padding: 0;
+  cursor: pointer;
   transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -107,26 +115,6 @@ textarea {
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.icon-button {
-  width: 24px;
-  height: 24px;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  background: transparent;
-  color: #8f8981;
-  cursor: pointer;
-  -webkit-app-region: no-drag;
-}
-
-.icon-button:hover {
-  border-color: var(--border-light);
-  background: var(--surface);
-  color: var(--cat-black);
 }
 
 .widget-content {
@@ -205,6 +193,12 @@ textarea {
   border-color: var(--cat-black);
   background: var(--cat-black);
   color: white;
+}
+
+.subtitle-toggle[aria-pressed="true"] {
+  border-color: var(--point-gold);
+  background: rgb(230 185 30 / 18%);
+  color: var(--cat-black);
 }
 
 .button-row {
@@ -442,53 +436,25 @@ textarea {
   font-variant-numeric: tabular-nums;
 }
 
-.lyric-display {
-  min-height: 50px;
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 8px;
-  padding: 7px 10px;
-  border-left: 3px solid var(--cat-black);
-  border-radius: 6px;
-  background-color: var(--panel-cream);
+.memo-context {
+  margin: 0 0 7px;
+  overflow: hidden;
+  color: #5a5a5a;
+  font-size: 12px;
+  font-style: italic;
+  font-weight: 650;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   animation: slideUpFade 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards;
   opacity: 0;
 }
 
-.lyric-time {
+.memo-context span {
+  margin-right: 6px;
   color: var(--point-gold);
-  font-size: 12px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-}
-
-.lyric-lines {
-  min-width: 0;
-}
-
-.lyric-line,
-.lyric-translation {
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.lyric-line {
-  color: var(--text-charcoal);
-  font-size: 13px;
-  font-style: italic;
-  font-weight: 650;
-  line-height: 1.35;
-}
-
-.lyric-translation {
-  margin-top: 3px;
-  color: #5a5a5a;
-  font-size: 12px;
-  line-height: 1.35;
 }
 
 @keyframes slideUpFade {
@@ -513,8 +479,8 @@ textarea {
 
 .memo-input {
   width: 100%;
-  min-height: 38px;
-  max-height: 44px;
+  min-height: 46px;
+  max-height: 56px;
   border: 1px solid var(--border-light);
   border-radius: 6px;
   display: block;
@@ -525,4 +491,12 @@ textarea {
   color: var(--text-charcoal);
   font-size: 13px;
   line-height: 1.35;
+}
+
+.memo-save-state {
+  min-height: 14px;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
 }

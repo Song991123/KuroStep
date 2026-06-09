@@ -24,6 +24,7 @@ const widgetState = {
     timestamp: "01:18",
     memo: "불을 낮추고, 조용함이 장면의 감정을 정하게 둔다. (분위기 전환 포인트)",
   },
+  lyricsOverlayVisible: false,
 };
 
 function escapeHtml(value) {
@@ -51,14 +52,13 @@ function sectionHeader(title, actionLabel) {
 function widgetShell(content) {
   return `
     <section class="widget-container">
-      <header class="mac-header" data-tauri-drag-region>
-        <div class="mac-dots" data-tauri-drag-region>
-          <span class="mac-dot dot-red"></span>
-          <span class="mac-dot dot-yellow"></span>
-          <span class="mac-dot dot-green"></span>
+      <header class="mac-header" id="window-drag-region" data-tauri-drag-region>
+        <div class="mac-dots">
+          <button class="mac-dot dot-red" id="window-close" type="button" aria-label="닫기"></button>
+          <button class="mac-dot dot-yellow" id="window-minimize" type="button" aria-label="최소화"></button>
+          <button class="mac-dot dot-green" id="window-zoom" type="button" aria-label="확대 또는 복원"></button>
         </div>
         <strong class="window-title" data-tauri-drag-region>KuroStep</strong>
-        <button class="icon-button close-button" id="close-widget" type="button" aria-label="닫기">×</button>
       </header>
       <div class="widget-content">
         ${content}
@@ -118,6 +118,9 @@ function playerWidget(track) {
           <div class="track-actions">
             <button class="action-button" type="button">현재곡 변경</button>
             <button class="action-button" type="button">링크 열기</button>
+            <button class="action-button subtitle-toggle" id="subtitle-toggle" type="button" aria-pressed="${widgetState.lyricsOverlayVisible}">
+              자막 ${widgetState.lyricsOverlayVisible ? "ON" : "OFF"}
+            </button>
           </div>
         </div>
       </div>
@@ -155,20 +158,18 @@ function playlistWidget(tracks) {
 
 function lyricMemoWidget(lyricMemo) {
   return `
-    <section class="widget-section lyric-memo-widget" aria-labelledby="lyric-memo-title">
-      ${sectionHeader("LYRIC", "라인 선택")}
-      <div class="lyric-display" id="lyric-memo-title" aria-live="polite">
-        <span class="lyric-time">${escapeHtml(lyricMemo.timestamp)}</span>
-        <div class="lyric-lines">
-          <p class="lyric-line">"${escapeHtml(lyricMemo.line)}"</p>
-          <p class="lyric-translation">「${escapeHtml(lyricMemo.translation)}」</p>
-        </div>
-      </div>
+    <section class="widget-section lyric-memo-widget" aria-labelledby="translation-memo-title">
+      ${sectionHeader("TRANSLATION MEMO", "라인 선택")}
+      <p class="memo-context" id="translation-memo-title">
+        <span>${escapeHtml(lyricMemo.timestamp)}</span>
+        "${escapeHtml(lyricMemo.line)}"
+      </p>
       <label class="memo-label" for="translation-memo">한국어 번역 메모</label>
       <textarea class="memo-input" id="translation-memo" rows="2">${escapeHtml(lyricMemo.memo)}</textarea>
+      <p class="memo-save-state" id="memo-save-state" aria-live="polite"></p>
       <div class="button-row">
         <button class="action-button" type="button">메모 편집</button>
-        <button class="action-button primary" type="button">저장</button>
+        <button class="action-button primary" id="save-memo" type="button">저장</button>
       </div>
     </section>
   `;
@@ -184,8 +185,9 @@ function render() {
     ${lyricMemoWidget(widgetState.lyricMemo)}
   `);
 
-  const closeButton = document.querySelector("#close-widget");
-  closeButton.addEventListener("click", closeWidget);
+  bindWindowControls();
+  bindSubtitleToggle();
+  bindMemoPersistence();
 }
 
 async function closeWidget() {
@@ -197,6 +199,89 @@ async function closeWidget() {
   }
 
   window.close();
+}
+
+function getCurrentWindow() {
+  return window.__TAURI__?.window?.getCurrentWindow?.();
+}
+
+async function minimizeWidget() {
+  const currentWindow = getCurrentWindow();
+
+  if (currentWindow?.minimize) {
+    await currentWindow.minimize();
+  }
+}
+
+async function toggleWidgetZoom() {
+  const currentWindow = getCurrentWindow();
+
+  if (currentWindow?.toggleMaximize) {
+    await currentWindow.toggleMaximize();
+  }
+}
+
+async function startWindowDrag() {
+  const currentWindow = getCurrentWindow();
+
+  if (currentWindow?.startDragging) {
+    await currentWindow.startDragging();
+  }
+}
+
+function bindWindowControls() {
+  document.querySelector("#window-close").addEventListener("click", closeWidget);
+  document.querySelector("#window-minimize").addEventListener("click", minimizeWidget);
+  document.querySelector("#window-zoom").addEventListener("click", toggleWidgetZoom);
+
+  document.querySelector("#window-drag-region").addEventListener("mousedown", (event) => {
+    if (event.target.closest("button")) {
+      return;
+    }
+
+    startWindowDrag();
+  });
+}
+
+async function setLyricsOverlayVisible(visible) {
+  widgetState.lyricsOverlayVisible = visible;
+
+  const invoke = window.__TAURI__?.core?.invoke;
+  if (invoke) {
+    await invoke("set_lyrics_visible", {
+      visible,
+      line: widgetState.lyricMemo.line,
+      translation: widgetState.lyricMemo.translation,
+    });
+  }
+
+  const button = document.querySelector("#subtitle-toggle");
+  button.textContent = `자막 ${visible ? "ON" : "OFF"}`;
+  button.setAttribute("aria-pressed", String(visible));
+}
+
+function bindSubtitleToggle() {
+  document.querySelector("#subtitle-toggle").addEventListener("click", async () => {
+    await setLyricsOverlayVisible(!widgetState.lyricsOverlayVisible);
+  });
+}
+
+function bindMemoPersistence() {
+  const memoInput = document.querySelector("#translation-memo");
+  const saveButton = document.querySelector("#save-memo");
+  const saveState = document.querySelector("#memo-save-state");
+  const savedMemo = window.localStorage.getItem("kurostep.translationMemo");
+
+  if (savedMemo) {
+    memoInput.value = savedMemo;
+    widgetState.lyricMemo.memo = savedMemo;
+  }
+
+  saveButton.addEventListener("click", () => {
+    widgetState.lyricMemo.memo = memoInput.value;
+    window.localStorage.setItem("kurostep.translationMemo", memoInput.value);
+    saveState.textContent = "로컬에 저장됨";
+  });
 }
 
 window.addEventListener("keydown", (event) => {
