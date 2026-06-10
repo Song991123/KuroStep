@@ -2048,7 +2048,7 @@ function updateGlobalControlsDom() {
 }
 
 function bindLinkImportAction() {
-  bindLinkImportAction();
+  document.querySelector("#register-track-link")?.addEventListener("click", registerTrackFromInputs);
 }
 
 function refreshLinkWidgetDom() {
