@@ -84,6 +84,7 @@ let youtubePlayerVideoId = "";
 let progressScrubbing = false;
 let draggedPlaylistTrackId = null;
 let syncedPawWindowVisible = null;
+let linkImportSequence = 0;
 
 function resetPlaybackPosition() {
   appState.playbackPositionSeconds = 0;
@@ -361,7 +362,7 @@ function todayIso() {
 
 async function api(path, options = {}) {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  let timeoutId;
   const headers = {
     "Content-Type": "application/json",
     ...(appState.auth?.accessToken ? { Authorization: `Bearer ${appState.auth.accessToken}` } : {}),
@@ -369,11 +370,19 @@ async function api(path, options = {}) {
   };
 
   try {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      ...options,
-      headers,
-      signal: controller.signal,
-    });
+    const response = await Promise.race([
+      fetch(`${API_BASE_URL}${path}`, {
+        ...options,
+        headers,
+        signal: controller.signal,
+      }),
+      new Promise((_, reject) => {
+        timeoutId = window.setTimeout(() => {
+          controller.abort();
+          reject(new Error("서버 응답이 너무 늦다냥. 잠깐 뒤 다시 시도해줘냥."));
+        }, API_TIMEOUT_MS);
+      }),
+    ]);
     const text = await response.text();
     const body = text ? safeJson(text) : null;
 
@@ -389,7 +398,7 @@ async function api(path, options = {}) {
     }
     throw error;
   } finally {
-    window.clearTimeout(timeout);
+    window.clearTimeout(timeoutId);
   }
 }
 
@@ -901,11 +910,21 @@ async function registerTrackFromInputs() {
     return;
   }
 
+  const importSequence = ++linkImportSequence;
   appState.linkSaving = true;
   appState.error = "";
   appState.notice = "YouTube 링크를 작업 바구니에 담는 중이냥...";
   refreshLinkWidgetDom();
   updatePlaybackDom();
+
+  const unlockTimer = window.setTimeout(() => {
+    if (appState.linkSaving && importSequence === linkImportSequence) {
+      appState.linkSaving = false;
+      appState.error = "링크 추가가 오래 걸려서 멈췄다냥. 같은 링크를 다시 눌러줘냥.";
+      refreshLinkWidgetDom();
+      updatePlaybackDom();
+    }
+  }, API_TIMEOUT_MS + METADATA_TIMEOUT_MS + 1500);
 
   try {
     await ensureAuth();
@@ -919,15 +938,23 @@ async function registerTrackFromInputs() {
     } else {
       await registerSingleTrackFromUrl(userId, sourceUrl, sourceId);
     }
+    if (importSequence !== linkImportSequence) {
+      return;
+    }
     appState.linkSaving = false;
     refreshLinkWidgetDom();
     refreshPlaylistWidgetDom();
     updatePlaybackDom();
   } catch (error) {
+    if (importSequence !== linkImportSequence) {
+      return;
+    }
     appState.error = error.message;
     appState.linkSaving = false;
     refreshLinkWidgetDom();
     updatePlaybackDom();
+  } finally {
+    window.clearTimeout(unlockTimer);
   }
 }
 
