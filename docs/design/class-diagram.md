@@ -4,7 +4,7 @@
 
 이 문서는 KuroStep의 주요 JPA Entity, Enum, Repository 관계를 구현 전에 확인하기 위한 클래스 다이어그램 문서이다.
 
-실제 구현 시 상세 컬럼 제약은 `KuroStep_Data_Dictionary.md`, 변수명은 `KuroStep_Naming_Guide.md`를 기준으로 한다.
+실제 구현 시 상세 컬럼 제약은 `data-dictionary.md`를 기준으로 한다. 초기 변수명 정리 메모는 공개 문서가 아닌 로컬 `_local-notes/naming-guide.md`에 보관한다.
 
 ## Entity Class Diagram
 

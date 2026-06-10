@@ -28,7 +28,7 @@ GitHub Pages 배포와 백엔드 CI는 성공했고, AWS EC2 배포를 위한 Te
 
 WBS 시각화 파일:
 
-- `02_백엔드세미용/KuroStep_WBS_Dashboard.html`
+- `docs/project-management/wbs-dashboard.html`
 
 실제 검증 로그:
 
@@ -90,8 +90,8 @@ draft 1 MYMEMORY AUTO_DRAFT 절대 포기하지 않을 거예요
 | 검증/Test | `./gradlew test` 통과 | 실제 검증 완료 | Gradle test 실행 결과 | 발표 전 최종 1회 재실행 |
 | 검증/HTTP | 전체 데모 시나리오 추가 | 실제 검증 완료 | `KuroStep/http/kurostep-demo.http` | 발표용 데모 순서로 정리 |
 | 검증/HTTP | 실제 HTTP 요청으로 MVP 흐름 검증 | 실제 검증 완료 | `KuroStep/http/kurostep-demo.http`, 실제 검증 로그 | Swagger 수동 확인과 연결 |
-| 문서/보고 | `KuroStep_MVP_Presentation_Assets.md` 생성 | 최소 구현 완료 | `02_백엔드세미용/KuroStep_MVP_Presentation_Assets.md` | 백엔드 최신 완료 범위 반영 |
-| 문서/보고 | 최종 보고 템플릿 일부 현실화 | 최소 구현 완료 | `02_백엔드세미용/KuroStep_Backend_Semi_Final_Template.md` | Docker/Swagger 수동 확인 결과가 생기면 추가 반영 |
+| 문서/보고 | 발표 자료 메모 생성 | 최소 구현 완료 | `docs/report/presentation-assets.md` | 백엔드 최신 완료 범위 반영 |
+| 문서/보고 | 최종 보고서 일부 현실화 | 최소 구현 완료 | `docs/report/final-report.md` | Docker/Swagger 수동 확인 결과가 생기면 추가 반영 |
 | 문서/보고 | 발표용 데모 시나리오 정리 | 진행 중 | `KuroStep/http/kurostep-demo.http` | Swagger 수동 확인 순서와 합치기 |
 | Tauri | 최소 위젯 API 연동 | 최소 구현 완료 | `kurostep-tauri-widget/src/main.js` | 발표 시 백엔드 API 응답이 위젯에 표시되는 흐름 설명 |
 | Tauri | 가사 오버레이 창 이벤트 연동 | 최소 구현 완료 | `kurostep-tauri-widget/src-tauri/src/lib.rs`, `src/lyrics.js` | 자막 ON/OFF와 현재 라인 전달 구조 설명 |
@@ -140,7 +140,7 @@ draft 1 MYMEMORY AUTO_DRAFT 절대 포기하지 않을 거예요
 
 - Tauri 로컬 번들 앱에서 YouTube iframe이 `tauri://localhost` origin으로 인식되어 `Error 153`이 발생한다.
 - 참고 스킨 파일 분석 결과, YouTube IFrame Player API를 사용하면서 iframe 컨테이너를 `display: none` 처리하고 커스텀 플레이어 UI만 보여주는 구조를 확인했다.
-- 로컬에 내려받은 `playlist_260404_0` 전체를 확인했고, 상세 분석은 `KuroStep_Reference_Playlist_Skin_Analysis.md`에 정리했다.
+- 로컬에 내려받은 `playlist_260404_0` 전체를 확인했고, 상세 분석은 `docs/design/reference-playlist-skin-analysis.md`에 정리했다.
 - 이 방식은 영상 화면과 영상 광고 UI를 숨길 수 있지만, YouTube 광고 자체를 제거하거나 제어하는 것은 아니다.
 - 광고가 실제로 재생되면 숨겨진 iframe의 오디오가 들릴 수 있으며, 이 부분은 공식 플레이어 정책에 따르는 한계로 트러블슈팅에 기록한다.
 - `저작권보호심의 제도와 동향 25년 3호` 자료를 참고해 유튜브 광고 제거, 광고 자동 스킵, 다운로드, 스트림 추출은 법적 리스크가 큰 항목으로 분리한다.
