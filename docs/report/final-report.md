@@ -89,9 +89,9 @@ draft 1 MYMEMORY AUTO_DRAFT 절대 포기하지 않을 거예요
 
 아래 항목은 새 기능 확장이 아니라, 현재 백엔드 구현을 배포와 시연 가능한 형태로 고정하기 위한 작업이다.
 
-- Docker 빌드/실행 최종 검증
-- Swagger에서 핵심 API 시나리오 수동 확인
-- EC2 배포 후 외부 접속 확인
+- Docker 빌드/실행 최종 검증 완료
+- Swagger 외부 접속 확인 완료
+- EC2 배포 후 API 문서와 Auth API 실요청 확인 완료
 - GitHub Pages와 배포 API 연동 시 HTTPS/CORS 확인
 - 도메인 API에서 `userId` 요청 파라미터를 JWT 인증 사용자 정보로 교체하는 후속 개선
 
@@ -649,7 +649,8 @@ Swagger/OpenAPI 문서화를 위해 `springdoc-openapi-starter-webmvc-ui` 의존
 
 - `http/kurostep-demo.http` 파일로 핵심 API 요청 순서를 정리했다.
 - 회원가입, 로그인, 곡 등록, 플레이리스트 생성, 곡 추가, 작업 카드 생성, 플레이리스트 연결, 현재 곡 설정, 상태 변경 흐름을 실제 HTTP 요청으로 확인했다.
-- Swagger UI는 `http://localhost:8080/swagger-ui/index.html`에서 API 문서화와 개발 검증 보조 도구로 사용한다.
+- Swagger UI는 로컬 개발 환경의 `http://localhost:8080/swagger-ui/index.html`과 EC2 배포 환경의 `http://54.116.185.226:8080/swagger-ui/index.html`에서 API 문서화와 개발 검증 보조 도구로 사용한다.
+- EC2 배포 서버에서 `/v3/api-docs`와 Swagger UI가 `HTTP 200`으로 응답하는 것을 확인했다.
 - JWT 인증 API를 Swagger에서 편하게 검증하기 위해 Bearer Token 입력 설정 보강을 후속 작업으로 둔다.
 
 ## 13. Docker 적용
@@ -675,6 +676,7 @@ Docker 적용을 위해 로컬 개발용 실행 파일과 EC2 배포용 실행 �
 - EC2 배포에서는 `docker-compose.prod.yml`로 MySQL 컨테이너와 Spring Boot 컨테이너를 함께 실행한다.
 - MySQL 데이터는 Docker volume `kurostep-mysql-data`에 저장한다.
 - `mysql` 컨테이너 healthcheck가 통과한 뒤 `kurostep-api` 컨테이너가 실행된다.
+- 실제 EC2 서버에서 `kurostep-api`, `kurostep-mysql` 컨테이너 실행을 확인했다.
 
 ## 14. 배포
 
@@ -712,7 +714,8 @@ terraform apply
 - GitHub Pages로 Tauri 위젯 정적 화면 배포를 완료했다.
 - GitHub Actions에서 백엔드 테스트 CI가 통과했다.
 - EC2 배포용 GitHub Actions workflow를 추가했다.
-- AWS 계정의 EC2 접속 정보와 GitHub Secrets를 등록하면 수동 실행으로 EC2 배포를 진행할 수 있다.
+- 이번 검증에서는 로컬에서 빌드한 jar를 EC2에 전송하고 Docker Compose로 Spring Boot API와 MySQL을 실행했다.
+- GitHub Secrets를 등록하면 동일 구조를 GitHub Actions 수동 배포로 전환할 수 있다.
 
 배포 workflow:
 
@@ -726,7 +729,20 @@ terraform apply
 
 - GitHub Repository: `https://github.com/Song991123/KuroStep`
 - GitHub Pages: `https://song991123.github.io/KuroStep/`
-- 임시 EC2 API URL 형식: `http://EC2_PUBLIC_IP:8080`
+- EC2 API: `http://54.116.185.226:8080`
+- EC2 Swagger UI: `http://54.116.185.226:8080/swagger-ui/index.html`
+- EC2 OpenAPI JSON: `http://54.116.185.226:8080/v3/api-docs`
+
+배포 서버 확인 결과:
+
+```text
+Terraform apply: EC2, 보안그룹, Elastic IP 생성 완료
+Docker Compose: kurostep-api, kurostep-mysql 실행 확인
+/v3/api-docs: HTTP 200
+/swagger-ui/index.html: HTTP 200
+/api/auth/signup: HTTP 200
+/api/auth/login: HTTP 200
+```
 
 GitHub Pages는 HTTPS이므로 브라우저에서 직접 API를 호출하려면 EC2 API에도 HTTPS 설정이 필요하다. 발표 이후에는 도메인 연결, Nginx reverse proxy, Let's Encrypt 인증서 설정을 추가한다.
 
@@ -771,8 +787,13 @@ GitHub Pages는 HTTPS이므로 브라우저에서 직접 API를 호출하려면 
 - 광고가 발생할 경우 자동 우회하지 않고 사용자가 직접 정지, 음소거, 볼륨 조절, 다음 곡 이동을 선택할 수 있는 방향으로 정리했다.
 - 가사 위젯은 Tauri의 별도 `lyrics` 창을 두고, 메인 창에서 `set_lyrics_visible` 명령을 호출해 현재 가사 라인과 번역문을 `lyrics:update` 이벤트로 전달하는 방식으로 구현했다.
 - GitHub Pages 배포 화면은 정상 렌더링을 확인했지만, HTTPS 프론트에서 EC2 HTTP API를 호출하는 문제를 고려해 도메인 + Nginx + Let's Encrypt HTTPS 설정을 후속 작업으로 분리했다.
-- EC2 인프라는 Terraform 코드로 생성하도록 구성하고, AWS 계정 인증과 GitHub Secrets 등록 후 배포 workflow를 실행하는 구조로 정리했다.
+- EC2 인프라는 Terraform 코드로 생성했고, AWS 계정 인증 후 `terraform plan/apply`로 실제 리소스 생성을 확인했다.
+- `t3.micro`에서 Spring Boot 4 + MySQL 8 컨테이너를 함께 실행하자 SSH/API 응답이 불안정해지는 문제가 있었고, `t3.small`로 인스턴스 타입을 조정해 배포 서버를 안정화했다.
+- Spring Boot 컨테이너가 MySQL 컨테이너보다 먼저 DB 이름 해석을 시도하면서 `UnknownHostException: mysql`이 1회 발생했지만, 컨테이너 재시작 후 MySQL healthcheck 완료 상태에서 정상 연결됐다.
 - 민감정보는 `.env.prod.example`에 예시만 남기고 실제 값은 GitHub Secrets 또는 EC2 서버의 `.env` 파일로 주입한다.
+- Terraform state, tfvars, `.env`, SSH key는 `.gitignore`로 Git 추적을 차단했다.
+- SSH 보안그룹은 배포 작업 중 접속 안정성을 위해 임시로 `0.0.0.0/0`으로 열었으며, 시연 후 개인 IP 제한 또는 `terraform destroy`로 정리해야 한다.
+- 발표/검증 이후에는 비용 방지를 위해 `terraform destroy` 또는 EC2 중지를 수행해야 한다.
 
 ## 16. 프로젝트 회고
 
@@ -793,6 +814,7 @@ GitHub Pages는 HTTPS이므로 브라우저에서 직접 API를 호출하려면 
 - 조회 성능 개선을 위해 fetch join, 인덱스 설계, 캐시 전략을 추가로 학습할 필요가 있다.
 - 도메인 API의 `userId` 요청 파라미터를 JWT 인증 사용자 정보로 교체해야 한다.
 - EC2 HTTPS 적용, 배포 서버 API와 GitHub Pages/Tauri 연동을 최종 확인해야 한다.
+- EC2 배포 리소스 비용 관리를 위해 시연 이후 삭제 절차를 정리해야 한다.
 
 ### 향후 확장 계획
 

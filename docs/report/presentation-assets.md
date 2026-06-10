@@ -7,8 +7,8 @@
 | Entity / Repository 구성 | 최종 보고서 정리 | Tauri YouTube iframe `Error 153` | 시연 순서 1회 리허설 |
 | Auth/JWT 구현 | API 요청/응답 캡처 | YouTube 숨김 오디오 재생은 공식 임베드 흐름 아님 | 최종 테스트 재실행 |
 | BCrypt 암호화/검증 | 발표 문장 다듬기 | Tauri 로컬 번들 origin 제약 | 보고서 최종 오탈자 확인 |
-| Track 등록/검색 | Docker 실행 확인 |  |  |
-| Playlist 생성/곡 추가 | Swagger 핵심 API 확인 |  |  |
+| Track 등록/검색 | API 요청/응답 캡처 |  |  |
+| Playlist 생성/곡 추가 | 발표 문장 다듬기 |  |  |
 | CreatorTask CRUD/상태 변경 |  |  |  |
 | 작업-플레이리스트 연결 |  |  |  |
 | 현재 플레이리스트 곡 설정 |  |  |  |
@@ -18,6 +18,8 @@
 | Tauri 가사 오버레이 이벤트 연동 |  |  |  |
 | 통합 테스트 통과 |  |  |  |
 | 실제 HTTP 요청 검증 |  |  |  |
+| Docker/EC2 배포 확인 |  |  |  |
+| Swagger 외부 접속 확인 |  |  |  |
 
 ## 2. 핵심 플로우 다이어그램
 
@@ -118,6 +120,7 @@ erDiagram
 - `KuroStepFlowIntegrationTest`
 - `http/kurostep-demo.http`
 - 실제 HTTP 요청으로 H2 DB 저장 확인
+- EC2 배포 서버에서 Swagger UI와 Auth API 응답 확인
 
 ## 6. 발표에서 선을 그을 부분
 
@@ -136,15 +139,18 @@ erDiagram
 - MyMemory 자동 번역 초안 생성
 - Tauri 최소 위젯 API 연동
 - Tauri 가사 오버레이 이벤트 연동
+- Docker Compose 기반 EC2 배포
+- Swagger/OpenAPI 외부 접속 확인
 
 트러블슈팅으로 설명할 것:
 
 - Tauri 로컬 번들 앱에서 YouTube iframe이 `tauri://localhost` origin으로 인식되어 `Error 153` 발생
 - YouTube 숨김 오디오 재생/스트림 추출은 공식 임베드 흐름이 아니므로 사용하지 않음
 - 앱 내부 재생을 유지하려면 HTTPS 프론트 배포 후 Tauri가 해당 URL을 로드하는 구조를 추가 검토
+- `t3.micro`에서 Spring Boot + MySQL 동시 실행이 불안정해 `t3.small`로 조정
+- GitHub Pages에서 EC2 HTTP API를 직접 호출하려면 HTTPS 설정이 필요함
 
 남은 검증:
 
-- Docker/EC2 배포
-- Swagger 핵심 API 수동 확인
 - Tauri 위젯/가사 오버레이 최종 시연 확인
+- 발표 전 EC2 서버 상태와 비용 정리 확인

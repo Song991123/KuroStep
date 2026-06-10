@@ -164,6 +164,13 @@ Swagger UI:
 http://localhost:8080/swagger-ui/index.html
 ```
 
+배포 확인 URL:
+
+```text
+http://54.116.185.226:8080/swagger-ui/index.html
+http://54.116.185.226:8080/v3/api-docs
+```
+
 ### Frontend / Tauri Widget
 
 ```bash
@@ -197,6 +204,8 @@ cd KuroStep
 - GitHub Actions로 백엔드 테스트 자동화
 - Dockerfile / Docker Compose로 Spring Boot + MySQL 실행 환경 구성
 - Terraform으로 EC2, 보안그룹, Elastic IP 구성
+- EC2에서 Spring Boot API + MySQL 컨테이너 실행 확인
+- 배포 서버에서 Swagger UI, OpenAPI JSON, 회원가입/로그인 API 응답 확인
 
 운영 환경의 DB 비밀번호, JWT secret, SSH key, Terraform state는 Git에 커밋하지 않고 환경변수 또는 GitHub Secrets로 관리합니다.
 
@@ -210,6 +219,7 @@ cd KuroStep
 | YouTube 광고/음원 정책 | 다운로드, 스트림 추출, 광고 제거 기능 제외 |
 | GitHub Pages와 EC2 HTTP API 연결 | Mixed Content 문제 때문에 HTTPS API 설정 필요 |
 | Terraform 보안 | `.tfstate`, `.tfvars`, SSH key, `.env` 파일 Git 추적 제외 |
+| EC2 인스턴스 사양 | `t3.micro`에서 Spring Boot + MySQL 동시 실행이 불안정해 `t3.small`로 조정 |
 
 ## 문서
 
