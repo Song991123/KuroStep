@@ -15,7 +15,7 @@
       {
         "label": "main",
         "title": "KuroStep Widget Dev",
-        "url": "https://song991123.github.io/KuroStep/",
+        "url": "shell.html?view=main",
         "width": 380,
         "height": 660,
         "minWidth": 360,
@@ -31,7 +31,7 @@
       {
         "label": "lyrics",
         "title": "KuroStep Lyrics",
-        "url": "https://song991123.github.io/KuroStep/lyrics.html",
+        "url": "lyrics.html",
         "width": 760,
         "height": 128,
         "minWidth": 420,
@@ -48,7 +48,7 @@
       {
         "label": "paw",
         "title": "KuroStep Paw Notes",
-        "url": "https://song991123.github.io/KuroStep/paw.html",
+        "url": "shell.html?view=paw",
         "width": 380,
         "height": 520,
         "minWidth": 360,

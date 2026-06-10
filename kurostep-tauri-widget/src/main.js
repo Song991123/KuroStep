@@ -2,6 +2,9 @@ const DEPLOYED_API_BASE_URL = "https://54-116-185-226.sslip.io";
 const isGitHubPages = window.location.hostname.endsWith("github.io");
 const KUROSTEP_WINDOW = window.KUROSTEP_WINDOW || "main";
 const isEmbeddedContent = new URLSearchParams(window.location.search).get("embedded") === "1";
+if (isEmbeddedContent) {
+  document.documentElement.classList.add("embedded-mode");
+}
 const isTauriApp =
   Boolean(window.__TAURI__) ||
   window.location.protocol === "tauri:" ||
@@ -15,6 +18,21 @@ const PLAYLIST_PAGE_SIZE = 10;
 
 function isPawWindow() {
   return KUROSTEP_WINDOW === "paw";
+}
+
+function postShellMessage(message) {
+  if (!isEmbeddedContent || window.parent === window) {
+    return false;
+  }
+  window.parent.postMessage({ source: "kurostep-content", ...message }, "*");
+  return true;
+}
+
+function notifyShellAuthState() {
+  postShellMessage({
+    type: "auth_state",
+    authenticated: Boolean(appState.auth),
+  });
 }
 
 const appState = {
@@ -382,10 +400,12 @@ async function ensureAuth() {
       const me = await api("/api/auth/me");
       appState.auth = { ...me, accessToken: appState.auth.accessToken };
       writeJson("kurostep.auth", appState.auth);
+      notifyShellAuthState();
       return true;
     } catch {
       window.localStorage.removeItem("kurostep.auth");
       appState.auth = null;
+      notifyShellAuthState();
     }
   }
 
@@ -468,10 +488,12 @@ async function handleAuthSubmit(event) {
       ),
     });
     writeJson("kurostep.auth", appState.auth);
+    notifyShellAuthState();
     appState.notice = appState.authMode === "signup" ? "가입 완료냥. 작업실로 들어간다냥." : "어서 와냥. 오늘 발자국을 펼친다냥.";
     await ensureWorkspaceData();
   } catch (error) {
     appState.auth = null;
+    notifyShellAuthState();
     window.localStorage.removeItem("kurostep.auth");
     appState.error = authErrorMessage(error, appState.authMode);
   } finally {
@@ -483,6 +505,7 @@ async function handleAuthSubmit(event) {
 
 function logout() {
   appState.auth = null;
+  notifyShellAuthState();
   appState.settingsOpen = false;
   appState.work = null;
   appState.playlist = null;
@@ -1556,13 +1579,17 @@ function widgetShell(content, options = {}) {
   }
 
   const title = options.title || "KuroStep";
-  const rightAction = options.rightAction ?? (appState.auth && !isPawWindow() ? "settings" : "none");
+  const rightAction = options.rightAction ?? (!isPawWindow() ? (appState.auth ? "settings" : "exit") : "none");
   const rightButton =
     rightAction === "settings"
       ? `<div class="header-actions">
           <button class="ghost-header-button icon-text" id="settings-open" type="button">${iconSvg("settings")}<span>설정</span></button>
           <button class="ghost-header-button" id="app-exit-button" type="button">종료</button>
         </div>`
+      : rightAction === "exit"
+        ? `<div class="header-actions">
+            <button class="ghost-header-button" id="app-exit-button" type="button">종료</button>
+          </div>`
       : "";
 
   return `
@@ -1996,6 +2023,7 @@ function render() {
     if (!isPawWindow()) {
       bindAuthActions();
     }
+    notifyShellAuthState();
     return;
   }
 
@@ -2003,6 +2031,7 @@ function render() {
     app.innerHTML = widgetShell(settingsWidget(), { title: "KuroStep", rightAction: "none" });
     bindWindowControls();
     bindSettingsActions();
+    notifyShellAuthState();
     return;
   }
 
@@ -2016,6 +2045,7 @@ function render() {
 
     bindWindowControls();
     bindActions();
+    notifyShellAuthState();
     return;
   }
 
@@ -2026,12 +2056,13 @@ function render() {
       ${musicPlayerWidget()}
       ${lyricsWidget()}
     </div>
-    ${!isTauriApp && appState.pawWidgetVisible ? `<aside class="detached-widget paw-detached-widget" aria-label="작업 발자국 위젯">${taskPawWidget()}</aside>` : ""}
+    ${!isTauriApp && !isEmbeddedContent && appState.pawWidgetVisible ? `<aside class="detached-widget paw-detached-widget" aria-label="작업 발자국 위젯">${taskPawWidget()}</aside>` : ""}
   `);
 
   bindWindowControls();
   bindActions();
   syncPawWidgetWindowIfNeeded();
+  notifyShellAuthState();
 }
 
 function bindAuthActions() {
@@ -2263,6 +2294,10 @@ async function exitApplication() {
     }
   }
 
+  if (postShellMessage({ type: "native_command", command: "exit_app" })) {
+    return;
+  }
+
   closeWidget();
 }
 
@@ -2320,6 +2355,18 @@ async function setLyricsOverlayVisible(visible) {
     } catch (error) {
       appState.error = `가사 창을 못 열었다냥: ${error.message || error}`;
     }
+  } else if (
+    postShellMessage({
+      type: "native_command",
+      command: "set_lyrics_visible",
+      payload: {
+        visible,
+        line: appState.selectedLine?.text || "",
+        translation: appState.translation?.translatedText || "",
+      },
+    })
+  ) {
+    appState.notice = visible ? "가사 창 띄웠다냥." : "가사 창 접었다냥.";
   } else {
     appState.notice = visible ? "브라우저 미리보기라 위젯 안에 자막 보여준다냥." : "자막 프리뷰 접었다냥.";
   }
@@ -2339,6 +2386,8 @@ async function setPawWidgetVisible(visible) {
     } catch (error) {
       appState.error = `작업 발자국 창을 못 열었다냥: ${error.message || error}`;
     }
+  } else if (postShellMessage({ type: "native_command", command: "set_paw_visible", payload: { visible } })) {
+    appState.notice = visible ? "작업 발자국 창을 펼쳤다냥." : "작업 발자국 창을 접었다냥.";
   } else {
     appState.notice = visible ? "작업 발자국을 펼쳤다냥." : "작업 발자국을 접었다냥.";
   }
@@ -2348,7 +2397,7 @@ async function setPawWidgetVisible(visible) {
 
 async function syncPawWidgetWindowIfNeeded() {
   const invoke = window.__TAURI__?.core?.invoke;
-  if (!invoke || !appState.auth) {
+  if ((!invoke && !isEmbeddedContent) || !appState.auth) {
     return;
   }
   if (syncedPawWindowVisible === appState.pawWidgetVisible) {
@@ -2356,7 +2405,15 @@ async function syncPawWidgetWindowIfNeeded() {
   }
 
   try {
-    await invoke("set_paw_visible", { visible: appState.pawWidgetVisible });
+    if (invoke) {
+      await invoke("set_paw_visible", { visible: appState.pawWidgetVisible });
+    } else {
+      postShellMessage({
+        type: "native_command",
+        command: "set_paw_visible",
+        payload: { visible: appState.pawWidgetVisible },
+      });
+    }
     syncedPawWindowVisible = appState.pawWidgetVisible;
   } catch {
     // The browser preview does not have a native paw window.
@@ -2378,6 +2435,17 @@ window.addEventListener("storage", (event) => {
 
   if (event.key === "kurostep.workspaceChangedAt" && appState.auth) {
     loadDashboard();
+  }
+});
+
+window.addEventListener("message", (event) => {
+  if (!event.data || event.data.source !== "kurostep-shell") {
+    return;
+  }
+
+  if (event.data.action === "open_settings" && appState.auth && !isPawWindow()) {
+    appState.settingsOpen = true;
+    render();
   }
 });
 

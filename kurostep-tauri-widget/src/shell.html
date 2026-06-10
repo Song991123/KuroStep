@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KuroStep Shell</title>
+    <link rel="stylesheet" href="./shell.css?v=20260610-3" />
+  </head>
+  <body>
+    <section class="shell-window" id="shell-window">
+      <header class="shell-header" id="shell-drag-region" data-tauri-drag-region>
+        <div class="shell-tools">
+          <button class="shell-tool-button" id="shell-minimize" type="button" aria-label="최소화" title="최소화">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 12h10" /></svg>
+          </button>
+        </div>
+        <strong class="shell-title" data-tauri-drag-region>
+          <img src="./assets/paw-print-neutral.svg" alt="" />
+          <span>KuroStep</span>
+        </strong>
+        <div class="shell-actions" id="shell-actions"></div>
+      </header>
+      <iframe id="shell-frame" title="KuroStep content" allow="autoplay; encrypted-media; picture-in-picture; web-share"></iframe>
+    </section>
+    <script src="./shell.js?v=20260610-3" defer></script>
+  </body>
+</html>

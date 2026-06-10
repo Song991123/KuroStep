@@ -32,6 +32,17 @@ body {
   -webkit-app-region: drag;
 }
 
+.embedded-mode,
+.embedded-mode body {
+  overflow: hidden;
+  background: var(--bg-cream);
+}
+
+.embedded-mode body {
+  display: block;
+  -webkit-app-region: no-drag;
+}
+
 button,
 textarea,
 input,
@@ -208,6 +219,19 @@ select,
 }
 
 .widget-content::-webkit-scrollbar {
+  display: none;
+}
+
+.embedded-content {
+  width: 100%;
+  height: 100vh;
+  overflow: auto;
+  scrollbar-width: none;
+  padding: 10px 0 14px;
+  background: var(--bg-cream);
+}
+
+.embedded-content::-webkit-scrollbar {
   display: none;
 }
 
