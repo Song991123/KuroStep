@@ -59,7 +59,7 @@ public class YouTubePlaylistImportService {
                 .map(CompletableFuture::join)
                 .toList();
 
-        return new YouTubePlaylistImportResponse(playlistId, tracks.size(), tracks);
+        return new YouTubePlaylistImportResponse(playlistId, videoIds.size(), tracks);
     }
 
     private String extractPlaylistId(String playlistUrl) {

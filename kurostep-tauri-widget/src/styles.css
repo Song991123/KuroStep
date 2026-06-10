@@ -887,6 +887,24 @@ select,
   grid-column: 1 / -1;
 }
 
+.task-inline-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
+  align-items: center;
+  margin: 0 0 8px;
+  padding: 7px;
+  border: 1px solid rgb(45 45 45 / 8%);
+  border-radius: 10px;
+  background: rgb(255 253 248 / 72%);
+}
+
+.task-inline-form .form-input {
+  min-height: 34px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
 .status-badges {
   display: flex;
   gap: 5px;
@@ -1386,23 +1404,39 @@ select,
 }
 
 .lyrics-line {
-  display: grid;
-  grid-template-columns: 40px 1fr;
-  gap: 8px;
-  align-items: start;
   border-radius: 8px;
   padding: 6px 8px;
   color: #706a62;
 }
 
-.lyrics-line span {
+.lyrics-line-button {
+  width: 100%;
+  border: 0;
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 8px;
+  align-items: start;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lyrics-line-button:hover p {
+  color: var(--cat-black);
+}
+
+.lyrics-line span,
+.lyrics-line-button span {
   color: var(--muted);
   font-size: 10px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 
-.lyrics-line p {
+.lyrics-line p,
+.lyrics-line-button p {
   margin: 0;
   color: #615c55;
   font-size: 12px;

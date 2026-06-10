@@ -471,6 +471,17 @@ function TodayWorkWidget({
   onUpdateStatus: (status: TaskStatus) => void;
   onDeleteTask: () => void;
 }) {
+  const [creating, setCreating] = useState(false);
+  const [draftTitle, setDraftTitle] = useState("");
+
+  function submitTask() {
+    const title = draftTitle.trim();
+    if (!title) return;
+    onCreateTask(title);
+    setDraftTitle("");
+    setCreating(false);
+  }
+
   return (
     <section className="widget-section today-work" aria-labelledby="today-work-title">
       <div className="task-list-head">
@@ -481,14 +492,41 @@ function TodayWorkWidget({
           type="button"
           title="할 일 추가"
           aria-label="할 일 추가"
-          onClick={() => {
-            const title = window.prompt("새 할 일을 적어줘냥.");
-            if (title) onCreateTask(title);
-          }}
+          onClick={() => setCreating((value) => !value)}
         >
           <Icon name="plus" />
         </button>
       </div>
+      {creating && (
+        <form
+          className="task-inline-form"
+          aria-label="새 할 일 추가"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submitTask();
+          }}
+        >
+          <input
+            className="form-input"
+            value={draftTitle}
+            onChange={(event) => setDraftTitle(event.target.value)}
+            placeholder="새 발자국을 적어줘냥"
+            aria-label="새 할 일 제목"
+            autoFocus
+          />
+          <button className="action-button primary compact" type="submit">추가</button>
+          <button
+            className="action-button compact"
+            type="button"
+            onClick={() => {
+              setDraftTitle("");
+              setCreating(false);
+            }}
+          >
+            취소
+          </button>
+        </form>
+      )}
       <TaskList tasks={tasks} selectedId={work?.id} onSelect={onSelectTask} />
       {work ? (
         <>
@@ -948,7 +986,7 @@ function TaskPawWidget({
             {savedLyricPieces.map((piece) => (
               <li key={piece.id}>
                 <strong>{piece.lineText}</strong>
-                <small>{piece.translatedText || piece.memoText || piece.trackTitle}</small>
+                <small>{piece.translatedText || "번역문 없음"}{piece.memoText ? ` · ${piece.memoText}` : ` · ${piece.trackTitle}`}</small>
                 <button className="mini-icon-button danger" type="button" title="저장 조각 삭제" aria-label="저장 조각 삭제" onClick={() => onDeletePiece(piece.id)}><Icon name="trash" /></button>
               </li>
             ))}
@@ -999,22 +1037,27 @@ function LyricMemoWidget({
 
 function LyricsWidget({
   currentTrack,
+  lyric,
   lyricSource,
   selectedLine,
   translation,
   lyricsExpanded,
   onToggleExpanded,
+  onSelectLine,
   onSavePiece,
 }: {
   currentTrack: Track | null;
+  lyric: Lyric | null;
   lyricSource: LyricSource | null;
   selectedLine: SelectedLine | null;
   translation: Translation | null;
   lyricsExpanded: boolean;
   onToggleExpanded: () => void;
+  onSelectLine: (line: SelectedLine) => void;
   onSavePiece: () => void;
 }) {
   const fullLines = lyricSource?.lines || [];
+  const lyricRefs = lyric?.lines || [];
   const lineText = selectedLine?.text || (currentTrack ? "처음 듣는 곡이면 가사 발자국을 굽는 중이다냥." : "아직 재생 중인 곡이 없다냥.");
 
   return (
@@ -1034,12 +1077,27 @@ function LyricsWidget({
         <button className="action-button compact" id="save-lyric-piece" type="button" disabled={!selectedLine?.text} onClick={onSavePiece}>현재 줄 저장</button>
         {lyricsExpanded && (
           <ol className="lyrics-full-list" id="lyrics-full-list">
-            {fullLines.length ? fullLines.map((line) => (
+            {fullLines.length ? fullLines.map((line) => {
+              const ref = lyricRefs.find((item) => item.lineIndex === line.index);
+              return (
               <li className={`lyrics-line${line.index === selectedLine?.lineIndex ? " active" : ""}`} data-line-index={line.index} key={line.index}>
-                <span>{formatTimestamp(line.startTimeMs)}</span>
-                <p>{line.text}</p>
+                <button
+                  className="lyrics-line-button"
+                  type="button"
+                  aria-label={`${formatTimestamp(line.startTimeMs)} 가사 선택`}
+                  onClick={() => onSelectLine({
+                    id: ref?.id || null,
+                    lineIndex: line.index,
+                    startTimeMs: line.startTimeMs,
+                    text: line.text,
+                  })}
+                >
+                  <span>{formatTimestamp(line.startTimeMs)}</span>
+                  <p>{line.text}</p>
+                </button>
               </li>
-            )) : (
+              );
+            }) : (
               <li className="lyrics-line empty"><p>아직 불러온 가사가 없다냥.</p></li>
             )}
           </ol>
@@ -1193,11 +1251,11 @@ export default function App() {
 
   useEffect(() => {
     const nextLine = chooseLineByPlaybackTime(lyric, lyricSource, playbackPosition);
+    if (!nextLine) {
+      return;
+    }
     if (nextLine?.id !== selectedLine?.id || nextLine?.lineIndex !== selectedLine?.lineIndex) {
       setSelectedLine(nextLine);
-      if (!nextLine?.id) {
-        setTranslation(null);
-      }
     }
   }, [playbackPosition, lyric, lyricSource, selectedLine?.id, selectedLine?.lineIndex]);
 
@@ -1538,8 +1596,8 @@ export default function App() {
           if (!String((error as Error).message).includes("이미")) throw error;
         });
         const playlistTracks = await reloadPlaylistTracks(auth, { selectFirstWhenEmpty: shouldAutoSelectAddedTrack });
-        const addedPlaylistTrack = playlistTracks.find((item) => item.trackId === track.id) || playlistTracks[0];
-        if (addedPlaylistTrack) {
+        const addedPlaylistTrack = playlistTracks.find((item) => item.trackId === track.id) || null;
+        if (shouldAutoSelectAddedTrack && addedPlaylistTrack) {
           await selectTrack(addedPlaylistTrack);
         }
         setNotice({ kind: "notice", message: "곡을 BGM 바구니에 넣었다냥." });
@@ -1971,11 +2029,13 @@ export default function App() {
         />
         <LyricsWidget
           currentTrack={workspace.currentTrack}
+          lyric={lyric}
           lyricSource={lyricSource}
           selectedLine={selectedLine}
           translation={translation}
           lyricsExpanded={lyricsExpanded}
           onToggleExpanded={() => setLyricsExpanded((value) => !value)}
+          onSelectLine={setSelectedLine}
           onSavePiece={saveCurrentLyricPiece}
         />
         {pawWidgetVisible && !isEmbeddedContent && (
