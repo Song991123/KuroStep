@@ -20,10 +20,11 @@ function iconSvg(name) {
 
 function contentUrl() {
   const baseUrl = params.get("content") || DEPLOYED_BASE_URL;
-  const url = new URL(view === "paw" ? "paw.html" : "", baseUrl);
+  const url = new URL("", baseUrl);
+  url.searchParams.set("view", view);
   url.searchParams.set("embedded", "1");
   url.searchParams.set("shell", "tauri");
-  url.searchParams.set("v", "20260610-23");
+  url.searchParams.set("v", "20260610-react-01");
   return url.toString();
 }
 

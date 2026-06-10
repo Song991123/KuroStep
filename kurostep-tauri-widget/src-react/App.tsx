@@ -28,6 +28,7 @@ import { extractYoutubeId, extractYoutubePlaylistId, fetchYoutubeMetadata } from
 
 const query = new URLSearchParams(window.location.search);
 const isEmbeddedContent = query.get("embedded") === "1";
+const shellView = query.get("view") || "main";
 const PLAYBACK_TICK_MS = 250;
 const LYRIC_SYNC_LOOKAHEAD_MS = 350;
 
@@ -1073,7 +1074,7 @@ export default function App() {
 
     const cacheKey = `kurostep.lyrics.${track.id}`;
     const cached = readJson<LyricSource | null>(cacheKey, null);
-    if (cached?.lines?.length) {
+    if (cached?.lines?.length && cached?.lyric) {
       setLyric(cached.lyric || null);
       setLyricSource(cached);
       return;
@@ -1627,6 +1628,27 @@ export default function App() {
     return <SettingsScreen auth={auth} onBack={() => setSettingsOpen(false)} onLogout={logout} onExit={exitApp} />;
   }
 
+  if (shellView === "paw") {
+    return (
+      <WidgetShell title="작업 발자국" rightAction="none">
+        <p className={`app-status ${visibleNotice.kind === "error" ? "error" : ""}`} id="app-status">{visibleNotice.message}</p>
+        <TaskPawWidget
+          workspace={workspace}
+          savedLyricPieces={savedLyricPieces}
+          selectedLine={selectedLine}
+          translation={translation}
+          onSelectTask={(task) => setWorkspace((current) => ({ ...current, work: task }))}
+          onCreateTask={createTask}
+          onUpdateStatus={updateStatus}
+          onDeleteTask={deleteTask}
+          onSaveMemo={saveMemo}
+          onDeleteMemo={deleteMemo}
+          onDeletePiece={deleteSavedLyricPiece}
+        />
+      </WidgetShell>
+    );
+  }
+
   return (
     <WidgetShell rightAction="settings" onSettings={() => setSettingsOpen(true)} onExit={exitApp}>
       <p className={`app-status ${visibleNotice.kind === "error" ? "error" : ""}`} id="app-status">{visibleNotice.message}</p>
@@ -1707,7 +1729,7 @@ export default function App() {
           onToggleExpanded={() => setLyricsExpanded((value) => !value)}
           onSavePiece={saveCurrentLyricPiece}
         />
-        {pawWidgetVisible && (
+        {pawWidgetVisible && !isEmbeddedContent && (
           <aside className="detached-widget paw-detached-widget" aria-label="작업 발자국 위젯">
             <TaskPawWidget
               workspace={workspace}
