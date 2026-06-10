@@ -1563,9 +1563,11 @@ async function setCurrentPlaylistTrack(playlistTrack, options = {}) {
     { method: "PATCH" },
   );
   appState.currentTrack = await hydratePlaylistTrack(playlistTrack);
-  await ensureLyricAndTranslation(userId, playlistTrack.trackId);
+  appState.lyric = null;
+  appState.lyricSource = null;
+  appState.selectedLine = null;
+  appState.translation = null;
   appState.notice = "현재 곡을 바꿨다냥";
-  await syncLyricsOverlay();
   appState.isPlaying = Boolean(autoplay);
   render();
   if (autoplay) {
@@ -1577,6 +1579,20 @@ async function setCurrentPlaylistTrack(playlistTrack, options = {}) {
     syncPlaybackTimer();
     updatePlaybackDom();
   }
+
+  prepareCurrentTrackForPlayback()
+    .then(() => {
+      if (appState.currentTrack?.playlistTrackId === playlistTrack.playlistTrackId) {
+        updateLyricsPreviewDom();
+        updatePlaybackDom();
+      }
+    })
+    .catch((error) => {
+      if (appState.currentTrack?.playlistTrackId === playlistTrack.playlistTrackId) {
+        appState.notice = `가사는 천천히 불러올게냥: ${error.message}`;
+        updatePlaybackDom();
+      }
+    });
 }
 
 async function reorderPlaylistTracks(orderedIds) {
