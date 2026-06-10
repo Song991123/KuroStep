@@ -712,7 +712,7 @@ terraform apply
 - GitHub Pages로 Tauri 위젯 정적 화면 배포를 완료했다.
 - GitHub Actions에서 백엔드 테스트 CI가 통과했다.
 - EC2 배포용 GitHub Actions workflow를 추가했다.
-- AWS 계정의 EC2 접속 정보와 GitHub Secrets를 등록하면 `main` 브랜치 push 또는 수동 실행으로 EC2 배포를 진행할 수 있다.
+- AWS 계정의 EC2 접속 정보와 GitHub Secrets를 등록하면 수동 실행으로 EC2 배포를 진행할 수 있다.
 
 배포 workflow:
 
@@ -720,7 +720,7 @@ terraform apply
 |---|---|
 | `.github/workflows/backend-ci.yml` | Spring Boot 테스트 자동 실행 |
 | `.github/workflows/pages.yml` | GitHub Pages에 Tauri 위젯 정적 배포 |
-| `.github/workflows/deploy-ec2.yml` | 빌드한 Spring Boot jar를 EC2에 전송하고 Docker Compose 재시작 |
+| `.github/workflows/deploy-ec2.yml` | 수동 실행 시 빌드한 Spring Boot jar를 EC2에 전송하고 Docker Compose 재시작 |
 
 현재 확인된 URL:
 

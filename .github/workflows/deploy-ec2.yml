@@ -2,11 +2,6 @@ name: Deploy KuroStep API to EC2
 
 on:
   workflow_dispatch:
-  push:
-    branches: ["main"]
-    paths:
-      - "KuroStep/**"
-      - ".github/workflows/deploy-ec2.yml"
 
 jobs:
   deploy:
