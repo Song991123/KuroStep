@@ -14,7 +14,7 @@ KuroStep은 재택으로 작업하는 웹툰 작가, 일러스트레이터, 프�
 | 개발 형태 | 개인 프로젝트 |
 | 주제 | 창작자용 작업 카드 + BGM + 가사/번역 메모 관리 서비스 |
 | Backend | Spring Boot REST API |
-| Frontend | Tauri 데스크톱 위젯 / GitHub Pages 정적 배포 |
+| Frontend | React/TypeScript UI / Tauri 데스크톱 shell / GitHub Pages 정적 배포 |
 | Database | H2, MySQL |
 | 배포/운영 | Docker, GitHub Actions, Terraform, AWS EC2 |
 
@@ -71,8 +71,9 @@ KuroStep은 재택으로 작업하는 웹툰 작가, 일러스트레이터, 프�
 
 ### Frontend / Client
 
+- React
+- TypeScript / TSX
 - Tauri
-- Vanilla JavaScript
 - HTML / CSS
 - GitHub Pages
 
@@ -88,7 +89,8 @@ KuroStep은 재택으로 작업하는 웹툰 작가, 일러스트레이터, 프�
 
 ```mermaid
 flowchart LR
-    Client["Tauri Widget / GitHub Pages"] --> API["Spring Boot REST API"]
+    Shell["Tauri Shell"] --> UI["GitHub Pages React UI"]
+    UI --> API["Spring Boot REST API"]
     API --> Security["Spring Security + JWT"]
     Security --> Controller["Controller"]
     Controller --> Service["Service"]
@@ -158,12 +160,27 @@ KuroStep은 가사 전문을 서버 DB에 계속 수집하는 구조를 피하�
 ```text
 .
 ├── KuroStep/                 # Spring Boot 백엔드
-├── kurostep-tauri-widget/    # Tauri 위젯 프론트엔드
+├── kurostep-tauri-widget/    # React UI + Tauri shell 프론트엔드
 ├── infra/                    # Terraform EC2 인프라 코드
 └── docs/                     # 보고서, 설계서, WBS 문서
 ```
 
 ## 실행 방법
+
+### Frontend
+
+```bash
+cd kurostep-tauri-widget
+npm install
+npm run dev:react
+```
+
+Tauri 개발 앱:
+
+```bash
+cd kurostep-tauri-widget
+npm run tauri:dev
+```
 
 ### Backend
 

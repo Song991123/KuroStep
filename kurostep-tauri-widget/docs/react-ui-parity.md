@@ -5,6 +5,8 @@
 - 현재 적용 버그픽스 커밋: `ddae0f6 Patch vanilla widget partial refresh bugs`
 - React 실험 실패 브랜치: `react-tsx-experiment`
 - 새 이식 브랜치: `react-ui-parity`
+- main 병합 커밋: `55dd4dc`
+- 최신 React 수정 커밋: `345dfab Fix playlist import flow in React widget`
 
 ## 절대 지킬 것
 - 새 디자인 금지
@@ -76,9 +78,32 @@
 - 현재 트랙이 있는 상태에서 새 영상 링크 추가 검증 완료: 플레이리스트에는 곡이 추가되고 NOW PLAYING 현재 곡은 유지
 - React dev 환경의 중복 생성 원인이던 `React.StrictMode` 제거
 - Tauri dev 검증 완료: 임시 content URL로 로컬 React 화면을 shell 안에 표시 확인
+- GitHub Pages 검증 완료: `https://song991123.github.io/KuroStep/`가 React 빌드 화면을 로드
+- Tauri shell 검증 완료: 로컬 shell이 GitHub Pages React iframe을 로드
+- 플레이리스트 링크 등록 수정 완료: `window.prompt()` 제거, 앱 내부 확인 패널에서 담을 곡 수 선택
+- 플레이리스트 preview 병목 수정 완료: 백엔드는 앞 10곡 preview만 병렬 생성하고 noembed timeout을 3초로 제한
+- 트랙 제거 후 상태 동기화 수정 완료: 현재곡 삭제 시 작업 발자국의 `currentPlaylistTrackId` 표시까지 갱신
+- API 주소 주입 개선: `VITE_KUROSTEP_API_BASE_URL`을 지원하여 로컬 검증 시 `18080` 같은 별도 포트를 확실히 지정 가능
 
-## 아직 React로 옮기는 중인 범위
-- 실제 Tauri 앱에서 YouTube IFrame 재생 검증
-- 앱 내부 shell의 최소화/드래그 세부 검증
-- 가사 오버레이 창에서 `lyrics:update` 이벤트 수신 UI 최종 검증
-- LRCLIB가 한국곡/특정 영상 가사를 못 찾을 때 사용자 입력 가사 등록 대안
+## 2026-06-11 검증 결과
+
+| 항목 | 결과 |
+|---|---|
+| `npx tsc --noEmit` | 통과 |
+| `npm run build:react` | 통과 |
+| `./gradlew test` | 통과 |
+| GitHub Pages 배포 | 성공, commit `345dfab` |
+| Backend CI | 성공, commit `345dfab` |
+| 로컬 React 회원가입 | 성공 |
+| 플레이리스트 preview 패널 | 성공 |
+| 플레이리스트 2곡 담기 | 성공 |
+| 트랙 선택 | 성공 |
+| 트랙 제거 | 성공 |
+| Tauri shell iframe 로드 | 성공 |
+
+## 남은 범위
+
+- 실제 YouTube IFrame 재생은 영상별 embed 허용 여부에 영향을 받는다. Rick Astley 공식 영상처럼 iframe에서 “동영상을 재생할 수 없음”이 뜨는 경우가 있다.
+- 가사 오버레이 창에서 `lyrics:update` 이벤트 수신 UI는 추가 장시간 검증이 필요하다.
+- LRCLIB가 한국곡/특정 영상 가사를 못 찾을 때 사용자 입력 가사 등록 대안이 필요하다.
+- EC2 API는 인프라가 1대만 존재하지만, 현재 Docker MySQL volume 비밀번호 불일치 이슈가 남아 있어 배포 API 로그인 검증 전 운영 조치가 필요하다.
