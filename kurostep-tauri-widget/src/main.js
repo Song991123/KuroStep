@@ -762,20 +762,7 @@ async function registerSingleTrackFromUrl(userId, sourceUrl, sourceId) {
   });
 
   await attachTrackToWorkspace(userId, track, true);
-
-  try {
-    await ensureLyricAndTranslation(userId, track.id);
-  } catch (error) {
-    appState.lyric = null;
-    appState.lyricSource = null;
-    appState.selectedLine = null;
-    appState.translation = null;
-    appState.notice = `곡은 연결했다냥. 가사는 나중에 다시 불러올게냥: ${error.message}`;
-  }
-
-  if (!appState.notice.includes("가사는")) {
-    appState.notice = "YouTube 링크에서 곡 정보를 불러와 작업 카드에 묶었다냥";
-  }
+  appState.notice = "YouTube 링크를 플레이리스트에 넣고 바로 틀 준비했다냥.";
   broadcastWorkspaceChanged();
 }
 
@@ -822,7 +809,7 @@ async function registerPlaylistFromUrl(userId, playlistUrl, fallbackVideoId) {
     addedCount += 1;
   }
 
-  if (firstTrack) {
+  if (!appState.currentTrack && firstTrack) {
     const firstPlaylistTrack = appState.playlistTracks.find((item) => item.trackId === firstTrack.id);
     if (firstPlaylistTrack) {
       resetPlaybackPosition();
@@ -831,20 +818,11 @@ async function registerPlaylistFromUrl(userId, playlistUrl, fallbackVideoId) {
         `/api/tasks/${appState.work.id}/current-playlist-track/${firstPlaylistTrack.playlistTrackId}?userId=${userId}`,
         { method: "PATCH" },
       );
-
-      try {
-        await ensureLyricAndTranslation(userId, firstTrack.id);
-      } catch (error) {
-        appState.lyric = null;
-        appState.lyricSource = null;
-        appState.selectedLine = null;
-        appState.translation = null;
-      }
     }
   }
 
   appState.playlistPage = Math.ceil(appState.playlistTracks.length / PLAYLIST_PAGE_SIZE);
-  appState.notice = `플레이리스트 ${range.startNumber}-${range.endNumber}번, ${addedCount}곡을 작업 BGM에 넣었다냥.`;
+  appState.notice = `플레이리스트 ${range.startNumber}-${range.endNumber}번, ${addedCount}곡을 뒤에 추가했다냥.`;
   broadcastWorkspaceChanged();
 }
 
@@ -908,18 +886,13 @@ async function registerTrackFromInputs() {
       await registerSingleTrackFromUrl(userId, sourceUrl, sourceId);
     }
     urlInput.value = "";
-    if (appState.currentTrack) {
-      appState.isPlaying = true;
-      render();
-      await playCurrentAudio().catch((error) => {
-        appState.isPlaying = false;
-        appState.error = `곡은 담았지만 바로 재생은 못 했다냥: ${error.message}`;
-      });
-      syncPlaybackTimer();
+    appState.linkSaving = false;
+    render();
+    if (appState.currentTrack && !playlistId) {
+      await togglePlayback();
     }
   } catch (error) {
     appState.error = error.message;
-  } finally {
     appState.linkSaving = false;
     render();
   }
