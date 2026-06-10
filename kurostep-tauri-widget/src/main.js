@@ -88,6 +88,8 @@ let syncedPawWindowVisible = null;
 let linkImportSequence = 0;
 let lyricPrepareSequence = 0;
 const lyricCacheWarmups = new Map();
+const lyricWarmupQueue = [];
+let lyricWarmupQueueRunning = false;
 
 function resetPlaybackPosition() {
   appState.playbackPositionSeconds = 0;
@@ -769,7 +771,7 @@ async function attachTrackToWorkspace(userId, track, makeCurrent = true) {
   const playlistTrack =
     appState.playlistTracks.find((item) => item.trackId === track.id) || appState.playlistTracks.at(-1);
 
-  warmTrackLyricCache(track.id).catch(() => {});
+  enqueueLyricWarmup(track.id);
 
   if (appState.work.playlistId !== appState.playlist.id) {
     appState.work = await api(`/api/tasks/${appState.work.id}/playlist/${appState.playlist.id}?userId=${userId}`, {
@@ -1153,6 +1155,41 @@ async function warmTrackLyricCache(trackId) {
   return warmup;
 }
 
+function enqueueLyricWarmup(trackId) {
+  if (!trackId) {
+    return;
+  }
+
+  const cacheKey = `kurostep.lyrics.${trackId}`;
+  const cached = readJson(cacheKey);
+  if (cached?.lines?.length && cached?.lyric) {
+    return;
+  }
+  if (lyricCacheWarmups.has(trackId) || lyricWarmupQueue.includes(trackId)) {
+    return;
+  }
+
+  lyricWarmupQueue.push(trackId);
+  window.setTimeout(runLyricWarmupQueue, 1200);
+}
+
+async function runLyricWarmupQueue() {
+  if (lyricWarmupQueueRunning) {
+    return;
+  }
+
+  lyricWarmupQueueRunning = true;
+  try {
+    while (lyricWarmupQueue.length) {
+      const trackId = lyricWarmupQueue.shift();
+      await warmTrackLyricCache(trackId).catch(() => {});
+      await new Promise((resolve) => window.setTimeout(resolve, 900));
+    }
+  } finally {
+    lyricWarmupQueueRunning = false;
+  }
+}
+
 function prewarmUpcomingTrackLyrics() {
   if (!appState.currentTrack?.playlistTrackId || !appState.playlistTracks.length) {
     return;
@@ -1163,7 +1200,7 @@ function prewarmUpcomingTrackLyrics() {
   );
   const upcomingTracks = appState.playlistTracks.slice(Math.max(currentIndex, 0) + 1, Math.max(currentIndex, 0) + 3);
   upcomingTracks.forEach((track) => {
-    warmTrackLyricCache(track.trackId).catch(() => {});
+    enqueueLyricWarmup(track.trackId);
   });
 }
 

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "KuroStep Widget Dev",
+  "productName": "KuroStep",
   "version": "0.1.0",
-  "identifier": "dev.local.kurostep-widget-dev",
+  "identifier": "com.song991123.kurostep",
   "build": {
     "beforeDevCommand": "",
     "beforeBuildCommand": "",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "KuroStep Widget Dev",
+        "title": "KuroStep",
         "url": "shell.html?view=main",
         "width": 380,
         "height": 660,
