@@ -15,6 +15,8 @@ const DEFAULT_API_BASE_URL = isGitHubPages || isTauriApp
 const API_BASE_URL = window.localStorage.getItem("kurostep.apiBaseUrl") || DEFAULT_API_BASE_URL;
 const YOUTUBE_APP_ORIGIN = window.location.origin;
 const PLAYLIST_PAGE_SIZE = 10;
+const PLAYBACK_TICK_MS = 250;
+const LYRIC_SYNC_LOOKAHEAD_MS = 350;
 
 function isPawWindow() {
   return KUROSTEP_WINDOW === "paw";
@@ -65,6 +67,9 @@ const appState = {
   lyricSource: null,
   selectedLine: null,
   translation: null,
+  translationCache: {},
+  translationPending: {},
+  preparedTrackId: null,
   linkSaving: false,
 };
 
@@ -80,6 +85,7 @@ let syncedPawWindowVisible = null;
 function resetPlaybackPosition() {
   appState.playbackPositionSeconds = 0;
   appState.isPlaying = false;
+  appState.preparedTrackId = null;
   syncPlaybackTimer();
   youtubePlayer?.pauseVideo?.();
   youtubePlayer?.seekTo?.(0, true);
@@ -236,6 +242,23 @@ function pauseCurrentAudio() {
   youtubePlayer?.pauseVideo?.();
 }
 
+function keepYoutubePlayingAfterOverlayChange() {
+  if (!appState.isPlaying || !youtubePlayer?.playVideo) {
+    return;
+  }
+
+  const resumeIfPaused = () => {
+    const state = youtubePlayer?.getPlayerState?.();
+    if (!window.YT?.PlayerState || state === window.YT.PlayerState.PAUSED || state === window.YT.PlayerState.CUED) {
+      youtubePlayer?.playVideo?.();
+    }
+    syncPlaybackTimer();
+  };
+
+  window.setTimeout(resumeIfPaused, 150);
+  window.setTimeout(resumeIfPaused, 700);
+}
+
 function handlePlaybackEnded() {
   if (appState.repeatMode) {
     appState.playbackPositionSeconds = 0;
@@ -271,8 +294,9 @@ function formatDuration(seconds) {
   if (!Number.isFinite(seconds)) {
     return "--:--";
   }
-  const minutes = Math.floor(seconds / 60);
-  const rest = String(seconds % 60).padStart(2, "0");
+  const wholeSeconds = Math.floor(seconds);
+  const minutes = Math.floor(wholeSeconds / 60);
+  const rest = String(wholeSeconds % 60).padStart(2, "0");
   return `${minutes}:${rest}`;
 }
 
@@ -935,25 +959,105 @@ async function ensureLyricAndTranslation(userId, trackId) {
     appState.translation = null;
     appState.notice = `가사는 불러왔고, 번역 메모는 나중에 다시 시도할게냥: ${error.message}`;
   });
+  warmUpcomingTranslations(userId);
 }
 
-async function ensureSelectedLineTranslation(userId) {
-  if (!appState.selectedLine?.text) {
+async function prepareCurrentTrackForPlayback() {
+  if (!appState.auth?.userId || !appState.currentTrack?.id) {
     return;
   }
 
-  appState.translation = await api(
-    `/api/lyric-line-refs/${appState.selectedLine.id}/translations/auto-draft?userId=${userId}`,
-    {
-      method: "POST",
-      body: JSON.stringify({
-        sourceText: appState.selectedLine.text,
-        sourceLanguageCode: "en",
-        targetLanguageCode: "ko",
-        memoText: readMemoFallback(),
-      }),
-    },
-  );
+  if (appState.preparedTrackId === appState.currentTrack.id && appState.lyricSource?.lines?.length) {
+    warmUpcomingTranslations(appState.auth.userId);
+    return;
+  }
+
+  await ensureLyricAndTranslation(appState.auth.userId, appState.currentTrack.id);
+  appState.preparedTrackId = appState.currentTrack.id;
+  refreshLyricsWidgetDom();
+  await syncLyricsOverlay();
+}
+
+async function ensureSelectedLineTranslation(userId, line = appState.selectedLine) {
+  if (!line?.text || !line?.id) {
+    return;
+  }
+
+  const translation = await getLineTranslation(userId, line);
+  if (appState.selectedLine?.id === line.id) {
+    appState.translation = translation;
+  }
+  return translation;
+}
+
+async function getLineTranslation(userId, line) {
+  if (!line?.id || !line?.text) {
+    return null;
+  }
+
+  const cacheKey = String(line.id);
+  if (appState.translationCache[cacheKey]) {
+    return appState.translationCache[cacheKey];
+  }
+  if (appState.translationPending[cacheKey]) {
+    return appState.translationPending[cacheKey];
+  }
+
+  appState.translationPending[cacheKey] = (async () => {
+    const savedTranslations = await api(`/api/lyric-line-refs/${line.id}/translations?userId=${userId}`);
+    const savedKorean = savedTranslations.find((translation) => translation.languageCode === "ko") || savedTranslations[0];
+    if (savedKorean) {
+      appState.translationCache[cacheKey] = savedKorean;
+      return savedKorean;
+    }
+
+    const created = await api(
+      `/api/lyric-line-refs/${line.id}/translations/auto-draft?userId=${userId}`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          sourceText: line.text,
+          sourceLanguageCode: "en",
+          targetLanguageCode: "ko",
+          memoText: readMemoFallback(),
+        }),
+      },
+    );
+    appState.translationCache[cacheKey] = created;
+    return created;
+  })().finally(() => {
+    delete appState.translationPending[cacheKey];
+  });
+
+  return appState.translationPending[cacheKey];
+}
+
+function getCachedTranslation(line) {
+  return line?.id ? appState.translationCache[String(line.id)] || null : null;
+}
+
+function warmUpcomingTranslations(userId, currentLine = appState.selectedLine) {
+  if (!userId || !currentLine?.id) {
+    return;
+  }
+
+  const refs = appState.lyric?.lines || [];
+  const sourceLines = appState.lyricSource?.lines || [];
+  const currentIndex = refs.findIndex((line) => line.id === currentLine.id);
+  if (currentIndex < 0) {
+    return;
+  }
+
+  refs.slice(currentIndex, currentIndex + 3).forEach((ref) => {
+    const sourceLine = sourceLines.find((line) => line.index === ref.lineIndex);
+    const line = {
+      id: ref.id,
+      lineIndex: ref.lineIndex,
+      startTimeMs: ref.startTimeMs,
+      text: sourceLine?.text || "",
+    };
+    getLineTranslation(userId, line).catch(() => {});
+  });
 }
 
 async function getLatestLyric(trackId) {
@@ -1014,7 +1118,7 @@ function chooseLineByPlaybackTime(positionSeconds) {
     return null;
   }
 
-  const positionMs = positionSeconds * 1000;
+  const positionMs = positionSeconds * 1000 + LYRIC_SYNC_LOOKAHEAD_MS;
   const timedRefs = refs.filter((line) => Number.isFinite(line.startTimeMs));
   if (timedRefs.length) {
     const firstTimedRef = [...timedRefs].sort((left, right) => left.startTimeMs - right.startTimeMs)[0];
@@ -1144,6 +1248,7 @@ async function saveMemo() {
         }),
       },
     );
+    appState.translationCache[String(appState.selectedLine.id)] = appState.translation;
     window.localStorage.setItem("kurostep.translationMemo", memoInput.value);
     appState.notice = "번역 메모를 서버에 콕 저장했다냥";
     broadcastWorkspaceChanged();
@@ -1168,6 +1273,7 @@ async function deleteMemo() {
     await api(`/api/lyric-line-refs/${appState.selectedLine.id}/translations?userId=${appState.auth.userId}&languageCode=ko`, {
       method: "DELETE",
     });
+    delete appState.translationCache[String(appState.selectedLine.id)];
     appState.translation = null;
     appState.notice = "이 줄의 번역 메모를 지웠다냥.";
     broadcastWorkspaceChanged();
@@ -1183,6 +1289,7 @@ async function togglePlayback() {
 
   try {
     if (!appState.isPlaying) {
+      await prepareCurrentTrackForPlayback();
       appState.isPlaying = true;
       updatePlaybackDom();
       await playCurrentAudio();
@@ -1220,13 +1327,13 @@ function syncPlaybackTimer() {
       return;
     }
     if (youtubePlayer?.getCurrentTime) {
-      appState.playbackPositionSeconds = Math.floor(youtubePlayer.getCurrentTime() || 0);
+      appState.playbackPositionSeconds = youtubePlayer.getCurrentTime() || 0;
       getTrackDurationSeconds();
     } else {
-      appState.playbackPositionSeconds += 1;
+      appState.playbackPositionSeconds += PLAYBACK_TICK_MS / 1000;
     }
     handlePlaybackTick();
-  }, 1000);
+  }, PLAYBACK_TICK_MS);
 }
 
 function handlePlaybackTick() {
@@ -1246,17 +1353,24 @@ function handlePlaybackTick() {
     appState.selectedLine = null;
     appState.translation = null;
     updateLyricMemoDom();
+    updateLyricsPreviewDom();
     syncLyricsOverlay();
     updatePlaybackDom();
     return;
   }
   if (nextLine && nextLine.id !== appState.selectedLine?.id) {
     appState.selectedLine = nextLine;
+    appState.translation = getCachedTranslation(nextLine);
     updateLyricMemoDom();
-    syncLyricsOverlay();
+    updateLyricsPreviewDom();
+    if (appState.translation) {
+      syncLyricsOverlay();
+    }
     ensureSelectedLineTranslation(appState.auth.userId)
       .then(() => {
+        warmUpcomingTranslations(appState.auth.userId, nextLine);
         updateLyricMemoDom();
+        updateLyricsPreviewDom();
         return syncLyricsOverlay();
       })
       .catch((error) => {
@@ -1368,6 +1482,7 @@ async function setCurrentPlaylistTrack(playlistTrack, options = {}) {
   const autoplay = options.autoplay ?? appState.isPlaying;
   const userId = appState.auth.userId;
   appState.playbackPositionSeconds = 0;
+  appState.preparedTrackId = null;
   appState.work = await api(
     `/api/tasks/${appState.work.id}/current-playlist-track/${playlistTrack.playlistTrackId}?userId=${userId}`,
     { method: "PATCH" },
@@ -1443,6 +1558,7 @@ async function syncLyricsOverlay() {
   if (invoke) {
     try {
       await invoke("set_lyrics_visible", payload);
+      keepYoutubePlayingAfterOverlayChange();
     } catch (error) {
       appState.error = `가사 오버레이 갱신을 못 했다냥: ${error.message || error}`;
     }
@@ -1454,6 +1570,7 @@ async function syncLyricsOverlay() {
     command: "set_lyrics_visible",
     payload,
   });
+  keepYoutubePlayingAfterOverlayChange();
 }
 
 function hasSyncedLyricLines() {
@@ -1589,6 +1706,56 @@ function updateLyricMemoDom() {
   if (saveState) {
     saveState.textContent = appState.translation?.status || "";
   }
+}
+
+function updateLyricsPreviewDom() {
+  const preview = document.querySelector(".lyrics-preview");
+  const currentLine = preview?.querySelector(":scope > p");
+  if (!preview || !currentLine) {
+    return;
+  }
+
+  const syncStatus = lyricSyncStatusText();
+  currentLine.textContent = appState.selectedLine?.text || syncStatus || "아직 재생 중이 아닙니다";
+  preview.classList.toggle("playing", appState.isPlaying);
+
+  document.querySelectorAll(".lyrics-line").forEach((item) => {
+    const index = Number(item.getAttribute("data-line-index"));
+    item.classList.toggle("active", Number.isFinite(index) && index === appState.selectedLine?.lineIndex);
+  });
+}
+
+function updateGlobalControlsDom() {
+  const pawButton = document.querySelector("#toggle-paw-widget");
+  if (pawButton) {
+    pawButton.classList.toggle("primary", appState.pawWidgetVisible);
+    pawButton.setAttribute("aria-pressed", String(appState.pawWidgetVisible));
+    pawButton.textContent = `작업 발자국 ${appState.pawWidgetVisible ? "ON" : "OFF"}`;
+  }
+
+  const lyricsButton = document.querySelector("#global-lyrics-toggle");
+  if (lyricsButton) {
+    lyricsButton.classList.toggle("primary", appState.lyricsOverlayVisible);
+    lyricsButton.setAttribute("aria-pressed", String(appState.lyricsOverlayVisible));
+    lyricsButton.textContent = `가사 오버레이 ${appState.lyricsOverlayVisible ? "ON" : "OFF"}`;
+  }
+}
+
+function bindLyricsPanelToggle() {
+  document.querySelector("#lyrics-panel-toggle")?.addEventListener("click", () => {
+    appState.lyricsPanelExpanded = !appState.lyricsPanelExpanded;
+    refreshLyricsWidgetDom();
+  });
+}
+
+function refreshLyricsWidgetDom() {
+  const current = document.querySelector(".lyrics-widget");
+  if (!current) {
+    return;
+  }
+  current.outerHTML = lyricsWidget();
+  bindLyricsPanelToggle();
+  updateLyricsPreviewDom();
 }
 
 function sectionHeader(title, actionLabel, actionId) {
@@ -2025,7 +2192,7 @@ function lyricsWidget() {
           const active = line.index === appState.selectedLine?.lineIndex ? " active" : "";
           const timestamp = Number.isFinite(line.startTimeMs) ? formatTimestamp(line.startTimeMs) : "--:--";
           return `
-            <li class="lyrics-line${active}">
+            <li class="lyrics-line${active}" data-line-index="${escapeHtml(line.index)}">
               <span>${escapeHtml(timestamp)}</span>
               <p>${escapeHtml(line.text)}</p>
             </li>
@@ -2132,7 +2299,8 @@ function bindActions() {
   });
   document.querySelector("#global-lyrics-toggle")?.addEventListener("click", async () => {
     await setLyricsOverlayVisible(!appState.lyricsOverlayVisible);
-    render();
+    updateGlobalControlsDom();
+    updateLyricsPreviewDom();
   });
   document.querySelector("#open-task-create")?.addEventListener("click", () => {
     appState.taskFormOpen = true;
@@ -2169,10 +2337,7 @@ function bindActions() {
       render();
     }
   });
-  document.querySelector("#lyrics-panel-toggle")?.addEventListener("click", () => {
-    appState.lyricsPanelExpanded = !appState.lyricsPanelExpanded;
-    render();
-  });
+  bindLyricsPanelToggle();
   document.querySelector("#play-toggle")?.addEventListener("click", togglePlayback);
   document.querySelector("#skip-back")?.addEventListener("click", () => skipPlayback(-10));
   document.querySelector("#skip-forward")?.addEventListener("click", () => skipPlayback(10));
@@ -2393,6 +2558,7 @@ async function setLyricsOverlayVisible(visible) {
         line: appState.selectedLine?.text || "",
         translation: appState.translation?.translatedText || "",
       });
+      keepYoutubePlayingAfterOverlayChange();
       appState.notice = visible ? "가사 창 띄웠다냥." : "가사 창 접었다냥.";
     } catch (error) {
       appState.error = `가사 창을 못 열었다냥: ${error.message || error}`;
@@ -2408,6 +2574,7 @@ async function setLyricsOverlayVisible(visible) {
       },
     })
   ) {
+    keepYoutubePlayingAfterOverlayChange();
     appState.notice = visible ? "가사 창 띄웠다냥." : "가사 창 접었다냥.";
   } else {
     appState.notice = visible ? "브라우저 미리보기라 위젯 안에 자막 보여준다냥." : "자막 프리뷰 접었다냥.";

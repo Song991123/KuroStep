@@ -22,9 +22,11 @@ fn set_lyrics_visible(
         .emit("lyrics:update", LyricPayload { line, translation })
         .map_err(|error| error.to_string())?;
 
-    if visible {
+    let is_visible = lyrics.is_visible().map_err(|error| error.to_string())?;
+
+    if visible && !is_visible {
         lyrics.show().map_err(|error| error.to_string())?;
-    } else {
+    } else if !visible && is_visible {
         lyrics.hide().map_err(|error| error.to_string())?;
     }
 
