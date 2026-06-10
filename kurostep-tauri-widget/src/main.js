@@ -150,7 +150,7 @@ async function ensureYoutubePlayer() {
   const videoId = getYoutubeVideoId();
   const playerRoot = document.querySelector("#youtube-player");
   if (!videoId || !playerRoot) {
-    throw new Error("앱 안에서 재생할 YouTube 영상 정보를 못 찾았어냥.");
+    throw new Error("재생할 YouTube 영상 정보를 못 찾았어냥.");
   }
 
   const YT = await loadYoutubeIframeApi();
@@ -209,7 +209,7 @@ async function ensureYoutubePlayer() {
       onError: () => {
         appState.isPlaying = false;
         appState.error =
-          "YouTube 플레이어가 앱 안에서 못 깨어났어냥. Tauri WebView Referer 제한이면 Error 153이 날 수 있어냥.";
+          "YouTube 플레이어를 깨우지 못했어냥. 영상 펼치기를 열어 재생 상태를 확인해줘냥.";
         syncPlaybackTimer();
         updatePlaybackDom();
       },
@@ -223,7 +223,7 @@ async function ensureYoutubePlayer() {
 
 async function playCurrentAudio() {
   if (!isYoutubeTrack()) {
-    throw new Error("현재 곡은 YouTube 링크가 아니라 앱 안 재생을 못 해냥.");
+    throw new Error("현재 곡은 YouTube 링크가 아니라 바로 재생하기 어렵다냥.");
   }
 
   const player = await ensureYoutubePlayer();
@@ -237,7 +237,7 @@ async function playCurrentAudio() {
     getTrackDurationSeconds();
     updatePlaybackDom();
   }, 700);
-  appState.notice = "앱 안에서 YouTube BGM 재생 중이냥.";
+  appState.notice = "YouTube BGM 재생 중이냥.";
 }
 
 function pauseCurrentAudio() {
