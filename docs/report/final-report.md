@@ -87,13 +87,13 @@ draft 1 MYMEMORY AUTO_DRAFT 절대 포기하지 않을 거예요
 
 ### 남은 백엔드 검증 및 보고 준비 작업
 
-아래 항목은 새 기능 확장이 아니라, 현재 백엔드 구현을 보고 가능한 형태로 고정하기 위한 작업이다.
+아래 항목은 새 기능 확장이 아니라, 현재 백엔드 구현을 배포와 시연 가능한 형태로 고정하기 위한 작업이다.
 
-- 현재 완료 범위를 WBS와 보고서에 최신 상태로 반영
-- Docker 빌드/실행 검증
+- Docker 빌드/실행 최종 검증
 - Swagger에서 핵심 API 시나리오 수동 확인
-- 발표용 데모 시나리오 정리
-- 남은 시간에 사용자별 권한 검증 보강 또는 문서화
+- EC2 배포 후 외부 접속 확인
+- GitHub Pages와 배포 API 연동 시 HTTPS/CORS 확인
+- 도메인 API에서 `userId` 요청 파라미터를 JWT 인증 사용자 정보로 교체하는 후속 개선
 
 ### 주요 기능
 
@@ -403,21 +403,21 @@ erDiagram
 | PATCH | `/api/playlists/{playlistId}` | 플레이리스트 수정 | O |
 | DELETE | `/api/playlists/{playlistId}` | 플레이리스트 삭제 | O |
 | POST | `/api/playlists/{playlistId}/tracks/{trackId}` | 플레이리스트에 곡 추가 | O |
-| PATCH | `/api/playlists/{playlistId}/tracks/reorder` | 플레이리스트 곡 순서 변경 | O |
 | DELETE | `/api/playlists/{playlistId}/tracks/{trackId}` | 플레이리스트에서 곡 제거 | O |
 | POST | `/api/tracks` | 곡 등록 | O |
 | GET | `/api/tracks/search` | 곡 검색 | O |
 | GET | `/api/tracks/{trackId}` | 곡 상세 조회 | O |
+| POST | `/api/tracks/youtube-playlist/preview` | YouTube playlist URL 기반 트랙 미리보기 | O |
 | PATCH | `/api/tasks/{taskId}/playlist/{playlistId}` | 작업에 플레이리스트 연결 | O |
 | PATCH | `/api/tasks/{taskId}/current-playlist-track/{playlistTrackId}` | 작업의 현재 재생 플레이리스트 항목 설정 | O |
 | POST | `/api/tracks/{trackId}/lyrics/fetch` | LRCLIB 기반 가사 조회 및 사용자 로컬 캐시 생성 준비 | O |
-| PATCH | `/api/user-lyric-caches/{cacheId}` | Tauri 로컬 가사 파일 저장 상태 갱신 | O |
+| POST | `/api/tracks/{trackId}/lyrics/line-refs` | 수동 가사 라인 참조 생성 | O |
 | GET | `/api/tracks/{trackId}/lyrics` | 곡 가사 캐시 메타데이터 조회 | O |
-| POST | `/api/lyric-line-refs/{lineRefId}/translations/auto` | 한국어 번역 초안 생성 | O |
+| GET | `/api/lyrics/{lyricId}` | 가사 묶음 상세 조회 | O |
+| POST | `/api/lyric-line-refs/{lineRefId}/translations/auto-draft` | 한국어 번역 초안 생성 | O |
 | POST | `/api/lyric-line-refs/{lineRefId}/translations` | 번역 메모 직접 저장 | O |
-| PATCH | `/api/translations/{translationId}` | 번역 메모 수정 | O |
+| GET | `/api/lyric-line-refs/{lineRefId}/translations` | 라인별 번역 메모 조회 | O |
 | GET | `/api/tasks/today` | 오늘 작업 통합 조회 | O |
-| GET | `/api/overlay/current` | Tauri 오버레이용 현재 작업 컨텍스트 조회 | O |
 
 ### 재생 및 싱크 규칙
 
@@ -476,7 +476,6 @@ com.kurostep
  │   ├── domain
  │   ├── dto
  │   ├── provider
- │   │   └── lrclib
  │   ├── repository
  │   └── service
  ├── translation
@@ -484,12 +483,7 @@ com.kurostep
  │   ├── domain
  │   ├── dto
  │   ├── provider
- │   │   └── gemini
  │   ├── repository
- │   └── service
- ├── overlay
- │   ├── controller
- │   ├── dto
  │   └── service
  ├── security
  │   ├── config
@@ -559,8 +553,9 @@ com.kurostep
 
 ### 페이징 처리
 
-- 작업 목록과 곡 검색 목록에 페이징을 적용한다.
-- 기본 페이지 크기는 10개로 설정한다.
+- 현재 MVP에서는 빠른 검증을 위해 `List` 응답 기반으로 구현했다.
+- 데이터가 많아지는 운영 환경에서는 작업 목록과 곡 검색 목록에 `Pageable` 기반 페이징을 적용한다.
+- 기본 페이지 크기는 10개로 설정하는 것을 후속 개선 항목으로 둔다.
 
 ## 10. JPA 활용
 
@@ -605,9 +600,12 @@ com.kurostep
 - `existsByEmail`
 - `findByUserId`
 - `findByUserIdAndTaskDate`
-- `findByUserIdOrderByCreatedAtDesc`
 - `findByPlaylistIdOrderBySortOrderAsc`
-- `findByTitleContainingOrArtistContaining`
+- `existsByPlaylistIdAndTrackId`
+- `findByPlaylistIdAndTrackId`
+- `findTopByPlaylistIdOrderBySortOrderDesc`
+- `findByTitleContainingIgnoreCaseOrArtistContainingIgnoreCase`
+- `findBySourceTypeAndSourceId`
 - `findByTrackId`
 - `findByUserIdAndLyricId`
 - `findByLyricIdOrderByLineIndexAsc`
@@ -647,12 +645,12 @@ com.kurostep
 
 ### Swagger(OpenAPI)
 
-이번 MVP에서는 Swagger UI보다 실제 HTTP 요청과 통합 테스트를 우선해 API 동작을 검증했다.
+Swagger/OpenAPI 문서화를 위해 `springdoc-openapi-starter-webmvc-ui` 의존성을 추가했다. 이번 MVP에서는 Swagger UI 문서화와 별도로 실제 HTTP 요청과 통합 테스트를 우선해 API 동작을 검증했다.
 
 - `http/kurostep-demo.http` 파일로 핵심 API 요청 순서를 정리했다.
 - 회원가입, 로그인, 곡 등록, 플레이리스트 생성, 곡 추가, 작업 카드 생성, 플레이리스트 연결, 현재 곡 설정, 상태 변경 흐름을 실제 HTTP 요청으로 확인했다.
-- Swagger UI는 API 문서화 보조 도구로 향후 적용한다.
-- JWT 적용 후에는 Swagger UI에 Bearer Token 설정을 추가할 계획이다.
+- Swagger UI는 `http://localhost:8080/swagger-ui/index.html`에서 API 문서화와 개발 검증 보조 도구로 사용한다.
+- JWT 인증 API를 Swagger에서 편하게 검증하기 위해 Bearer Token 입력 설정 보강을 후속 작업으로 둔다.
 
 ## 13. Docker 적용
 
@@ -754,9 +752,10 @@ GitHub Pages는 HTTPS이므로 브라우저에서 직접 API를 호출하려면 
 
 ### 해결 과정
 
-- MVP 검증 단계에서는 `SecurityConfig`에서 요청을 임시 허용하고, 이후 JWT 적용 시 인증 필요 경로를 분리하도록 계획했다.
+- `SecurityConfig`에서 회원가입, 로그인, H2 Console, Swagger 경로는 허용하고 `/api/**`는 인증이 필요하도록 분리했다.
+- 도메인 API 일부는 MVP 검증 편의를 위해 `userId` 요청 파라미터를 함께 사용하고 있으며, 후속 개선에서 JWT 인증 사용자 정보로 교체한다.
 - `CreatorTask`가 `BaseTimeEntity`를 상속하도록 수정해 공통 시간 컬럼을 생성했다.
-- `TrackService`, `PlaylistService`, `CreatorTaskService`의 TODO 메서드를 실제 Repository 저장/조회 로직으로 구현했다.
+- `TrackService`, `PlaylistService`, `CreatorTaskService`의 초기 스텁 메서드를 실제 Repository 저장/조회 로직으로 구현했다.
 - 작업과 플레이리스트 수정 시 요청 사용자 id와 리소스 소유자 id를 비교한다.
 - Service 계층에서 DTO 변환을 완료해 응답을 반환한다.
 - Provider 인터페이스를 두어 LRCLIB 연동과 번역 API 연동을 분리하는 설계를 유지한다.
@@ -792,7 +791,7 @@ GitHub Pages는 HTTPS이므로 브라우저에서 직접 API를 호출하려면 
 - 외부 Provider 실패 상황에 대한 재시도와 fallback 전략을 보강할 필요가 있다.
 - 테스트 범위를 더 넓혀 예외 상황을 체계적으로 검증할 필요가 있다.
 - 조회 성능 개선을 위해 fetch join, 인덱스 설계, 캐시 전략을 추가로 학습할 필요가 있다.
-- JWT 필터 기반 인증/인가를 완성해 `userId` 요청 파라미터를 로그인 사용자 정보로 교체해야 한다.
+- 도메인 API의 `userId` 요청 파라미터를 JWT 인증 사용자 정보로 교체해야 한다.
 - EC2 HTTPS 적용, 배포 서버 API와 GitHub Pages/Tauri 연동을 최종 확인해야 한다.
 
 ### 향후 확장 계획
