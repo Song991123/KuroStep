@@ -86,6 +86,8 @@ let progressScrubbing = false;
 let draggedPlaylistTrackId = null;
 let syncedPawWindowVisible = null;
 let linkImportSequence = 0;
+let lyricPrepareSequence = 0;
+const lyricCacheWarmups = new Map();
 
 function resetPlaybackPosition() {
   appState.playbackPositionSeconds = 0;
@@ -767,6 +769,8 @@ async function attachTrackToWorkspace(userId, track, makeCurrent = true) {
   const playlistTrack =
     appState.playlistTracks.find((item) => item.trackId === track.id) || appState.playlistTracks.at(-1);
 
+  warmTrackLyricCache(track.id).catch(() => {});
+
   if (appState.work.playlistId !== appState.playlist.id) {
     appState.work = await api(`/api/tasks/${appState.work.id}/playlist/${appState.playlist.id}?userId=${userId}`, {
       method: "PATCH",
@@ -981,9 +985,7 @@ async function ensureLyricAndTranslation(userId, trackId) {
 
   if (!lyricSource?.lines?.length) {
     try {
-      fetchResponse = await api(`/api/tracks/${trackId}/lyrics/fetch`, { method: "POST" });
-      lyricSource = parseLyricSource(fetchResponse);
-      writeJson(cacheKey, lyricSource);
+      lyricSource = await warmTrackLyricCache(trackId);
     } catch (error) {
       appState.lyric = null;
       appState.lyricSource = null;
@@ -994,7 +996,10 @@ async function ensureLyricAndTranslation(userId, trackId) {
     }
   }
 
-  appState.lyric = fetchResponse?.lyric || (await getLatestLyric(trackId));
+  appState.lyric = fetchResponse?.lyric || lyricSource.lyric || (await getLatestLyric(trackId));
+  if (appState.lyric && !lyricSource.lyric) {
+    writeJson(cacheKey, { ...lyricSource, lyric: appState.lyric });
+  }
   appState.lyricSource = lyricSource;
   appState.selectedLine = chooseLineByPlaybackTime(appState.playbackPositionSeconds || 0) || chooseDisplayLine(appState.lyric, lyricSource);
   if (!appState.selectedLine || (appState.playbackPositionSeconds || 0) === 0) {
@@ -1009,7 +1014,8 @@ async function ensureLyricAndTranslation(userId, trackId) {
   warmUpcomingTranslations(userId);
 }
 
-async function prepareCurrentTrackForPlayback() {
+async function prepareCurrentTrackForPlayback(options = {}) {
+  const { silent = false } = options;
   if (!appState.auth?.userId || !appState.currentTrack?.id) {
     return;
   }
@@ -1019,10 +1025,21 @@ async function prepareCurrentTrackForPlayback() {
     return;
   }
 
+  const preparingTrackId = appState.currentTrack.id;
+  const sequence = ++lyricPrepareSequence;
+  if (!silent) {
+    appState.notice = "처음 듣는 곡이면 가사 발자국을 굽는 중이다냥.";
+    updatePlaybackDom();
+    updateLyricsPreviewDom();
+  }
   await ensureLyricAndTranslation(appState.auth.userId, appState.currentTrack.id);
+  if (sequence !== lyricPrepareSequence || appState.currentTrack?.id !== preparingTrackId) {
+    return;
+  }
   appState.preparedTrackId = appState.currentTrack.id;
   refreshLyricsWidgetDom();
   await syncLyricsOverlay();
+  prewarmUpcomingTrackLyrics();
 }
 
 async function ensureSelectedLineTranslation(userId, line = appState.selectedLine) {
@@ -1107,6 +1124,49 @@ function warmUpcomingTranslations(userId, currentLine = appState.selectedLine) {
   });
 }
 
+async function warmTrackLyricCache(trackId) {
+  if (!trackId) {
+    return;
+  }
+
+  const cacheKey = `kurostep.lyrics.${trackId}`;
+  const cached = readJson(cacheKey);
+  if (cached?.lines?.length && cached?.lyric) {
+    return;
+  }
+  if (lyricCacheWarmups.has(trackId)) {
+    return lyricCacheWarmups.get(trackId);
+  }
+
+  const warmup = api(`/api/tracks/${trackId}/lyrics/fetch`, { method: "POST" })
+    .then((fetchResponse) => {
+      const lyricSource = parseLyricSource(fetchResponse);
+      if (lyricSource.lines.length) {
+        writeJson(cacheKey, lyricSource);
+      }
+      return lyricSource;
+    })
+    .finally(() => {
+      lyricCacheWarmups.delete(trackId);
+    });
+  lyricCacheWarmups.set(trackId, warmup);
+  return warmup;
+}
+
+function prewarmUpcomingTrackLyrics() {
+  if (!appState.currentTrack?.playlistTrackId || !appState.playlistTracks.length) {
+    return;
+  }
+
+  const currentIndex = appState.playlistTracks.findIndex(
+    (track) => track.playlistTrackId === appState.currentTrack.playlistTrackId,
+  );
+  const upcomingTracks = appState.playlistTracks.slice(Math.max(currentIndex, 0) + 1, Math.max(currentIndex, 0) + 3);
+  upcomingTracks.forEach((track) => {
+    warmTrackLyricCache(track.trackId).catch(() => {});
+  });
+}
+
 async function getLatestLyric(trackId) {
   const lyrics = await api(`/api/tracks/${trackId}/lyrics`);
   return lyrics.at(-1) || null;
@@ -1121,6 +1181,7 @@ function parseLyricSource(fetchResponse) {
 
   return {
     localCacheKey: fetchResponse.localCacheKey,
+    lyric: fetchResponse.lyric || null,
     lines,
   };
 }
@@ -1405,14 +1466,22 @@ async function togglePlayback() {
 
   try {
     if (!appState.isPlaying) {
-      await prepareCurrentTrackForPlayback();
       appState.isPlaying = true;
+      if (!appState.lyricSource?.lines?.length) {
+        appState.notice = "처음 듣는 곡이면 가사를 찾으면서 바로 틀게냥.";
+      }
       updatePlaybackDom();
       await playCurrentAudio();
       const started = await confirmYoutubePlaybackStarted();
       if (!started) {
         appState.isPlaying = false;
         appState.notice = "YouTube가 바로 재생을 막았어냥. 영상 펼치기로 한 번 깨워줘냥.";
+      } else {
+        prepareCurrentTrackForPlayback({ silent: true }).catch((error) => {
+          appState.notice = `가사는 뒤에서 다시 찾아볼게냥: ${error.message}`;
+          updatePlaybackDom();
+          updateLyricsPreviewDom();
+        });
       }
     } else {
       pauseCurrentAudio();
@@ -1490,8 +1559,10 @@ function handlePlaybackTick() {
         return syncLyricsOverlay();
       })
       .catch((error) => {
-        appState.error = error.message;
-        render();
+        appState.notice = `번역 메모는 잠깐 놓쳤다냥: ${error.message}`;
+        updateLyricMemoDom();
+        updateLyricsPreviewDom();
+        updatePlaybackDom();
       });
   }
   updatePlaybackDom();
