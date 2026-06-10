@@ -15,6 +15,7 @@ const DEFAULT_API_BASE_URL = isGitHubPages || isTauriApp
 const API_BASE_URL = window.localStorage.getItem("kurostep.apiBaseUrl") || DEFAULT_API_BASE_URL;
 const YOUTUBE_APP_ORIGIN = window.location.origin;
 const PLAYLIST_PAGE_SIZE = 10;
+const API_TIMEOUT_MS = 12000;
 const PLAYBACK_TICK_MS = 250;
 const LYRIC_SYNC_LOOKAHEAD_MS = 350;
 
@@ -357,25 +358,37 @@ function todayIso() {
 }
 
 async function api(path, options = {}) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
   const headers = {
     "Content-Type": "application/json",
     ...(appState.auth?.accessToken ? { Authorization: `Bearer ${appState.auth.accessToken}` } : {}),
     ...(options.headers || {}),
   };
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
-  const text = await response.text();
-  const body = text ? safeJson(text) : null;
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    const body = text ? safeJson(text) : null;
 
-  if (!response.ok) {
-    const message = body?.message || body?.error || text || `HTTP ${response.status}`;
-    throw new Error(message);
+    if (!response.ok) {
+      const message = body?.message || body?.error || text || `HTTP ${response.status}`;
+      throw new Error(message);
+    }
+
+    return body;
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error("서버 응답이 너무 늦다냥. 잠깐 뒤 다시 시도해줘냥.");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
   }
-
-  return body;
 }
 
 function safeJson(text) {
@@ -607,15 +620,10 @@ async function ensureWorkspaceData() {
     );
   }
 
-  try {
-    await ensureLyricAndTranslation(userId, currentPlaylistTrack.trackId);
-  } catch (error) {
-    appState.lyric = null;
-    appState.lyricSource = null;
-    appState.selectedLine = null;
-    appState.translation = null;
-    appState.notice = `작업곡은 준비했다냥. 가사는 아직 못 찾았다냥: ${error.message}`;
-  }
+  appState.lyric = null;
+  appState.lyricSource = null;
+  appState.selectedLine = null;
+  appState.translation = null;
 }
 
 function countTaskStatuses(tasks) {
