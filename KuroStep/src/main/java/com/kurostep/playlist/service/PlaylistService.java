@@ -7,6 +7,7 @@ import com.kurostep.playlist.domain.Playlist;
 import com.kurostep.playlist.domain.PlaylistTrack;
 import com.kurostep.playlist.dto.PlaylistCreateRequest;
 import com.kurostep.playlist.dto.PlaylistResponse;
+import com.kurostep.playlist.dto.PlaylistTrackReorderRequest;
 import com.kurostep.playlist.dto.PlaylistTrackResponse;
 import com.kurostep.playlist.dto.PlaylistUpdateRequest;
 import com.kurostep.playlist.repository.PlaylistRepository;
@@ -15,7 +16,11 @@ import com.kurostep.track.domain.Track;
 import com.kurostep.track.repository.TrackRepository;
 import com.kurostep.user.domain.User;
 import com.kurostep.user.repository.UserRepository;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -111,6 +116,36 @@ public class PlaylistService {
                 .orElseThrow(() -> new NotFoundException("플레이리스트에 해당 곡이 없습니다."));
 
         playlistTrackRepository.delete(playlistTrack);
+    }
+
+    @Transactional
+    public List<PlaylistTrackResponse> reorderTracks(Long userId, Long playlistId, PlaylistTrackReorderRequest request) {
+        getOwnedPlaylist(userId, playlistId);
+
+        List<PlaylistTrack> playlistTracks = playlistTrackRepository.findByPlaylistIdOrderBySortOrderAsc(playlistId);
+        if (playlistTracks.size() != request.playlistTrackIds().size()) {
+            throw new IllegalArgumentException("플레이리스트 곡 개수가 맞지 않습니다.");
+        }
+
+        Map<Long, PlaylistTrack> playlistTrackMap = playlistTracks.stream()
+                .collect(Collectors.toMap(PlaylistTrack::getId, Function.identity()));
+        if (new HashSet<>(request.playlistTrackIds()).size() != request.playlistTrackIds().size()) {
+            throw new IllegalArgumentException("중복된 플레이리스트 곡 항목이 있습니다.");
+        }
+
+        for (int index = 0; index < request.playlistTrackIds().size(); index++) {
+            Long playlistTrackId = request.playlistTrackIds().get(index);
+            PlaylistTrack playlistTrack = playlistTrackMap.get(playlistTrackId);
+            if (playlistTrack == null) {
+                throw new IllegalArgumentException("다른 플레이리스트의 곡은 순서를 바꿀 수 없습니다.");
+            }
+            playlistTrack.changeSortOrder(index);
+        }
+
+        return playlistTrackRepository.findByPlaylistIdOrderBySortOrderAsc(playlistId)
+                .stream()
+                .map(PlaylistTrackResponse::from)
+                .toList();
     }
 
     private User getUser(Long userId) {

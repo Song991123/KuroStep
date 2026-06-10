@@ -1,5 +1,7 @@
 const DEPLOYED_API_BASE_URL = "https://54-116-185-226.sslip.io";
 const isGitHubPages = window.location.hostname.endsWith("github.io");
+const KUROSTEP_WINDOW = window.KUROSTEP_WINDOW || "main";
+const isEmbeddedContent = new URLSearchParams(window.location.search).get("embedded") === "1";
 const isTauriApp =
   Boolean(window.__TAURI__) ||
   window.location.protocol === "tauri:" ||
@@ -9,6 +11,11 @@ const DEFAULT_API_BASE_URL = isGitHubPages || isTauriApp
   : "http://localhost:8080";
 const API_BASE_URL = window.localStorage.getItem("kurostep.apiBaseUrl") || DEFAULT_API_BASE_URL;
 const YOUTUBE_APP_ORIGIN = window.location.origin;
+const PLAYLIST_PAGE_SIZE = 10;
+
+function isPawWindow() {
+  return KUROSTEP_WINDOW === "paw";
+}
 
 const appState = {
   auth: readJson("kurostep.auth"),
@@ -22,13 +29,19 @@ const appState = {
   youtubeVideoVisible: false,
   playbackPositionSeconds: 0,
   volume: Number(window.localStorage.getItem("kurostep.volume") || 80),
+  previousVolume: Number(window.localStorage.getItem("kurostep.previousVolume") || 80),
   volumePanelOpen: false,
   lyricsOverlayVisible: false,
+  pawWidgetVisible: readJson("kurostep.pawWidgetVisible") ?? true,
   lyricsPanelExpanded: false,
+  settingsOpen: false,
+  taskFormOpen: false,
+  taskEditing: false,
   work: null,
   counts: { TODO: 0, DOING: 0, DONE: 0 },
   playlist: null,
   playlistTracks: [],
+  playlistPage: 1,
   currentTrack: null,
   lyric: null,
   lyricSource: null,
@@ -43,6 +56,8 @@ let youtubePlayer = null;
 let youtubePlayerReady = false;
 let youtubePlayerVideoId = "";
 let progressScrubbing = false;
+let draggedPlaylistTrackId = null;
+let syncedPawWindowVisible = null;
 
 function readUserAddedTrackIds() {
   const value = readJson("kurostep.userAddedTrackIds");
@@ -104,6 +119,15 @@ function loadYoutubeIframeApi() {
   return youtubeApiPromise;
 }
 
+function tuneYoutubeIframe() {
+  const iframe = document.querySelector("#youtube-player iframe");
+  if (!iframe) {
+    return;
+  }
+  iframe.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+  iframe.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share");
+}
+
 async function ensureYoutubePlayer() {
   const videoId = getYoutubeVideoId();
   const playerRoot = document.querySelector("#youtube-player");
@@ -137,6 +161,7 @@ async function ensureYoutubePlayer() {
     events: {
       onReady: (event) => {
         youtubePlayerReady = true;
+        tuneYoutubeIframe();
         event.target.setVolume?.(appState.volume);
         const duration = Math.floor(event.target.getDuration?.() || 0);
         if (appState.currentTrack && duration > 0) {
@@ -172,6 +197,8 @@ async function ensureYoutubePlayer() {
       },
     },
   });
+
+  window.setTimeout(tuneYoutubeIframe, 500);
 
   return youtubePlayer;
 }
@@ -268,6 +295,14 @@ function formatTimestamp(ms) {
 
 function iconSvg(name) {
   const icons = {
+    minimize: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 12h10"/></svg>`,
+    arrowLeft: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>`,
+    settings: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.05.05-2.12 2.12-.05-.05a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.1 1.66v.1h-3v-.1a1.8 1.8 0 0 0-1.1-1.66 1.8 1.8 0 0 0-1.98.36l-.05.05-2.12-2.12.05-.05A1.8 1.8 0 0 0 4.6 15a1.8 1.8 0 0 0-1.66-1.1h-.1v-3h.1A1.8 1.8 0 0 0 4.6 9a1.8 1.8 0 0 0-.36-1.98l-.05-.05 2.12-2.12.05.05A1.8 1.8 0 0 0 8.34 5.26 1.8 1.8 0 0 0 9.44 3.6v-.1h3v.1a1.8 1.8 0 0 0 1.1 1.66 1.8 1.8 0 0 0 1.98-.36l.05-.05 2.12 2.12-.05.05A1.8 1.8 0 0 0 19.4 9a1.8 1.8 0 0 0 1.66 1.1h.1v3h-.1A1.8 1.8 0 0 0 19.4 15z"/></svg>`,
+    shuffle: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5"/><path d="M4 20 21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/></svg>`,
+    plus: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>`,
+    edit: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>`,
+    trash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>`,
+    grip: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h.01"/><path d="M15 6h.01"/><path d="M9 12h.01"/><path d="M15 12h.01"/><path d="M9 18h.01"/><path d="M15 18h.01"/></svg>`,
     previous: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6v12"/><path d="m19 6-9 6 9 6z"/></svg>`,
     rewind: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 19 2 12l9-7v14z"/><path d="M22 19 13 12l9-7v14z"/></svg>`,
     play: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7z"/></svg>`,
@@ -448,6 +483,7 @@ async function handleAuthSubmit(event) {
 
 function logout() {
   appState.auth = null;
+  appState.settingsOpen = false;
   appState.work = null;
   appState.playlist = null;
   appState.playlistTracks = [];
@@ -460,6 +496,10 @@ function logout() {
   window.localStorage.removeItem("kurostep.auth");
   appState.notice = "다음 작업 때 또 보자냥.";
   render();
+}
+
+function broadcastWorkspaceChanged() {
+  window.localStorage.setItem("kurostep.workspaceChangedAt", String(Date.now()));
 }
 
 async function ensureWorkspaceData() {
@@ -494,6 +534,7 @@ async function ensureWorkspaceData() {
   appState.playlist = playlists[0];
   const playlistTracks = await api(`/api/playlists/${appState.playlist.id}/tracks?userId=${userId}`);
   appState.playlistTracks = playlistTracks.filter(isUserAddedPlaylistTrack);
+  appState.playlistPage = Math.min(appState.playlistPage, getPlaylistPageCount(appState.playlistTracks.length));
 
   if (appState.work.playlistId !== appState.playlist.id) {
     appState.work = await api(`/api/tasks/${appState.work.id}/playlist/${appState.playlist.id}?userId=${userId}`, {
@@ -684,6 +725,7 @@ async function registerSingleTrackFromUrl(userId, sourceUrl, sourceId) {
   if (!appState.notice.includes("가사는")) {
     appState.notice = "YouTube 링크에서 곡 정보를 불러와 작업 카드에 묶었다냥";
   }
+  broadcastWorkspaceChanged();
 }
 
 async function registerPlaylistFromUrl(userId, playlistUrl, fallbackVideoId) {
@@ -697,12 +739,16 @@ async function registerPlaylistFromUrl(userId, playlistUrl, fallbackVideoId) {
   }
 
   const sample = preview.tracks
-    .slice(0, 5)
+    .slice(0, 8)
     .map((track, index) => `${index + 1}. ${track.title}`)
     .join("\n");
-  const confirmMessage = `이 플레이리스트에서 ${preview.trackCount}곡을 찾았다냥.\n모든 트랙을 오늘의 작업 BGM에 넣을까냥?\n\n${sample}${preview.trackCount > 5 ? "\n..." : ""}`;
+  const defaultEnd = Math.min(preview.trackCount, PLAYLIST_PAGE_SIZE);
+  const rangeAnswer = window.prompt(
+    `이 플레이리스트에서 ${preview.trackCount}곡을 찾았다냥.\n몇 번부터 몇 번까지 넣을까냥?\n예: 1-${defaultEnd}\n\n${sample}${preview.trackCount > 8 ? "\n..." : ""}`,
+    `1-${defaultEnd}`,
+  );
 
-  if (!window.confirm(confirmMessage)) {
+  if (!rangeAnswer) {
     if (fallbackVideoId) {
       await registerSingleTrackFromUrl(userId, playlistUrl, fallbackVideoId);
       return;
@@ -712,10 +758,13 @@ async function registerPlaylistFromUrl(userId, playlistUrl, fallbackVideoId) {
     return;
   }
 
+  const range = parsePlaylistRange(rangeAnswer, preview.trackCount);
+  const selectedTracks = preview.tracks.slice(range.startIndex, range.endIndex + 1);
+
   let firstTrack = null;
   let addedCount = 0;
 
-  for (const draft of preview.tracks) {
+  for (const draft of selectedTracks) {
     const track = await findOrCreateTrack(draft);
     firstTrack = firstTrack || track;
     await attachTrackToWorkspace(userId, track, false);
@@ -743,7 +792,33 @@ async function registerPlaylistFromUrl(userId, playlistUrl, fallbackVideoId) {
     }
   }
 
-  appState.notice = `플레이리스트 ${addedCount}곡을 작업 BGM에 넣었다냥.`;
+  appState.playlistPage = Math.ceil(appState.playlistTracks.length / PLAYLIST_PAGE_SIZE);
+  appState.notice = `플레이리스트 ${range.startNumber}-${range.endNumber}번, ${addedCount}곡을 작업 BGM에 넣었다냥.`;
+  broadcastWorkspaceChanged();
+}
+
+function parsePlaylistRange(value, trackCount) {
+  const normalized = String(value).replace(/\s/g, "");
+  const match = normalized.match(/^(\d+)(?:-(\d+))?$/);
+  if (!match) {
+    throw new Error("범위는 1-10처럼 적어줘냥.");
+  }
+
+  const startNumber = Number(match[1]);
+  const endNumber = Number(match[2] || match[1]);
+  if (!Number.isInteger(startNumber) || !Number.isInteger(endNumber) || startNumber < 1 || endNumber < startNumber) {
+    throw new Error("곡 범위가 이상하다냥. 예: 1-10");
+  }
+  if (endNumber > trackCount) {
+    throw new Error(`이 플레이리스트는 ${trackCount}곡까지만 찾았다냥.`);
+  }
+
+  return {
+    startNumber,
+    endNumber,
+    startIndex: startNumber - 1,
+    endIndex: endNumber - 1,
+  };
 }
 
 async function registerTrackFromInputs() {
@@ -782,6 +857,15 @@ async function registerTrackFromInputs() {
       await registerSingleTrackFromUrl(userId, sourceUrl, sourceId);
     }
     urlInput.value = "";
+    if (appState.currentTrack) {
+      appState.isPlaying = true;
+      render();
+      await playCurrentAudio().catch((error) => {
+        appState.isPlaying = false;
+        appState.error = `곡은 담았지만 바로 재생은 못 했다냥: ${error.message}`;
+      });
+      syncPlaybackTimer();
+    }
   } catch (error) {
     appState.error = error.message;
   } finally {
@@ -953,6 +1037,66 @@ async function changeStatus(status) {
 async function refreshTasksOnly() {
   const tasks = await api(`/api/tasks/today?userId=${appState.auth.userId}`);
   appState.counts = countTaskStatuses(tasks);
+  if (tasks.length) {
+    appState.work = tasks.find((task) => task.id === appState.work?.id) || tasks[0];
+  }
+}
+
+async function saveTaskFromForm(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const title = form.elements.title.value.trim();
+  const description = form.elements.description.value.trim();
+  const taskDate = form.elements.taskDate.value;
+
+  if (!title || !taskDate) {
+    appState.error = "할 일 이름과 날짜를 적어줘냥.";
+    render();
+    return;
+  }
+
+  try {
+    const payload = { title, description, taskDate };
+    if (appState.taskEditing && appState.work?.id) {
+      appState.work = await api(`/api/tasks/${appState.work.id}?userId=${appState.auth.userId}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+      appState.notice = "오늘 발자국을 고쳤다냥.";
+    } else {
+      appState.work = await api(`/api/tasks?userId=${appState.auth.userId}`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      appState.notice = "새 할 일을 발자국장에 넣었다냥.";
+    }
+    appState.taskFormOpen = false;
+    appState.taskEditing = false;
+    await refreshTasksOnly();
+    broadcastWorkspaceChanged();
+  } catch (error) {
+    appState.error = error.message;
+  } finally {
+    render();
+  }
+}
+
+async function deleteCurrentTask() {
+  if (!appState.work?.id || !window.confirm("이 할 일을 지울까냥?")) {
+    return;
+  }
+
+  try {
+    await api(`/api/tasks/${appState.work.id}?userId=${appState.auth.userId}`, { method: "DELETE" });
+    appState.notice = "할 일을 살짝 치웠다냥.";
+    appState.work = null;
+    await ensureWorkspaceData();
+    broadcastWorkspaceChanged();
+  } catch (error) {
+    appState.error = error.message;
+  } finally {
+    render();
+  }
 }
 
 async function saveMemo() {
@@ -976,6 +1120,31 @@ async function saveMemo() {
     );
     window.localStorage.setItem("kurostep.translationMemo", memoInput.value);
     appState.notice = "번역 메모를 서버에 콕 저장했다냥";
+    broadcastWorkspaceChanged();
+  } catch (error) {
+    appState.error = error.message;
+  } finally {
+    render();
+  }
+}
+
+async function deleteMemo() {
+  if (!appState.selectedLine?.id || !appState.translation?.id) {
+    appState.notice = "아직 지울 번역 메모가 없다냥.";
+    updatePlaybackDom();
+    return;
+  }
+  if (!window.confirm("현재 가사 줄의 번역 메모를 지울까냥?")) {
+    return;
+  }
+
+  try {
+    await api(`/api/lyric-line-refs/${appState.selectedLine.id}/translations?userId=${appState.auth.userId}&languageCode=ko`, {
+      method: "DELETE",
+    });
+    appState.translation = null;
+    appState.notice = "이 줄의 번역 메모를 지웠다냥.";
+    broadcastWorkspaceChanged();
   } catch (error) {
     appState.error = error.message;
   } finally {
@@ -1124,6 +1293,19 @@ function toggleVolumePanel() {
   updatePlaybackDom();
 }
 
+function toggleMute() {
+  if (appState.volume > 0) {
+    appState.previousVolume = appState.volume;
+    window.localStorage.setItem("kurostep.previousVolume", String(appState.previousVolume));
+    changeVolume(0);
+    appState.notice = "소리를 잠깐 숨겼다냥.";
+  } else {
+    changeVolume(appState.previousVolume || 80);
+    appState.notice = "소리를 다시 꺼냈다냥.";
+  }
+  updatePlaybackDom();
+}
+
 async function movePlaylistTrack(offset) {
   if (!appState.playlistTracks.length || !appState.currentTrack) {
     return;
@@ -1146,10 +1328,11 @@ async function movePlaylistTrack(offset) {
     return;
   }
 
-  await setCurrentPlaylistTrack(nextTrack);
+  await setCurrentPlaylistTrack(nextTrack, { autoplay: appState.isPlaying });
 }
 
-async function setCurrentPlaylistTrack(playlistTrack) {
+async function setCurrentPlaylistTrack(playlistTrack, options = {}) {
+  const autoplay = options.autoplay ?? appState.isPlaying;
   const userId = appState.auth.userId;
   appState.playbackPositionSeconds = 0;
   appState.work = await api(
@@ -1162,13 +1345,50 @@ async function setCurrentPlaylistTrack(playlistTrack) {
   appState.notice = "현재 곡을 바꿨다냥";
   await syncLyricsOverlay();
   render();
-  if (appState.isPlaying) {
+  if (autoplay) {
+    appState.isPlaying = true;
     await playCurrentAudio().catch((error) => {
       appState.error = `재생을 시작하지 못했다냥: ${error.message}`;
       appState.isPlaying = false;
     });
     syncPlaybackTimer();
   }
+}
+
+async function reorderPlaylistTracks(orderedIds) {
+  if (!appState.playlist?.id || orderedIds.length !== appState.playlistTracks.length) {
+    return;
+  }
+
+  try {
+    appState.playlistTracks = await api(`/api/playlists/${appState.playlist.id}/tracks/reorder?userId=${appState.auth.userId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ playlistTrackIds: orderedIds }),
+    });
+    appState.notice = "재생 순서를 다시 맞췄다냥.";
+    broadcastWorkspaceChanged();
+  } catch (error) {
+    appState.error = error.message;
+  } finally {
+    render();
+  }
+}
+
+async function shufflePlaylistTracks() {
+  if (appState.playlistTracks.length < 2) {
+    appState.notice = "섞을 곡이 아직 부족하다냥.";
+    updatePlaybackDom();
+    return;
+  }
+
+  const orderedIds = appState.playlistTracks.map((track) => track.playlistTrackId);
+  for (let index = orderedIds.length - 1; index > 0; index--) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [orderedIds[index], orderedIds[randomIndex]] = [orderedIds[randomIndex], orderedIds[index]];
+  }
+
+  await reorderPlaylistTracks(orderedIds);
+  appState.notice = "플레이리스트를 랜덤 발걸음으로 섞었다냥.";
 }
 
 async function toggleRepeatMode() {
@@ -1208,12 +1428,6 @@ function updatePlaybackDom() {
   const repeatButton = document.querySelector("#repeat-toggle");
   repeatButton?.classList.toggle("active", appState.repeatMode);
 
-  const subtitleToggle = document.querySelector("#subtitle-toggle");
-  if (subtitleToggle) {
-    subtitleToggle.textContent = `자막 ${appState.lyricsOverlayVisible ? "ON" : "OFF"}`;
-    subtitleToggle.setAttribute("aria-pressed", String(appState.lyricsOverlayVisible));
-  }
-
   const youtubeToggle = document.querySelector("#youtube-video-toggle");
   if (youtubeToggle) {
     const label = appState.youtubeVideoVisible ? "영상 접기" : "영상 펼치기";
@@ -1227,22 +1441,6 @@ function updatePlaybackDom() {
   if (youtubeShell) {
     youtubeShell.classList.toggle("open", appState.youtubeVideoVisible);
     youtubeShell.setAttribute("aria-hidden", String(!appState.youtubeVideoVisible));
-  }
-
-  const inlineSubtitle = document.querySelector("#inline-subtitle");
-  if (inlineSubtitle) {
-    inlineSubtitle.classList.toggle("show", appState.lyricsOverlayVisible);
-    inlineSubtitle.setAttribute("aria-hidden", String(!appState.lyricsOverlayVisible));
-  }
-
-  const inlineSubtitleLine = document.querySelector("#inline-subtitle-line");
-  if (inlineSubtitleLine) {
-    inlineSubtitleLine.textContent = appState.selectedLine?.text || "재생 중인 가사가 여기 뜬다냥";
-  }
-
-  const inlineSubtitleTranslation = document.querySelector("#inline-subtitle-translation");
-  if (inlineSubtitleTranslation) {
-    inlineSubtitleTranslation.textContent = appState.translation?.translatedText || "번역 메모가 여기 이어진다냥";
   }
 
   const current = document.querySelector("#progress-current");
@@ -1352,21 +1550,36 @@ function statusLabel(status) {
   return labels[status] || status;
 }
 
-function widgetShell(content) {
+function widgetShell(content, options = {}) {
+  if (isEmbeddedContent) {
+    return `<section class="embedded-content">${content}</section>`;
+  }
+
+  const title = options.title || "KuroStep";
+  const rightAction = options.rightAction ?? (appState.auth && !isPawWindow() ? "settings" : "none");
+  const rightButton =
+    rightAction === "settings"
+      ? `<div class="header-actions">
+          <button class="ghost-header-button icon-text" id="settings-open" type="button">${iconSvg("settings")}<span>설정</span></button>
+          <button class="ghost-header-button" id="app-exit-button" type="button">종료</button>
+        </div>`
+      : "";
+
   return `
     <section class="widget-container">
       <header class="mac-header" id="window-drag-region" data-tauri-drag-region>
-        <div class="mac-dots">
-          <button class="mac-dot dot-red" id="window-close" type="button" aria-label="닫기"></button>
-          <button class="mac-dot dot-yellow" id="window-minimize" type="button" aria-label="최소화"></button>
+        <div class="window-tools">
+          <button class="window-tool-button" id="window-minimize" type="button" aria-label="최소화" title="최소화">
+            ${iconSvg("minimize")}
+          </button>
         </div>
         <strong class="window-title" data-tauri-drag-region>
           <span class="app-mark" aria-hidden="true">
             <img src="./assets/paw-print-neutral.svg" alt="" />
           </span>
-          KuroStep
+          ${escapeHtml(title)}
         </strong>
-        ${appState.auth ? `<button class="ghost-header-button" id="logout-button" type="button">나가기</button>` : `<span></span>`}
+        ${rightButton || `<span></span>`}
       </header>
       <div class="widget-content">
         ${content}
@@ -1405,6 +1618,34 @@ function authWidget() {
   `;
 }
 
+function settingsWidget() {
+  return `
+    <section class="settings-screen" aria-labelledby="settings-title">
+      <button class="settings-back-button" id="settings-back" type="button" aria-label="돌아가기" title="돌아가기">
+        ${iconSvg("arrowLeft")}
+      </button>
+      <div class="settings-head">
+        <p class="auth-eyebrow">SETTINGS</p>
+        <h1 id="settings-title">작업실 설정</h1>
+        <p>계정 정보와 로그아웃을 조용히 정리한다냥.</p>
+      </div>
+      <div class="settings-list">
+        <div class="settings-card">
+          <strong>로그인 계정</strong>
+          <span>${escapeHtml(appState.auth?.email || "로그인 정보 없음")}</span>
+        </div>
+        <div class="settings-card">
+          <strong>닉네임</strong>
+          <span>${escapeHtml(appState.auth?.nickname || "이름 없는 작업실")}</span>
+        </div>
+      </div>
+      <div class="settings-actions">
+        <button class="action-button danger" id="settings-logout" type="button">로그아웃</button>
+      </div>
+    </section>
+  `;
+}
+
 function appNoticeWidget() {
   if (appState.loading) {
     return `<p class="app-status" id="app-status">작업실 정리 중이냥...</p>`;
@@ -1418,9 +1659,51 @@ function appNoticeWidget() {
   return "";
 }
 
+function globalControlsWidget() {
+  return `
+    <div class="global-widget-controls" aria-label="위젯 열고 닫기">
+      <button class="action-button ${appState.pawWidgetVisible ? "primary" : ""}" id="toggle-paw-widget" type="button" aria-pressed="${appState.pawWidgetVisible}">
+        작업 발자국 ${appState.pawWidgetVisible ? "ON" : "OFF"}
+      </button>
+      <button class="action-button ${appState.lyricsOverlayVisible ? "primary" : ""}" id="global-lyrics-toggle" type="button" aria-pressed="${appState.lyricsOverlayVisible}">
+        가사 오버레이 ${appState.lyricsOverlayVisible ? "ON" : "OFF"}
+      </button>
+    </div>
+  `;
+}
+
+function taskFormWidget(work) {
+  if (!appState.taskFormOpen) {
+    return "";
+  }
+
+  const title = appState.taskEditing ? work?.title || "" : "";
+  const description = appState.taskEditing ? work?.description || "" : "";
+  const taskDate = appState.taskEditing ? work?.taskDate || todayIso() : todayIso();
+
+  return `
+    <form class="task-form" id="task-form">
+      <label>할 일 이름<input class="form-input" name="title" value="${escapeHtml(title)}" placeholder="오늘 그릴 컷 정리" required /></label>
+      <label>발자국 날짜<input class="form-input" name="taskDate" type="date" value="${escapeHtml(taskDate)}" required /></label>
+      <label class="wide">짧은 메모<textarea class="memo-input" name="description" rows="2" placeholder="오늘 작업 목표를 적어줘냥">${escapeHtml(description)}</textarea></label>
+      <div class="button-row">
+        <button class="action-button primary" type="submit">${appState.taskEditing ? "수정 저장" : "할 일 추가"}</button>
+        <button class="action-button" id="cancel-task-form" type="button">닫기</button>
+      </div>
+    </form>
+  `;
+}
+
 function todayWorkWidget(work, counts) {
   if (!work) {
-    return emptySection("오늘 할 일", "오늘 찍을 발자국이 아직 없다냥.");
+    return `
+      <section class="widget-section today-work" aria-labelledby="today-work-title">
+        ${sectionHeader("오늘 할 일")}
+        <p class="state-message">오늘 찍을 발자국이 아직 없다냥.</p>
+        <button class="action-button primary" id="open-task-create" type="button">${iconSvg("plus")}<span>할 일 추가</span></button>
+        ${taskFormWidget(null)}
+      </section>
+    `;
   }
 
   const statuses = ["TODO", "DOING", "DONE"];
@@ -1436,6 +1719,11 @@ function todayWorkWidget(work, counts) {
       ${sectionHeader("오늘 할 일")}
       <div class="task-header">
         <h3 class="task-title" id="today-work-title">${escapeHtml(work.title)}</h3>
+        <div class="task-actions">
+          <button class="mini-icon-button" id="open-task-create" type="button" title="할 일 추가" aria-label="할 일 추가">${iconSvg("plus")}</button>
+          <button class="mini-icon-button" id="open-task-edit" type="button" title="할 일 수정" aria-label="할 일 수정">${iconSvg("edit")}</button>
+          <button class="mini-icon-button danger" id="delete-task" type="button" title="할 일 삭제" aria-label="할 일 삭제">${iconSvg("trash")}</button>
+        </div>
       </div>
       <p class="task-description">${escapeHtml(work.description || work.taskDate)}</p>
       <div class="meta-grid" aria-label="작업 카드 상세">
@@ -1447,6 +1735,7 @@ function todayWorkWidget(work, counts) {
       <div class="status-badges" aria-label="작업 상태">
         ${statusButtons}
       </div>
+      ${taskFormWidget(work)}
     </section>
   `;
 }
@@ -1476,12 +1765,6 @@ function playerWidget(track) {
             <span>${escapeHtml(sourceLabel)}</span>
             <span>${escapeHtml(track.sourceId || "source id 없음")}</span>
             <span>${escapeHtml(formatDuration(duration))}</span>
-          </div>
-          <div class="track-actions">
-            <button class="action-button" id="prepare-player" type="button">앱 안 플레이어 준비</button>
-            <button class="action-button subtitle-toggle" id="subtitle-toggle" type="button" aria-pressed="${appState.lyricsOverlayVisible}">
-              자막 ${appState.lyricsOverlayVisible ? "ON" : "OFF"}
-            </button>
           </div>
         </div>
       </div>
@@ -1516,10 +1799,6 @@ function playerWidget(track) {
         ${iconSvg(appState.youtubeVideoVisible ? "chevronUp" : "chevronDown")}
         <span>${appState.youtubeVideoVisible ? "영상 접기" : "영상 펼치기"}</span>
       </button>
-      <div class="inline-subtitle ${appState.lyricsOverlayVisible ? "show" : ""}" id="inline-subtitle" aria-hidden="${appState.lyricsOverlayVisible ? "false" : "true"}">
-        <strong id="inline-subtitle-line">${escapeHtml(appState.selectedLine?.text || "재생 중인 가사가 여기 뜬다냥")}</strong>
-        <span id="inline-subtitle-translation">${escapeHtml(appState.translation?.translatedText || "번역 메모가 여기 이어진다냥")}</span>
-      </div>
       <div class="youtube-frame-shell ${appState.youtubeVideoVisible ? "open" : ""}" id="youtube-frame-shell" aria-hidden="${appState.youtubeVideoVisible ? "false" : "true"}">
         <div id="youtube-player" class="youtube-player" aria-label="앱 내부 YouTube 플레이어"></div>
       </div>
@@ -1541,17 +1820,27 @@ function youtubeLinkWidget() {
   `;
 }
 
+function getPlaylistPageCount(trackCount) {
+  return Math.max(Math.ceil(trackCount / PLAYLIST_PAGE_SIZE), 1);
+}
+
 function playlistWidget(tracks) {
   if (!tracks.length) {
     return emptySection("PLAYLIST", "플레이리스트가 아직 조용하다냥.");
   }
 
-  const items = tracks
+  const pageCount = getPlaylistPageCount(tracks.length);
+  const currentPage = Math.min(Math.max(appState.playlistPage, 1), pageCount);
+  const startIndex = (currentPage - 1) * PLAYLIST_PAGE_SIZE;
+  const pagedTracks = tracks.slice(startIndex, startIndex + PLAYLIST_PAGE_SIZE);
+
+  const items = pagedTracks
     .map((track, index) => {
       const playing = track.playlistTrackId === appState.currentTrack?.playlistTrackId || (!appState.currentTrack && index === 0) ? " playing" : "";
       const duration = track.durationSeconds || (track.trackId === appState.currentTrack?.id ? appState.currentTrack.durationSeconds : null);
       return `
-        <li class="playlist-item${playing}">
+        <li class="playlist-item${playing}" draggable="true" data-playlist-track-id="${escapeHtml(track.playlistTrackId)}">
+          <button class="drag-handle" type="button" title="끌어서 순서 바꾸기" aria-label="끌어서 순서 바꾸기">${iconSvg("grip")}</button>
           <span class="playlist-track">
             <strong>${escapeHtml(track.title)}</strong>
             <small>${escapeHtml(track.artist || "Unknown")} · #${escapeHtml(track.trackId)}</small>
@@ -1564,11 +1853,22 @@ function playlistWidget(tracks) {
 
   return `
     <section class="widget-section playlist-widget" aria-labelledby="playlist-title">
-      ${sectionHeader("PLAYLIST")}
-      <p class="playlist-name">${escapeHtml(appState.playlist?.name || "")} · ${escapeHtml(String(tracks.length))}곡</p>
+      <div class="section-head">
+        <h2 class="section-title">PLAYLIST</h2>
+        <button class="mini-icon-button" id="shuffle-playlist" type="button" title="셔플" aria-label="셔플">${iconSvg("shuffle")}</button>
+      </div>
+      <p class="playlist-name">${escapeHtml(appState.playlist?.name || "")} · ${escapeHtml(String(tracks.length))}곡 · ${escapeHtml(String(currentPage))}/${escapeHtml(String(pageCount))}쪽</p>
       <ol class="playlist-list" id="playlist-title">
         ${items}
       </ol>
+      ${
+        pageCount > 1
+          ? `<div class="playlist-pager" aria-label="플레이리스트 페이지">
+              <button class="action-button" id="playlist-prev-page" type="button" ${currentPage <= 1 ? "disabled" : ""}>이전 10곡</button>
+              <button class="action-button" id="playlist-next-page" type="button" ${currentPage >= pageCount ? "disabled" : ""}>다음 10곡</button>
+            </div>`
+          : ""
+      }
     </section>
   `;
 }
@@ -1593,6 +1893,7 @@ function lyricMemoWidget(line, translation) {
       <div class="button-row">
         <button class="action-button" id="auto-translate" type="button">초안 다시냥</button>
         <button class="action-button primary" id="save-memo" type="button">콕 저장</button>
+        <button class="action-button danger" id="delete-memo" type="button">메모 삭제</button>
       </div>
     </section>
   `;
@@ -1623,19 +1924,13 @@ function widgetGroup(className, title, subtitle, content) {
 
 function taskPawWidget() {
   return widgetGroup(
-    "task-paw-widget",
-    "오늘 발자국",
-    "오늘 할 일과 작업 상태를 살금살금 정리한다냥",
-    todayWorkWidget(appState.work, appState.counts)
-  );
-}
-
-function lyricDeskWidget() {
-  return widgetGroup(
-    "lyric-desk-widget",
-    "가사 손질장",
-    "원문 옆에 한국어 번역과 떠오른 느낌을 콕 남긴다냥",
-    lyricMemoWidget(appState.selectedLine, appState.translation)
+    "task-paw-widget lyric-paw-widget",
+    "작업 발자국",
+    "오늘 할 일과 번역 메모를 한 발자국씩 만진다냥",
+    `
+      ${todayWorkWidget(appState.work, appState.counts)}
+      ${lyricMemoWidget(appState.selectedLine, appState.translation)}
+    `
   );
 }
 
@@ -1693,24 +1988,50 @@ function lyricsWidget() {
 function render() {
   const app = document.querySelector("#app");
   if (!appState.auth) {
-    app.innerHTML = widgetShell(authWidget());
+    app.innerHTML = widgetShell(
+      isPawWindow() ? `<p class="app-status">로그인하면 작업 발자국이 열린다냥.</p>` : authWidget(),
+      isPawWindow() ? { title: "작업 발자국", rightAction: "none" } : {},
+    );
     bindWindowControls();
-    bindAuthActions();
+    if (!isPawWindow()) {
+      bindAuthActions();
+    }
+    return;
+  }
+
+  if (appState.settingsOpen && !isPawWindow()) {
+    app.innerHTML = widgetShell(settingsWidget(), { title: "KuroStep", rightAction: "none" });
+    bindWindowControls();
+    bindSettingsActions();
+    return;
+  }
+
+  if (isPawWindow()) {
+    app.innerHTML = widgetShell(`
+      ${appNoticeWidget()}
+      <div class="widget-stack" aria-label="작업 발자국 위젯">
+        ${taskPawWidget()}
+      </div>
+    `, { title: "작업 발자국", rightAction: "none" });
+
+    bindWindowControls();
+    bindActions();
     return;
   }
 
   app.innerHTML = widgetShell(`
     ${appNoticeWidget()}
+    ${globalControlsWidget()}
     <div class="widget-stack" aria-label="KuroStep 위젯 모음">
-    ${taskPawWidget()}
-    ${lyricDeskWidget()}
-    ${musicPlayerWidget()}
-    ${lyricsWidget()}
+      ${musicPlayerWidget()}
+      ${lyricsWidget()}
     </div>
+    ${!isTauriApp && appState.pawWidgetVisible ? `<aside class="detached-widget paw-detached-widget" aria-label="작업 발자국 위젯">${taskPawWidget()}</aside>` : ""}
   `);
 
   bindWindowControls();
   bindActions();
+  syncPawWidgetWindowIfNeeded();
 }
 
 function bindAuthActions() {
@@ -1728,24 +2049,37 @@ function bindAuthActions() {
 }
 
 function bindActions() {
-  document.querySelector("#logout-button")?.addEventListener("click", logout);
+  document.querySelector("#settings-open")?.addEventListener("click", () => {
+    appState.settingsOpen = true;
+    render();
+  });
+  document.querySelector("#app-exit-button")?.addEventListener("click", exitApplication);
+  document.querySelector("#toggle-paw-widget")?.addEventListener("click", () => {
+    setPawWidgetVisible(!appState.pawWidgetVisible);
+  });
+  document.querySelector("#global-lyrics-toggle")?.addEventListener("click", async () => {
+    await setLyricsOverlayVisible(!appState.lyricsOverlayVisible);
+    render();
+  });
+  document.querySelector("#open-task-create")?.addEventListener("click", () => {
+    appState.taskFormOpen = true;
+    appState.taskEditing = false;
+    render();
+  });
+  document.querySelector("#open-task-edit")?.addEventListener("click", () => {
+    appState.taskFormOpen = true;
+    appState.taskEditing = true;
+    render();
+  });
+  document.querySelector("#cancel-task-form")?.addEventListener("click", () => {
+    appState.taskFormOpen = false;
+    appState.taskEditing = false;
+    render();
+  });
+  document.querySelector("#task-form")?.addEventListener("submit", saveTaskFromForm);
+  document.querySelector("#delete-task")?.addEventListener("click", deleteCurrentTask);
   document.querySelectorAll("[data-status]").forEach((button) => {
     button.addEventListener("click", () => changeStatus(button.dataset.status));
-  });
-  document.querySelector("#prepare-player")?.addEventListener("click", async () => {
-    try {
-      await ensureYoutubePlayer();
-      getTrackDurationSeconds();
-      window.setTimeout(() => {
-        getTrackDurationSeconds();
-        updatePlaybackDom();
-      }, 700);
-      appState.notice = "앱 안 플레이어 준비 완료냥. 이제 재생 눌러줘냥.";
-      updatePlaybackDom();
-    } catch (error) {
-      appState.error = error.message;
-      render();
-    }
   });
   document.querySelector("#youtube-video-toggle")?.addEventListener("click", async () => {
     appState.youtubeVideoVisible = !appState.youtubeVideoVisible;
@@ -1762,9 +2096,6 @@ function bindActions() {
       render();
     }
   });
-  document.querySelector("#subtitle-toggle")?.addEventListener("click", async () => {
-    await setLyricsOverlayVisible(!appState.lyricsOverlayVisible);
-  });
   document.querySelector("#lyrics-panel-toggle")?.addEventListener("click", () => {
     appState.lyricsPanelExpanded = !appState.lyricsPanelExpanded;
     render();
@@ -1773,18 +2104,95 @@ function bindActions() {
   document.querySelector("#skip-back")?.addEventListener("click", () => skipPlayback(-10));
   document.querySelector("#skip-forward")?.addEventListener("click", () => skipPlayback(10));
   bindProgressScrubber();
-  document.querySelector("#volume-toggle")?.addEventListener("click", toggleVolumePanel);
+  document.querySelector("#volume-toggle")?.addEventListener("click", toggleMute);
   document.querySelector("#volume-slider")?.addEventListener("input", (event) => {
     changeVolume(event.target.value);
   });
   document.querySelector("#previous-track")?.addEventListener("click", () => movePlaylistTrack(-1));
   document.querySelector("#next-track")?.addEventListener("click", () => movePlaylistTrack(1));
   document.querySelector("#repeat-toggle")?.addEventListener("click", toggleRepeatMode);
+  document.querySelector("#shuffle-playlist")?.addEventListener("click", shufflePlaylistTracks);
+  document.querySelector("#playlist-prev-page")?.addEventListener("click", () => {
+    appState.playlistPage = Math.max(appState.playlistPage - 1, 1);
+    render();
+  });
+  document.querySelector("#playlist-next-page")?.addEventListener("click", () => {
+    appState.playlistPage = Math.min(appState.playlistPage + 1, getPlaylistPageCount(appState.playlistTracks.length));
+    render();
+  });
   document.querySelector("#save-memo")?.addEventListener("click", saveMemo);
+  document.querySelector("#delete-memo")?.addEventListener("click", deleteMemo);
   document.querySelector("#register-track-link")?.addEventListener("click", registerTrackFromInputs);
+  bindPlaylistInteractions();
   document.querySelector("#auto-translate")?.addEventListener("click", async () => {
     await ensureLyricAndTranslation(appState.auth.userId, appState.currentTrack.id);
     render();
+  });
+}
+
+function bindSettingsActions() {
+  document.querySelector("#settings-back")?.addEventListener("click", () => {
+    appState.settingsOpen = false;
+    render();
+  });
+  document.querySelector("#settings-logout")?.addEventListener("click", logout);
+}
+
+function bindPlaylistInteractions() {
+  document.querySelectorAll("[data-playlist-track-id]").forEach((item) => {
+    const playlistTrackId = Number(item.dataset.playlistTrackId);
+    const playlistTrack = appState.playlistTracks.find((track) => track.playlistTrackId === playlistTrackId);
+
+    item.addEventListener("click", (event) => {
+      if (event.target.closest(".drag-handle")) {
+        return;
+      }
+      if (playlistTrack) {
+        setCurrentPlaylistTrack(playlistTrack, { autoplay: true });
+      }
+    });
+
+    item.addEventListener("dragstart", (event) => {
+      draggedPlaylistTrackId = playlistTrackId;
+      item.classList.add("dragging");
+      event.dataTransfer?.setData("text/plain", String(playlistTrackId));
+      event.dataTransfer?.setDragImage?.(item, 20, 12);
+    });
+
+    item.addEventListener("dragend", () => {
+      draggedPlaylistTrackId = null;
+      item.classList.remove("dragging");
+      document.querySelectorAll(".playlist-item.drag-over").forEach((node) => node.classList.remove("drag-over"));
+    });
+
+    item.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      item.classList.add("drag-over");
+    });
+
+    item.addEventListener("dragleave", () => {
+      item.classList.remove("drag-over");
+    });
+
+    item.addEventListener("drop", (event) => {
+      event.preventDefault();
+      item.classList.remove("drag-over");
+      const fromId = Number(event.dataTransfer?.getData("text/plain") || draggedPlaylistTrackId);
+      const toId = playlistTrackId;
+      if (!fromId || fromId === toId) {
+        return;
+      }
+
+      const orderedIds = appState.playlistTracks.map((track) => track.playlistTrackId);
+      const fromIndex = orderedIds.indexOf(fromId);
+      const toIndex = orderedIds.indexOf(toId);
+      if (fromIndex < 0 || toIndex < 0) {
+        return;
+      }
+      orderedIds.splice(fromIndex, 1);
+      orderedIds.splice(toIndex, 0, fromId);
+      reorderPlaylistTracks(orderedIds);
+    });
   });
 }
 
@@ -1842,6 +2250,22 @@ async function closeWidget() {
   window.close();
 }
 
+async function exitApplication() {
+  const invoke = window.__TAURI__?.core?.invoke;
+  if (invoke) {
+    try {
+      await invoke("exit_app");
+      return;
+    } catch (error) {
+      appState.error = `앱을 한 번에 종료하지 못했다냥: ${error.message || error}`;
+      render();
+      return;
+    }
+  }
+
+  closeWidget();
+}
+
 function getCurrentWindow() {
   return window.__TAURI__?.window?.getCurrentWindow?.();
 }
@@ -1861,10 +2285,20 @@ async function startWindowDrag() {
 }
 
 function bindWindowControls() {
-  document.querySelector("#window-close")?.addEventListener("click", closeWidget);
   document.querySelector("#window-minimize")?.addEventListener("click", minimizeWidget);
-  document.querySelector("#window-drag-region")?.addEventListener("mousedown", (event) => {
-    if (event.target.closest("button")) {
+  document.querySelectorAll("[data-tauri-drag-region]").forEach((region) => {
+    region.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || event.target.closest("button, input, textarea, select, a, [role='button']")) {
+        return;
+      }
+      startWindowDrag();
+    });
+  });
+  document.querySelector(".widget-container")?.addEventListener("pointerdown", (event) => {
+    if (
+      event.button !== 0 ||
+      event.target.closest(".widget-content, button, input, textarea, select, a, [role='button']")
+    ) {
       return;
     }
     startWindowDrag();
@@ -1893,9 +2327,57 @@ async function setLyricsOverlayVisible(visible) {
   updatePlaybackDom();
 }
 
+async function setPawWidgetVisible(visible) {
+  appState.pawWidgetVisible = visible;
+  window.localStorage.setItem("kurostep.pawWidgetVisible", JSON.stringify(visible));
+
+  const invoke = window.__TAURI__?.core?.invoke;
+  if (invoke) {
+    try {
+      await invoke("set_paw_visible", { visible });
+      appState.notice = visible ? "작업 발자국 창을 펼쳤다냥." : "작업 발자국 창을 접었다냥.";
+    } catch (error) {
+      appState.error = `작업 발자국 창을 못 열었다냥: ${error.message || error}`;
+    }
+  } else {
+    appState.notice = visible ? "작업 발자국을 펼쳤다냥." : "작업 발자국을 접었다냥.";
+  }
+
+  render();
+}
+
+async function syncPawWidgetWindowIfNeeded() {
+  const invoke = window.__TAURI__?.core?.invoke;
+  if (!invoke || !appState.auth) {
+    return;
+  }
+  if (syncedPawWindowVisible === appState.pawWidgetVisible) {
+    return;
+  }
+
+  try {
+    await invoke("set_paw_visible", { visible: appState.pawWidgetVisible });
+    syncedPawWindowVisible = appState.pawWidgetVisible;
+  } catch {
+    // The browser preview does not have a native paw window.
+  }
+}
+
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     closeWidget();
+  }
+});
+
+window.addEventListener("storage", (event) => {
+  if (event.key === "kurostep.auth") {
+    appState.auth = readJson("kurostep.auth");
+    loadDashboard();
+    return;
+  }
+
+  if (event.key === "kurostep.workspaceChangedAt" && appState.auth) {
+    loadDashboard();
   }
 });
 

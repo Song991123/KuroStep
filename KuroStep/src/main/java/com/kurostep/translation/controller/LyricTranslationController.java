@@ -6,6 +6,7 @@ import com.kurostep.translation.dto.LyricTranslationSaveRequest;
 import com.kurostep.translation.service.LyricTranslationService;
 import jakarta.validation.Valid;
 import java.util.List;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -48,5 +49,14 @@ public class LyricTranslationController {
             @PathVariable Long lineRefId
     ) {
         return lyricTranslationService.findByLine(userId, lineRefId);
+    }
+
+    @DeleteMapping("/{lineRefId}/translations")
+    public void deleteByLine(
+            @RequestParam Long userId,
+            @PathVariable Long lineRefId,
+            @RequestParam(defaultValue = "ko") String languageCode
+    ) {
+        lyricTranslationService.deleteByLine(userId, lineRefId, languageCode);
     }
 }

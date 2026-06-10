@@ -92,6 +92,15 @@ public class LyricTranslationService {
                 .toList();
     }
 
+    @Transactional
+    public void deleteByLine(Long userId, Long lyricLineRefId, String languageCode) {
+        LyricTranslation translation = lyricTranslationRepository
+                .findByUserIdAndLyricLineRefIdAndLanguageCode(userId, lyricLineRefId, normalizeLanguageCode(languageCode))
+                .orElseThrow(() -> new NotFoundException("삭제할 번역 메모를 찾을 수 없습니다."));
+
+        lyricTranslationRepository.delete(translation);
+    }
+
     private String normalizeLanguageCode(String languageCode) {
         if (languageCode == null || languageCode.isBlank()) {
             return "ko";

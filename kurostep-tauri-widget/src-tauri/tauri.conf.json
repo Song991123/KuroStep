@@ -15,7 +15,7 @@
       {
         "label": "main",
         "title": "KuroStep Widget Dev",
-        "url": "index.html",
+        "url": "https://song991123.github.io/KuroStep/",
         "width": 380,
         "height": 660,
         "minWidth": 360,
@@ -31,7 +31,7 @@
       {
         "label": "lyrics",
         "title": "KuroStep Lyrics",
-        "url": "lyrics.html",
+        "url": "https://song991123.github.io/KuroStep/lyrics.html",
         "width": 760,
         "height": 128,
         "minWidth": 420,
@@ -44,6 +44,23 @@
         "visible": false,
         "center": true,
         "shadow": false
+      },
+      {
+        "label": "paw",
+        "title": "KuroStep Paw Notes",
+        "url": "https://song991123.github.io/KuroStep/paw.html",
+        "width": 380,
+        "height": 520,
+        "minWidth": 360,
+        "minHeight": 440,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "center": true,
+        "shadow": true
       }
     ],
     "security": {

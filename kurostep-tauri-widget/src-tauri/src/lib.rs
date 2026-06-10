@@ -31,10 +31,36 @@ fn set_lyrics_visible(
     Ok(())
 }
 
+#[tauri::command]
+fn set_paw_visible(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
+    let paw = app
+        .get_webview_window("paw")
+        .ok_or_else(|| "paw window not found".to_string())?;
+
+    let is_visible = paw.is_visible().map_err(|error| error.to_string())?;
+
+    if visible && !is_visible {
+        paw.show().map_err(|error| error.to_string())?;
+    } else if !visible && is_visible {
+        paw.hide().map_err(|error| error.to_string())?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn exit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![set_lyrics_visible])
+        .invoke_handler(tauri::generate_handler![
+            set_lyrics_visible,
+            set_paw_visible,
+            exit_app
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

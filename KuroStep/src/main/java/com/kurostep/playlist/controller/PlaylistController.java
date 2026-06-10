@@ -2,6 +2,7 @@ package com.kurostep.playlist.controller;
 
 import com.kurostep.playlist.dto.PlaylistCreateRequest;
 import com.kurostep.playlist.dto.PlaylistResponse;
+import com.kurostep.playlist.dto.PlaylistTrackReorderRequest;
 import com.kurostep.playlist.dto.PlaylistTrackResponse;
 import com.kurostep.playlist.dto.PlaylistUpdateRequest;
 import com.kurostep.playlist.service.PlaylistService;
@@ -91,5 +92,14 @@ public class PlaylistController {
             @PathVariable Long trackId
     ) {
         playlistService.removeTrack(userId, playlistId, trackId);
+    }
+
+    @PatchMapping("/{playlistId}/tracks/reorder")
+    public List<PlaylistTrackResponse> reorderTracks(
+            @RequestParam Long userId, // TODO: JWT 적용 후 로그인 사용자 ID로 교체
+            @PathVariable Long playlistId,
+            @Valid @RequestBody PlaylistTrackReorderRequest request
+    ) {
+        return playlistService.reorderTracks(userId, playlistId, request);
     }
 }
