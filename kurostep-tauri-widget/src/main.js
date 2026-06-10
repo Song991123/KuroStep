@@ -656,14 +656,20 @@ async function hydratePlaylistTrack(playlistTrack) {
 }
 
 async function findOrCreateTrack(trackDraft) {
-  const results = await api(`/api/tracks/search?keyword=${encodeURIComponent(trackDraft.title)}`);
-  const existing = results.find(
-    (track) =>
-      track.sourceType === trackDraft.sourceType &&
-      ((trackDraft.sourceId && track.sourceId === trackDraft.sourceId) || track.sourceUrl === trackDraft.sourceUrl),
-  );
-  if (existing) {
-    return existing;
+  const searchKeyword = trackDraft.sourceId || trackDraft.title;
+  try {
+    const results = await api(`/api/tracks/search?keyword=${encodeURIComponent(searchKeyword)}`);
+    const existing = results.find(
+      (track) =>
+        track.sourceType === trackDraft.sourceType &&
+        ((trackDraft.sourceId && track.sourceId === trackDraft.sourceId) || track.sourceUrl === trackDraft.sourceUrl),
+    );
+    if (existing) {
+      return existing;
+    }
+  } catch {
+    // Searching by title can fail on remote servers when video titles contain
+    // unusual Unicode. Creation is still safe for the demo flow.
   }
 
   return api("/api/tracks", {
