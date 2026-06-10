@@ -83,5 +83,8 @@ public class CreatorTask extends BaseTimeEntity {
         this.currentPlaylistTrack = playlistTrack;
     }
 
+    public void clearCurrentPlaylistTrack(){
+        this.currentPlaylistTrack = null;
+    }
 
 }

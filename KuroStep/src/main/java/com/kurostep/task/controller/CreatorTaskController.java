@@ -103,4 +103,12 @@ public class CreatorTaskController {
     ) {
         return creatorTaskService.changeCurrentPlaylistTrack(userId, taskId, playlistTrackId);
     }
+
+    @DeleteMapping("/{taskId}/current-playlist-track")
+    public CreatorTaskResponse clearCurrentPlaylistTrack(
+            @RequestParam Long userId, // TODO: JWT 적용 후 로그인 사용자 ID로 교체
+            @PathVariable Long taskId
+    ) {
+        return creatorTaskService.clearCurrentPlaylistTrack(userId, taskId);
+    }
 }

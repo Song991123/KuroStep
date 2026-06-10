@@ -117,6 +117,14 @@ public class CreatorTaskService {
         return CreatorTaskResponse.from(task);
     }
 
+    @Transactional
+    public CreatorTaskResponse clearCurrentPlaylistTrack(Long userId, Long taskId) {
+        CreatorTask task = getOwnedTask(userId, taskId);
+        task.clearCurrentPlaylistTrack();
+
+        return CreatorTaskResponse.from(task);
+    }
+
     private User getUser(Long userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("사용자를 찾을 수 없습니다."));

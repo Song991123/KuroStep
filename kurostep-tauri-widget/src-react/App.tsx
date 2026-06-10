@@ -1059,6 +1059,12 @@ export default function App() {
     workspaceRef.current = workspace;
   }, [workspace]);
 
+  function updateWorkspaceState(updater: Workspace | ((current: Workspace) => Workspace)) {
+    const next = typeof updater === "function" ? updater(workspaceRef.current) : updater;
+    workspaceRef.current = next;
+    setWorkspace(next);
+  }
+
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
       const data = event.data as { source?: string; action?: string };
@@ -1276,7 +1282,7 @@ export default function App() {
         }
       }
 
-      setWorkspace({
+      updateWorkspaceState({
         tasks,
         work,
         counts: countTaskStatuses(tasks),
@@ -1346,7 +1352,7 @@ export default function App() {
   function logout() {
     window.localStorage.removeItem("kurostep.auth");
     setAuth(null);
-    setWorkspace({ tasks: [], work: null, counts: { ...emptyCounts }, playlist: null, playlistTracks: [], currentTrack: null });
+    updateWorkspaceState({ tasks: [], work: null, counts: { ...emptyCounts }, playlist: null, playlistTracks: [], currentTrack: null });
     setIsPlaying(false);
     setPlaybackPosition(0);
     setTrackDuration(0);
@@ -1365,7 +1371,7 @@ export default function App() {
   async function reloadTasks(session = authRef.current) {
     if (!session?.userId) return;
     const tasks = await api<CreatorTask[]>(`/api/tasks/today?userId=${session.userId}`, {}, session);
-    setWorkspace((current) => {
+    updateWorkspaceState((current) => {
       const currentWorkId = current.work?.id;
       const work = tasks.find((task) => task.id === currentWorkId) || tasks.find((task) => task.status === "DOING") || tasks[0] || null;
       return {
@@ -1381,7 +1387,7 @@ export default function App() {
     const playlist = workspaceRef.current.playlist;
     if (!session?.userId || !playlist) return [];
     const playlistTracks = await api<PlaylistTrack[]>(`/api/playlists/${playlist.id}/tracks?userId=${session.userId}`, {}, session);
-    setWorkspace((current) => ({ ...current, playlistTracks }));
+    updateWorkspaceState((current) => ({ ...current, playlistTracks }));
     setPlaylistPage((current) => Math.min(current, getPlaylistPageCount(playlistTracks.length)));
 
     if (options.selectFirstWhenEmpty && !workspaceRef.current.currentTrack && playlistTracks[0]) {
@@ -1462,6 +1468,7 @@ export default function App() {
 
   async function registerLink(url: string) {
     const currentWorkspace = workspaceRef.current;
+    const shouldAutoSelectAddedTrack = !workspace.currentTrack;
     if (!auth?.userId || !currentWorkspace.playlist) {
       setNotice({ kind: "error", message: "BGM 바구니가 아직 준비 중이다냥. 잠깐 뒤 다시 눌러줘냥." });
       return false;
@@ -1500,7 +1507,7 @@ export default function App() {
           });
         }
         const playlistTracks = await reloadPlaylistTracks(auth);
-        if (!workspaceRef.current.currentTrack && firstAddedTrackId) {
+        if (shouldAutoSelectAddedTrack && firstAddedTrackId && !workspaceRef.current.currentTrack) {
           const firstAddedPlaylistTrack = playlistTracks.find((item) => item.trackId === firstAddedTrackId) || playlistTracks[0];
           if (firstAddedPlaylistTrack) {
             await selectTrack(firstAddedPlaylistTrack);
@@ -1512,12 +1519,10 @@ export default function App() {
         await api<void>(`/api/playlists/${currentWorkspace.playlist.id}/tracks/${track.id}?userId=${auth.userId}`, { method: "POST" }, auth).catch((error) => {
           if (!String((error as Error).message).includes("이미")) throw error;
         });
-        const playlistTracks = await reloadPlaylistTracks(auth);
-        if (!workspaceRef.current.currentTrack) {
-          const addedPlaylistTrack = playlistTracks.find((item) => item.trackId === track.id) || playlistTracks[0];
-          if (addedPlaylistTrack) {
-            await selectTrack(addedPlaylistTrack);
-          }
+        const playlistTracks = await reloadPlaylistTracks(auth, { selectFirstWhenEmpty: shouldAutoSelectAddedTrack });
+        const addedPlaylistTrack = playlistTracks.find((item) => item.trackId === track.id) || playlistTracks[0];
+        if (addedPlaylistTrack) {
+          await selectTrack(addedPlaylistTrack);
         }
         setNotice({ kind: "notice", message: "곡을 BGM 바구니에 넣었다냥." });
       }
@@ -1530,16 +1535,48 @@ export default function App() {
 
   async function selectTrack(playlistTrack: PlaylistTrack) {
     const currentWorkspace = workspaceRef.current;
-    if (!auth?.userId || !currentWorkspace.work) return;
+    if (!auth?.userId) return;
+    let work = currentWorkspace.work;
     try {
-      const work = await api<CreatorTask>(`/api/tasks/${currentWorkspace.work.id}/current-playlist-track/${playlistTrack.playlistTrackId}?userId=${auth.userId}`, { method: "PATCH" }, auth);
+      if (!work) {
+        const tasks = await api<CreatorTask[]>(`/api/tasks/today?userId=${auth.userId}`, {}, auth);
+        work = tasks.find((task) => task.status === "DOING") || tasks[0] || null;
+        updateWorkspaceState((current) => ({
+          ...current,
+          tasks,
+          work,
+          counts: countTaskStatuses(tasks),
+        }));
+      }
+      if (!work) {
+        work = await api<CreatorTask>(`/api/tasks?userId=${auth.userId}`, {
+          method: "POST",
+          body: JSON.stringify({ title: "오늘의 작업 발자국 정리", description: "", taskDate: todayIso() }),
+        }, auth);
+        updateWorkspaceState((current) => ({
+          ...current,
+          tasks: [work!, ...current.tasks],
+          work,
+          counts: countTaskStatuses([work!, ...current.tasks]),
+        }));
+      }
+      const playlist = workspaceRef.current.playlist;
+      if (playlist && work.playlistId !== playlist.id) {
+        work = await api<CreatorTask>(`/api/tasks/${work.id}/playlist/${playlist.id}?userId=${auth.userId}`, { method: "PATCH" }, auth);
+        updateWorkspaceState((current) => ({
+          ...current,
+          work,
+          tasks: current.tasks.map((task) => (task.id === work!.id ? work! : task)),
+        }));
+      }
+      const updatedWork = await api<CreatorTask>(`/api/tasks/${work.id}/current-playlist-track/${playlistTrack.playlistTrackId}?userId=${auth.userId}`, { method: "PATCH" }, auth);
       const detail = await api<Track>(`/api/tracks/${playlistTrack.trackId}`, {}, auth);
       setPlaybackPosition(0);
       setTrackDuration(detail.durationSeconds || 0);
-      setWorkspace((current) => ({
+      updateWorkspaceState((current) => ({
         ...current,
-        work,
-        tasks: current.tasks.map((task) => (task.id === work.id ? work : task)),
+        work: updatedWork,
+        tasks: current.tasks.map((task) => (task.id === updatedWork.id ? updatedWork : task)),
         currentTrack: { ...detail, playlistTrackId: playlistTrack.playlistTrackId, playlistName: current.playlist?.name },
       }));
       setNotice({ kind: "notice", message: "현재 곡을 바꿨다냥." });
@@ -1549,20 +1586,33 @@ export default function App() {
   }
 
   async function removeTrack(playlistTrack: PlaylistTrack) {
-    if (!auth?.userId || !workspace.playlist) return;
-    const removingCurrent = workspace.currentTrack?.playlistTrackId === playlistTrack.playlistTrackId;
+    const currentWorkspace = workspaceRef.current;
+    if (!auth?.userId || !currentWorkspace.playlist) return;
+    const removingCurrent = currentWorkspace.currentTrack?.playlistTrackId === playlistTrack.playlistTrackId;
+    const replacement = currentWorkspace.playlistTracks.find((item) => item.playlistTrackId !== playlistTrack.playlistTrackId) || null;
     try {
-      await api<void>(`/api/playlists/${workspace.playlist.id}/tracks/${playlistTrack.trackId}?userId=${auth.userId}`, { method: "DELETE" }, auth);
+      if (removingCurrent && currentWorkspace.work) {
+        if (replacement) {
+          await api<CreatorTask>(`/api/tasks/${currentWorkspace.work.id}/current-playlist-track/${replacement.playlistTrackId}?userId=${auth.userId}`, { method: "PATCH" }, auth);
+        } else {
+          await api<CreatorTask>(`/api/tasks/${currentWorkspace.work.id}/current-playlist-track?userId=${auth.userId}`, { method: "DELETE" }, auth);
+        }
+      }
+
+      await api<void>(`/api/playlists/${currentWorkspace.playlist.id}/tracks/${playlistTrack.trackId}?userId=${auth.userId}`, { method: "DELETE" }, auth);
       const playlistTracks = await reloadPlaylistTracks(auth);
       if (removingCurrent) {
-        const replacement = playlistTracks[0] || null;
-        if (replacement) {
-          await selectTrack(replacement);
-        } else {
-          setWorkspace((current) => ({ ...current, currentTrack: null }));
+        if (!replacement || !playlistTracks.length) {
+          updateWorkspaceState((current) => ({ ...current, currentTrack: null }));
           setPlaybackPosition(0);
           setTrackDuration(0);
           setIsPlaying(false);
+        } else {
+          const detail = await api<Track>(`/api/tracks/${replacement.trackId}`, {}, auth);
+          updateWorkspaceState((current) => ({
+            ...current,
+            currentTrack: { ...detail, playlistTrackId: replacement.playlistTrackId, playlistName: current.playlist?.name },
+          }));
         }
       }
       setNotice({ kind: "notice", message: "BGM 바구니에서 곡을 뺐다냥." });
@@ -1587,7 +1637,7 @@ export default function App() {
         method: "PATCH",
         body: JSON.stringify({ playlistTrackIds: orderedIds }),
       }, auth);
-      setWorkspace((current) => ({ ...current, playlistTracks: tracks }));
+      updateWorkspaceState((current) => ({ ...current, playlistTracks: tracks }));
       setNotice({ kind: "notice", message: "플레이리스트를 랜덤 발걸음으로 섞었다냥." });
     } catch (error) {
       setNotice({ kind: "error", message: (error as Error).message });
@@ -1606,7 +1656,7 @@ export default function App() {
         method: "PATCH",
         body: JSON.stringify({ playlistTrackIds }),
       }, auth);
-      setWorkspace((current) => ({ ...current, playlistTracks: tracks }));
+      updateWorkspaceState((current) => ({ ...current, playlistTracks: tracks }));
       setNotice({ kind: "notice", message: "BGM 순서를 살금 바꿨다냥." });
     } catch (error) {
       setNotice({ kind: "error", message: (error as Error).message });
@@ -1760,7 +1810,7 @@ export default function App() {
           savedLyricPieces={savedLyricPieces}
           selectedLine={selectedLine}
           translation={translation}
-          onSelectTask={(task) => setWorkspace((current) => ({ ...current, work: task }))}
+          onSelectTask={(task) => updateWorkspaceState((current) => ({ ...current, work: task }))}
           onCreateTask={createTask}
           onUpdateStatus={updateStatus}
           onDeleteTask={deleteTask}
@@ -1861,7 +1911,7 @@ export default function App() {
               savedLyricPieces={savedLyricPieces}
               selectedLine={selectedLine}
               translation={translation}
-              onSelectTask={(task) => setWorkspace((current) => ({ ...current, work: task }))}
+              onSelectTask={(task) => updateWorkspaceState((current) => ({ ...current, work: task }))}
               onCreateTask={createTask}
               onUpdateStatus={updateStatus}
               onDeleteTask={deleteTask}

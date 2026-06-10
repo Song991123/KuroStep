@@ -12,6 +12,7 @@ import com.kurostep.playlist.dto.PlaylistTrackResponse;
 import com.kurostep.playlist.dto.PlaylistUpdateRequest;
 import com.kurostep.playlist.repository.PlaylistRepository;
 import com.kurostep.playlist.repository.PlaylistTrackRepository;
+import com.kurostep.task.repository.CreatorTaskRepository;
 import com.kurostep.track.domain.Track;
 import com.kurostep.track.repository.TrackRepository;
 import com.kurostep.user.domain.User;
@@ -32,17 +33,20 @@ public class PlaylistService {
     private final PlaylistTrackRepository playlistTrackRepository;
     private final TrackRepository trackRepository;
     private final UserRepository userRepository;
+    private final CreatorTaskRepository creatorTaskRepository;
 
     public PlaylistService(
             PlaylistRepository playlistRepository,
             PlaylistTrackRepository playlistTrackRepository,
             TrackRepository trackRepository,
-            UserRepository userRepository
+            UserRepository userRepository,
+            CreatorTaskRepository creatorTaskRepository
     ) {
         this.playlistRepository = playlistRepository;
         this.playlistTrackRepository = playlistTrackRepository;
         this.trackRepository = trackRepository;
         this.userRepository = userRepository;
+        this.creatorTaskRepository = creatorTaskRepository;
     }
 
     @Transactional
@@ -114,6 +118,9 @@ public class PlaylistService {
 
         PlaylistTrack playlistTrack = playlistTrackRepository.findByPlaylistIdAndTrackId(playlistId, trackId)
                 .orElseThrow(() -> new NotFoundException("플레이리스트에 해당 곡이 없습니다."));
+
+        creatorTaskRepository.findByCurrentPlaylistTrackId(playlistTrack.getId())
+                .forEach(task -> task.clearCurrentPlaylistTrack());
 
         playlistTrackRepository.delete(playlistTrack);
     }
