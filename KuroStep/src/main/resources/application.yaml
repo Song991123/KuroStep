@@ -27,7 +27,7 @@ logging:
 kurostep:
   jwt:
     secret: ${KUROSTEP_JWT_SECRET:kurostep-local-development-secret-key-change-before-production}
-    expiration-minutes: ${KUROSTEP_JWT_EXPIRATION_MINUTES:120}
+    expiration-minutes: ${KUROSTEP_JWT_EXPIRATION_MINUTES:10080}
   lyrics:
     lrclib-base-url: ${KUROSTEP_LRCLIB_BASE_URL:https://lrclib.net}
   translation:
