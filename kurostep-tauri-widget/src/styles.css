@@ -1645,3 +1645,55 @@ select,
   font-size: 10px;
   font-weight: 700;
 }
+
+.saved-lyric-list {
+  display: grid;
+  gap: 7px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.saved-lyric-piece {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: start;
+  padding: 9px;
+  border: 1px solid var(--border-light);
+  border-radius: 7px;
+  background: rgb(255 255 255 / 70%);
+}
+
+.saved-lyric-piece div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.saved-lyric-piece strong,
+.saved-lyric-piece small,
+.saved-lyric-piece em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-lyric-piece strong {
+  color: var(--text-charcoal);
+  font-size: 12px;
+}
+
+.saved-lyric-piece small {
+  color: #6b655d;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.saved-lyric-piece em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+}

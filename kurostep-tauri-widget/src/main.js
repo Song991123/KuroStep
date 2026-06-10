@@ -72,6 +72,7 @@ const appState = {
   translation: null,
   translationCache: {},
   translationPending: {},
+  savedLyricPieces: readJson("kurostep.savedLyricPieces") || [],
   preparedTrackId: null,
   linkSaving: false,
 };
@@ -1348,6 +1349,57 @@ async function deleteMemo() {
   }
 }
 
+async function saveCurrentLyricPiece() {
+  const line = appState.selectedLine;
+  if (!line?.text) {
+    appState.notice = "아직 저장할 가사 줄이 없다냥.";
+    updatePlaybackDom();
+    return;
+  }
+
+  const piece = {
+    id: `${line.id || line.lineIndex || Date.now()}-${Date.now()}`,
+    lineRefId: line.id || null,
+    trackId: appState.currentTrack?.id || null,
+    trackTitle: appState.currentTrack?.title || "작업곡",
+    lineText: line.text,
+    translatedText: appState.translation?.translatedText || "",
+    memoText: appState.translation?.memoText || "",
+    savedAt: new Date().toISOString(),
+  };
+
+  appState.savedLyricPieces = [piece, ...appState.savedLyricPieces.filter((item) => item.lineRefId !== piece.lineRefId)].slice(0, 20);
+  writeJson("kurostep.savedLyricPieces", appState.savedLyricPieces);
+  appState.notice = "현재 가사 조각을 저장했다냥.";
+  refreshSavedLyricPiecesDom();
+  updatePlaybackDom();
+
+  if (!line.id || !appState.auth?.userId) {
+    return;
+  }
+
+  try {
+    await api(`/api/lyric-line-refs/${line.id}/translations?userId=${appState.auth.userId}`, {
+      method: "POST",
+      body: JSON.stringify({
+        languageCode: "ko",
+        translatedText: piece.translatedText || line.text,
+        memoText: piece.memoText || "저장한 가사 조각",
+      }),
+    });
+  } catch {
+    // Local save is the primary UX guarantee; server memo sync can be retried later.
+  }
+}
+
+function deleteSavedLyricPiece(pieceId) {
+  appState.savedLyricPieces = appState.savedLyricPieces.filter((piece) => piece.id !== pieceId);
+  writeJson("kurostep.savedLyricPieces", appState.savedLyricPieces);
+  appState.notice = "저장한 가사 조각을 지웠다냥.";
+  refreshSavedLyricPiecesDom();
+  updatePlaybackDom();
+}
+
 async function togglePlayback() {
   appState.error = "";
 
@@ -1811,10 +1863,25 @@ function updateLyricsPreviewDom() {
   currentLine.textContent = appState.selectedLine?.text || syncStatus || "아직 재생 중이 아닙니다";
   preview.classList.toggle("playing", appState.isPlaying);
 
+  const savePieceButton = document.querySelector("#save-lyric-piece");
+  if (savePieceButton) {
+    savePieceButton.disabled = !appState.selectedLine?.text;
+  }
+
   document.querySelectorAll(".lyrics-line").forEach((item) => {
     const index = Number(item.getAttribute("data-line-index"));
     item.classList.toggle("active", Number.isFinite(index) && index === appState.selectedLine?.lineIndex);
   });
+}
+
+function refreshSavedLyricPiecesDom() {
+  const current = document.querySelector(".saved-lyrics-widget");
+  if (!current) {
+    return;
+  }
+
+  current.outerHTML = savedLyricPiecesWidget();
+  bindSavedLyricPieceActions();
 }
 
 function updateGlobalControlsDom() {
@@ -2280,6 +2347,32 @@ function lyricMemoWidget(line, translation) {
   `;
 }
 
+function savedLyricPiecesWidget() {
+  const items = appState.savedLyricPieces
+    .map((piece) => `
+      <li class="saved-lyric-piece">
+        <div>
+          <strong>${escapeHtml(piece.lineText)}</strong>
+          ${piece.translatedText ? `<small>${escapeHtml(piece.translatedText)}</small>` : ""}
+          <em>${escapeHtml(piece.trackTitle || "작업곡")}</em>
+        </div>
+        <button class="mini-icon-button danger" data-delete-lyric-piece="${escapeHtml(piece.id)}" type="button" title="가사 조각 삭제" aria-label="가사 조각 삭제">${iconSvg("trash")}</button>
+      </li>
+    `)
+    .join("");
+
+  return `
+    <section class="widget-section saved-lyrics-widget" aria-labelledby="saved-lyrics-title">
+      ${sectionHeader("저장한 가사 조각")}
+      ${
+        items
+          ? `<ul class="saved-lyric-list" id="saved-lyrics-title">${items}</ul>`
+          : `<p class="state-message">가사 창에서 마음에 드는 줄을 콕 저장할 수 있다냥.</p>`
+      }
+    </section>
+  `;
+}
+
 function emptySection(title, message) {
   return `
     <section class="widget-section empty-section">
@@ -2311,6 +2404,7 @@ function taskPawWidget() {
     `
       ${todayWorkWidget(appState.work, appState.counts, appState.tasks)}
       ${lyricMemoWidget(appState.selectedLine, appState.translation)}
+      ${savedLyricPiecesWidget()}
     `
   );
 }
@@ -2362,6 +2456,7 @@ function lyricsWidget() {
       <div class="lyrics-preview ${appState.isPlaying ? "playing" : ""} ${appState.lyricsPanelExpanded ? "expanded" : ""}">
         <p>${escapeHtml(lineText)}</p>
         ${syncStatus && currentLine ? `<small>${escapeHtml(syncStatus)}</small>` : ""}
+        <button class="action-button compact" id="save-lyric-piece" type="button" ${appState.selectedLine?.text ? "" : "disabled"}>현재 줄 저장</button>
         ${appState.lyricsPanelExpanded ? `<ol class="lyrics-full-list" id="lyrics-full-list">${fullLyrics}</ol>` : ""}
       </div>
     </section>
@@ -2510,11 +2605,19 @@ function bindActions() {
   });
   document.querySelector("#save-memo")?.addEventListener("click", saveMemo);
   document.querySelector("#delete-memo")?.addEventListener("click", deleteMemo);
+  document.querySelector("#save-lyric-piece")?.addEventListener("click", saveCurrentLyricPiece);
+  bindSavedLyricPieceActions();
   document.querySelector("#register-track-link")?.addEventListener("click", registerTrackFromInputs);
   bindPlaylistInteractions();
   document.querySelector("#auto-translate")?.addEventListener("click", async () => {
     await ensureLyricAndTranslation(appState.auth.userId, appState.currentTrack.id);
     render();
+  });
+}
+
+function bindSavedLyricPieceActions() {
+  document.querySelectorAll("[data-delete-lyric-piece]").forEach((button) => {
+    button.addEventListener("click", () => deleteSavedLyricPiece(button.dataset.deleteLyricPiece));
   });
 }
 
