@@ -2,7 +2,7 @@ name: Deploy KuroStep Widget to GitHub Pages
 
 on:
   push:
-    branches: ["main", "master"]
+    branches: ["main"]
     paths:
       - "kurostep-tauri-widget/src/**"
       - ".github/workflows/pages.yml"
