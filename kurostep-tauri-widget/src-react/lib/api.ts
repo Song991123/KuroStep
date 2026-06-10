@@ -109,9 +109,17 @@ export type SelectedLine = {
 
 export type Translation = {
   id?: number;
+  status?: string;
   languageCode: string;
   translatedText: string;
   memoText?: string;
+};
+
+export type LyricFetchResponse = {
+  lyric?: Lyric | null;
+  localCacheKey?: string;
+  syncedLyrics?: string;
+  plainLyrics?: string;
 };
 
 export type SavedLyricPiece = {

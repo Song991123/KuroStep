@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent, type ReactNode } from "react";
 import pawBlack from "../src/assets/paw-print.svg";
 import pawNeutral from "../src/assets/paw-print-neutral.svg";
 import {
@@ -11,18 +11,25 @@ import {
   writeJson,
   type AuthSession,
   type CreatorTask,
+  type Lyric,
+  type LyricFetchResponse,
+  type LyricSource,
+  type SelectedLine,
   type Playlist,
   type PlaylistTrack,
   type SavedLyricPiece,
   type TaskStatus,
   type Track,
   type TrackCreateDraft,
+  type Translation,
   type YouTubePlaylistPreview,
 } from "./lib/api";
 import { extractYoutubeId, extractYoutubePlaylistId, fetchYoutubeMetadata } from "./lib/youtube";
 
 const query = new URLSearchParams(window.location.search);
 const isEmbeddedContent = query.get("embedded") === "1";
+const PLAYBACK_TICK_MS = 250;
+const LYRIC_SYNC_LOOKAHEAD_MS = 350;
 
 if (isEmbeddedContent) {
   document.documentElement.classList.add("embedded-mode");
@@ -44,7 +51,168 @@ type Notice = {
   message: string;
 };
 
+type YouTubePlayer = {
+  cueVideoById: (options: { videoId: string; startSeconds?: number }) => void;
+  playVideo: () => void;
+  pauseVideo: () => void;
+  seekTo: (seconds: number, allowSeekAhead: boolean) => void;
+  getCurrentTime: () => number;
+  getDuration: () => number;
+  getPlayerState: () => number;
+  setVolume: (volume: number) => void;
+};
+
+type YouTubeApi = {
+  Player: new (
+    elementId: string,
+    options: {
+      videoId: string;
+      playerVars: Record<string, string | number>;
+      events: {
+        onReady: (event: { target: YouTubePlayer }) => void;
+        onStateChange: (event: { data: number }) => void;
+        onError: () => void;
+      };
+    },
+  ) => YouTubePlayer;
+  PlayerState: {
+    PLAYING: number;
+    PAUSED: number;
+    BUFFERING: number;
+    ENDED: number;
+    CUED: number;
+  };
+};
+
+declare global {
+  interface Window {
+    YT?: YouTubeApi;
+    onYouTubeIframeAPIReady?: () => void;
+    __TAURI__?: {
+      core?: {
+        invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
+      };
+    };
+  }
+}
+
 const emptyCounts: Record<TaskStatus, number> = { TODO: 0, DOING: 0, DONE: 0 };
+let youtubeApiPromise: Promise<YouTubeApi> | null = null;
+
+function loadYoutubeIframeApi() {
+  if (window.YT?.Player) {
+    return Promise.resolve(window.YT);
+  }
+
+  if (youtubeApiPromise) {
+    return youtubeApiPromise;
+  }
+
+  youtubeApiPromise = new Promise((resolve, reject) => {
+    const previousReady = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      previousReady?.();
+      if (window.YT) {
+        resolve(window.YT);
+      }
+    };
+
+    const existing = document.querySelector<HTMLScriptElement>("script[src='https://www.youtube.com/iframe_api']");
+    if (existing) {
+      existing.addEventListener("error", () => reject(new Error("YouTube 플레이어 API를 못 불러왔어냥.")), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://www.youtube.com/iframe_api";
+    script.async = true;
+    script.onerror = () => reject(new Error("YouTube 플레이어 API를 못 불러왔어냥."));
+    document.head.appendChild(script);
+  });
+
+  return youtubeApiPromise;
+}
+
+function getYoutubeVideoId(track: Track | null) {
+  return track?.sourceId || extractYoutubeId(track?.sourceUrl || "");
+}
+
+function postShellMessage(message: Record<string, unknown>) {
+  if (!isEmbeddedContent || window.parent === window) {
+    return false;
+  }
+  window.parent.postMessage({ source: "kurostep-content", ...message }, "*");
+  return true;
+}
+
+async function invokeNative(command: string, payload: Record<string, unknown> = {}) {
+  const invoke = window.__TAURI__?.core?.invoke;
+  if (invoke) {
+    return invoke(command, payload);
+  }
+  if (postShellMessage({ type: "native_command", command, payload })) {
+    return null;
+  }
+  return null;
+}
+
+function parseLyricSource(fetchResponse: LyricFetchResponse): LyricSource {
+  const source = fetchResponse.syncedLyrics || fetchResponse.plainLyrics || "";
+  const lines = source
+    .split("\n")
+    .map((line, index) => parseLyricLine(line, index))
+    .filter((line) => line.text);
+
+  return {
+    localCacheKey: fetchResponse.localCacheKey,
+    lyric: fetchResponse.lyric || null,
+    lines,
+  };
+}
+
+function parseLyricLine(line: string, index: number) {
+  const match = line.match(/^\[(\d{2}):(\d{2})(?:\.(\d{2}))?\]\s*(.*)$/);
+  if (!match) {
+    return { index, startTimeMs: null, text: line.trim() };
+  }
+
+  const minutes = Number(match[1]);
+  const seconds = Number(match[2]);
+  const centiseconds = Number(match[3] || 0);
+  return {
+    index,
+    startTimeMs: (minutes * 60 + seconds) * 1000 + centiseconds * 10,
+    text: match[4].trim(),
+  };
+}
+
+function chooseLineByPlaybackTime(lyric: Lyric | null, source: LyricSource | null, positionSeconds: number): SelectedLine | null {
+  const refs = lyric?.lines || [];
+  const sourceLines = source?.lines || [];
+  if (!refs.length) return null;
+
+  const positionMs = positionSeconds * 1000 + LYRIC_SYNC_LOOKAHEAD_MS;
+  const timedRefs = refs.filter((line) => Number.isFinite(line.startTimeMs));
+  if (timedRefs.length) {
+    const firstTimedRef = [...timedRefs].sort((left, right) => Number(left.startTimeMs) - Number(right.startTimeMs))[0];
+    if (positionMs < Number(firstTimedRef.startTimeMs)) {
+      return null;
+    }
+  }
+  const ref =
+    timedRefs
+      .filter((line) => Number(line.startTimeMs) <= positionMs)
+      .sort((left, right) => Number(right.startTimeMs) - Number(left.startTimeMs))[0] ||
+    timedRefs[0] ||
+    refs[0];
+  const sourceLine = sourceLines.find((line) => line.index === ref.lineIndex) || sourceLines[0];
+  return {
+    id: ref.id,
+    lineIndex: ref.lineIndex,
+    startTimeMs: ref.startTimeMs,
+    text: sourceLine?.text || "",
+  };
+}
 
 function statusLabel(status: TaskStatus) {
   return {
@@ -125,12 +293,14 @@ function WidgetShell({
   children,
   title = "KuroStep",
   rightAction = "exit",
-  onLogout,
+  onExit,
+  onSettings,
 }: {
   children: ReactNode;
   title?: string;
   rightAction?: "exit" | "settings" | "none";
-  onLogout?: () => void;
+  onExit?: () => void;
+  onSettings?: () => void;
 }) {
   if (isEmbeddedContent) {
     return <section className="embedded-content">{children}</section>;
@@ -152,20 +322,55 @@ function WidgetShell({
         </strong>
         {rightAction === "settings" ? (
           <div className="header-actions">
-            <button className="ghost-header-button icon-text" id="settings-open" type="button">
+            <button className="ghost-header-button icon-text" id="settings-open" type="button" onClick={onSettings}>
               <Icon name="settings" />
               <span>설정</span>
             </button>
-            <button className="ghost-header-button" id="app-exit-button" type="button" onClick={onLogout}>종료</button>
+            <button className="ghost-header-button" id="app-exit-button" type="button" onClick={onExit}>종료</button>
           </div>
         ) : rightAction === "exit" ? (
           <div className="header-actions">
-            <button className="ghost-header-button" id="app-exit-button" type="button" onClick={onLogout}>종료</button>
+            <button className="ghost-header-button" id="app-exit-button" type="button" onClick={onExit}>종료</button>
           </div>
         ) : <span />}
       </header>
       <div className="widget-content">{children}</div>
     </section>
+  );
+}
+
+function SettingsScreen({
+  auth,
+  onBack,
+  onLogout,
+  onExit,
+}: {
+  auth: AuthSession;
+  onBack: () => void;
+  onLogout: () => void;
+  onExit: () => void;
+}) {
+  return (
+    <WidgetShell title="KuroStep" rightAction="none">
+      <section className="settings-screen" aria-labelledby="settings-title">
+        <button className="ghost-header-button icon-text" type="button" onClick={onBack} aria-label="돌아가기">← <span>돌아가기</span></button>
+        <p className="auth-eyebrow">SETTINGS</p>
+        <h1 id="settings-title">작업실 설정</h1>
+        <p>로그아웃과 앱 종료는 여기서 조용히 정리한다냥.</p>
+        <section className="settings-card">
+          <h2>로그인 계정</h2>
+          <p>{auth.email}</p>
+        </section>
+        <section className="settings-card">
+          <h2>닉네임</h2>
+          <p>{auth.nickname || "이름 없는 작업자냥"}</p>
+        </section>
+        <div className="settings-actions">
+          <button className="action-button danger" type="button" onClick={onLogout}>로그아웃</button>
+          <button className="action-button primary" type="button" onClick={onExit}>앱 종료</button>
+        </div>
+      </section>
+    </WidgetShell>
   );
 }
 
@@ -314,7 +519,21 @@ function MusicPlayerWidget({
   playlist,
   page,
   isPlaying,
+  repeatMode,
+  position,
+  duration,
+  volume,
+  youtubeVisible,
   onTogglePlay,
+  onPlayingChange,
+  onPositionChange,
+  onDurationChange,
+  onVolumeChange,
+  onToggleYoutube,
+  onMoveTrack,
+  onSkip,
+  onSeek,
+  onToggleRepeat,
   onSelectTrack,
   onRegisterLink,
   onRemoveTrack,
@@ -326,7 +545,21 @@ function MusicPlayerWidget({
   playlist: Playlist | null;
   page: number;
   isPlaying: boolean;
+  repeatMode: boolean;
+  position: number;
+  duration: number;
+  volume: number;
+  youtubeVisible: boolean;
   onTogglePlay: () => void;
+  onPlayingChange: (playing: boolean) => void;
+  onPositionChange: (seconds: number) => void;
+  onDurationChange: (seconds: number) => void;
+  onVolumeChange: (volume: number) => void;
+  onToggleYoutube: () => void;
+  onMoveTrack: (offset: number, autoplay?: boolean) => void;
+  onSkip: (seconds: number) => void;
+  onSeek: (seconds: number) => void;
+  onToggleRepeat: () => void;
   onSelectTrack: (playlistTrack: PlaylistTrack) => void;
   onRegisterLink: (url: string) => void;
   onRemoveTrack: (playlistTrack: PlaylistTrack) => void;
@@ -334,9 +567,155 @@ function MusicPlayerWidget({
   onPage: (page: number) => void;
 }) {
   const [url, setUrl] = useState("");
-  const duration = track?.durationSeconds || 0;
+  const [playerReady, setPlayerReady] = useState(false);
+  const [playerError, setPlayerError] = useState("");
+  const playerRef = useRef<YouTubePlayer | null>(null);
+  const videoIdRef = useRef("");
+  const timerRef = useRef<number | null>(null);
+  const videoId = getYoutubeVideoId(track);
+  const displayedDuration = duration || track?.durationSeconds || 0;
   const pageCount = getPlaylistPageCount(tracks.length);
   const visibleTracks = tracks.slice((page - 1) * PLAYLIST_PAGE_SIZE, page * PLAYLIST_PAGE_SIZE);
+  const progressRatio = displayedDuration > 0 ? Math.min(position / displayedDuration, 1) : 0;
+
+  useEffect(() => {
+    let cancelled = false;
+    setPlayerError("");
+    setPlayerReady(false);
+    if (!videoId) {
+      playerRef.current?.pauseVideo?.();
+      videoIdRef.current = "";
+      return;
+    }
+
+    loadYoutubeIframeApi()
+      .then((YT) => {
+        if (cancelled) return;
+        if (playerRef.current) {
+          videoIdRef.current = videoId;
+          playerRef.current.cueVideoById({ videoId, startSeconds: 0 });
+          onPositionChange(0);
+          if (isPlaying) {
+            window.setTimeout(() => playerRef.current?.playVideo(), 150);
+          }
+          return;
+        }
+
+        videoIdRef.current = videoId;
+        playerRef.current = new YT.Player("youtube-player", {
+          videoId,
+          playerVars: {
+            playsinline: 1,
+            rel: 0,
+            enablejsapi: 1,
+            origin: window.location.origin,
+            widget_referrer: window.location.origin,
+          },
+          events: {
+            onReady: (event) => {
+              if (cancelled) return;
+              setPlayerReady(true);
+              event.target.setVolume(volume);
+              const nextDuration = Math.floor(event.target.getDuration?.() || 0);
+              if (nextDuration > 0) {
+                onDurationChange(nextDuration);
+              }
+              if (isPlaying) {
+                event.target.playVideo();
+              }
+            },
+            onStateChange: (event) => {
+              if (!window.YT) return;
+              const nextDuration = Math.floor(playerRef.current?.getDuration?.() || 0);
+              if (nextDuration > 0) {
+                onDurationChange(nextDuration);
+              }
+              if (event.data === window.YT.PlayerState.PLAYING) {
+                onPlayingChange(true);
+                return;
+              }
+              if (event.data === window.YT.PlayerState.PAUSED) {
+                onPlayingChange(false);
+                return;
+              }
+              if (event.data === window.YT.PlayerState.ENDED) {
+                if (repeatMode) {
+                  playerRef.current?.seekTo(0, true);
+                  playerRef.current?.playVideo();
+                } else {
+                  onMoveTrack(1, true);
+                }
+              }
+            },
+            onError: () => {
+              setPlayerError("YouTube 플레이어를 깨우지 못했어냥. 영상 펼치기를 열어 재생 상태를 확인해줘냥.");
+              onPlayingChange(false);
+            },
+          },
+        });
+      })
+      .catch((error) => {
+        setPlayerError((error as Error).message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [videoId]);
+
+  useEffect(() => {
+    if (!playerRef.current || !videoId) return;
+    playerRef.current.setVolume(volume);
+  }, [volume, videoId]);
+
+  useEffect(() => {
+    if (!playerRef.current || !videoId) return;
+    if (isPlaying) {
+      playerRef.current.playVideo();
+    } else {
+      playerRef.current.pauseVideo();
+    }
+  }, [isPlaying, videoId]);
+
+  useEffect(() => {
+    if (timerRef.current) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (!isPlaying) return;
+
+    timerRef.current = window.setInterval(() => {
+      const player = playerRef.current;
+      const current = player?.getCurrentTime?.() || position;
+      const nextDuration = Math.floor(player?.getDuration?.() || displayedDuration || 0);
+      onPositionChange(current);
+      if (nextDuration > 0) {
+        onDurationChange(nextDuration);
+      }
+    }, PLAYBACK_TICK_MS);
+
+    return () => {
+      if (timerRef.current) {
+        window.clearInterval(timerRef.current);
+      }
+    };
+  }, [isPlaying, displayedDuration]);
+
+  function seekByPointer(event: PointerEvent<HTMLDivElement>) {
+    if (!displayedDuration) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const ratio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0;
+    const seconds = displayedDuration * Math.min(Math.max(ratio, 0), 1);
+    playerRef.current?.seekTo(seconds, true);
+    onSeek(seconds);
+  }
+
+  function skipBy(seconds: number) {
+    const max = displayedDuration > 0 ? Math.max(displayedDuration - 1, 0) : 24 * 60 * 60;
+    const nextSeconds = Math.min(Math.max(position + seconds, 0), max);
+    playerRef.current?.seekTo(nextSeconds, true);
+    onSkip(seconds);
+  }
 
   return (
     <section className="widget-group music-player-widget" aria-label="BGM 턴테이블">
@@ -366,33 +745,35 @@ function MusicPlayerWidget({
           </div>
         </div>
         <div className="player-controls" aria-label="작업용 플레이어 컨트롤">
-          <button className="icon-button" type="button" disabled={!tracks.length}><Icon name="previous" /></button>
-          <button className="icon-button" type="button" disabled={!track}><Icon name="rewind" /></button>
+          <button className="icon-button" type="button" disabled={!tracks.length} onClick={() => onMoveTrack(-1, isPlaying)}><Icon name="previous" /></button>
+          <button className="icon-button" type="button" disabled={!track} onClick={() => skipBy(-10)}><Icon name="rewind" /></button>
           <button className="icon-button main" type="button" disabled={!track} onClick={onTogglePlay}><Icon name={isPlaying ? "pause" : "play"} /></button>
-          <button className="icon-button" type="button" disabled={!track}><Icon name="forward" /></button>
-          <button className="icon-button" type="button" disabled={!tracks.length}><Icon name="next" /></button>
-          <button className="icon-button repeat" type="button"><Icon name="repeat" /></button>
+          <button className="icon-button" type="button" disabled={!track} onClick={() => skipBy(10)}><Icon name="forward" /></button>
+          <button className="icon-button" type="button" disabled={!tracks.length} onClick={() => onMoveTrack(1, isPlaying)}><Icon name="next" /></button>
+          <button className={`icon-button repeat${repeatMode ? " active" : ""}`} type="button" onClick={onToggleRepeat}><Icon name="repeat" /></button>
         </div>
         <div className="progress-row" aria-label="재생 위치">
-          <span>0:00</span>
-          <div className="progress-track" role="slider" tabIndex={0} aria-label="재생 위치 이동">
-            <span style={{ width: "0%" }}></span>
-            <i style={{ left: "0%" }}></i>
+          <span>{formatDuration(position)}</span>
+          <div className="progress-track" id="progress-track" role="slider" tabIndex={0} aria-label="재생 위치 이동" onPointerDown={seekByPointer}>
+            <span id="progress-bar" style={{ width: `${progressRatio * 100}%` }}></span>
+            <i id="progress-thumb" style={{ left: `${progressRatio * 100}%` }}></i>
           </div>
-          <span id="progress-duration">{formatDuration(duration)}</span>
+          <span id="progress-duration">{formatDuration(displayedDuration)}</span>
           <div className="volume-control">
-            <button className="volume-button" type="button" aria-label="볼륨 조절"><Icon name="volume" /></button>
+            <button className="volume-button" id="volume-toggle" type="button" aria-label="볼륨 조절" onClick={() => onVolumeChange(volume > 0 ? 0 : Number(window.localStorage.getItem("kurostep.previousVolume") || 80))}><Icon name="volume" /></button>
             <div className="volume-popover" aria-hidden="true">
-              <input type="range" min="0" max="100" step="1" defaultValue="80" aria-label="볼륨" />
-              <span>80%</span>
+              <input id="volume-slider" type="range" min="0" max="100" step="1" value={volume} aria-label="볼륨" onChange={(event) => onVolumeChange(Number(event.target.value))} />
+              <span id="volume-value">{volume}%</span>
             </div>
           </div>
         </div>
-        <button className="youtube-panel-toggle" id="youtube-video-toggle" type="button" aria-expanded="false" aria-controls="youtube-frame-shell" title="영상 펼치기" aria-label="영상 펼치기">
+        {playerError && <p className="state-message">{playerError}</p>}
+        {!playerError && track && !playerReady && <p className="state-message">YouTube 플레이어를 깨우는 중이냥...</p>}
+        <button className="youtube-panel-toggle" id="youtube-video-toggle" type="button" aria-expanded={youtubeVisible} aria-controls="youtube-frame-shell" title={youtubeVisible ? "영상 접기" : "영상 펼치기"} aria-label={youtubeVisible ? "영상 접기" : "영상 펼치기"} onClick={onToggleYoutube}>
           <Icon name="chevronDown" />
-          <span>영상 펼치기</span>
+          <span>{youtubeVisible ? "영상 접기" : "영상 펼치기"}</span>
         </button>
-        <div className="youtube-frame-shell" id="youtube-frame-shell" aria-hidden="true">
+        <div className={`youtube-frame-shell${youtubeVisible ? " open" : ""}`} id="youtube-frame-shell" aria-hidden={!youtubeVisible}>
           <div id="youtube-player" className="youtube-player" aria-label="앱 내부 YouTube 플레이어"></div>
         </div>
       </section>
@@ -417,10 +798,21 @@ function MusicPlayerWidget({
           {visibleTracks.map((playlistTrack) => (
             <li className={`playlist-item${playlistTrack.playlistTrackId === track?.playlistTrackId ? " playing" : ""}`} draggable="true" key={playlistTrack.playlistTrackId}>
               <button className="drag-handle" type="button" title="끌어서 순서 바꾸기" aria-label="끌어서 순서 바꾸기"><Icon name="grip" /></button>
-              <button className="playlist-track" type="button" onClick={() => onSelectTrack(playlistTrack)}>
+              <span
+                className="playlist-track"
+                role="button"
+                tabIndex={0}
+                onClick={() => onSelectTrack(playlistTrack)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelectTrack(playlistTrack);
+                  }
+                }}
+              >
                 <strong>{playlistTrack.title || `Track #${playlistTrack.trackId}`}</strong>
                 <small>{playlistTrack.artist || "YouTube"} · #{playlistTrack.trackId}</small>
-              </button>
+              </span>
               <span className="playlist-duration">{formatDuration(playlistTrack.durationSeconds)}</span>
               <button className="mini-icon-button danger playlist-remove-button" type="button" title="플레이리스트에서 곡 제거" aria-label="플레이리스트에서 곡 제거" onClick={() => onRemoveTrack(playlistTrack)}><Icon name="trash" /></button>
             </li>
@@ -440,17 +832,27 @@ function MusicPlayerWidget({
 function TaskPawWidget({
   workspace,
   savedLyricPieces,
+  selectedLine,
+  translation,
   onSelectTask,
   onCreateTask,
   onUpdateStatus,
   onDeleteTask,
+  onSaveMemo,
+  onDeleteMemo,
+  onDeletePiece,
 }: {
   workspace: Workspace;
   savedLyricPieces: SavedLyricPiece[];
+  selectedLine: SelectedLine | null;
+  translation: Translation | null;
   onSelectTask: (task: CreatorTask) => void;
   onCreateTask: (title: string) => void;
   onUpdateStatus: (status: TaskStatus) => void;
   onDeleteTask: () => void;
+  onSaveMemo: (translatedText: string, memoText: string) => void;
+  onDeleteMemo: () => void;
+  onDeletePiece: (pieceId: string) => void;
 }) {
   return (
     <section className="widget-group task-paw-widget lyric-paw-widget" aria-label="작업 발자국">
@@ -461,10 +863,7 @@ function TaskPawWidget({
         </div>
       </div>
       <TodayWorkWidget tasks={workspace.tasks} work={workspace.work} counts={workspace.counts} onSelectTask={onSelectTask} onCreateTask={onCreateTask} onUpdateStatus={onUpdateStatus} onDeleteTask={onDeleteTask} />
-      <section className="widget-section empty-section">
-        <SectionHeader title="번역 메모" />
-        <p className="state-message">곡을 재생하면 현재 가사와 한국어 메모를 만질 수 있다냥.</p>
-      </section>
+      <LyricMemoWidget selectedLine={selectedLine} translation={translation} onSaveMemo={onSaveMemo} onDeleteMemo={onDeleteMemo} />
       <section className="widget-section saved-lyrics-widget" aria-labelledby="saved-lyrics-title">
         <SectionHeader title="저장한 가사 조각" />
         {savedLyricPieces.length ? (
@@ -473,6 +872,7 @@ function TaskPawWidget({
               <li key={piece.id}>
                 <strong>{piece.lineText}</strong>
                 <small>{piece.translatedText || piece.memoText || piece.trackTitle}</small>
+                <button className="mini-icon-button danger" type="button" title="저장 조각 삭제" aria-label="저장 조각 삭제" onClick={() => onDeletePiece(piece.id)}><Icon name="trash" /></button>
               </li>
             ))}
           </ol>
@@ -482,7 +882,64 @@ function TaskPawWidget({
   );
 }
 
-function LyricsWidget({ currentTrack }: { currentTrack: Track | null }) {
+function LyricMemoWidget({
+  selectedLine,
+  translation,
+  onSaveMemo,
+  onDeleteMemo,
+}: {
+  selectedLine: SelectedLine | null;
+  translation: Translation | null;
+  onSaveMemo: (translatedText: string, memoText: string) => void;
+  onDeleteMemo: () => void;
+}) {
+  const [translatedText, setTranslatedText] = useState("");
+  const [memoText, setMemoText] = useState("");
+
+  useEffect(() => {
+    setTranslatedText(translation?.translatedText || "");
+    setMemoText(translation?.memoText || window.localStorage.getItem("kurostep.translationMemo") || "작업 중 떠오른 번역 느낌을 살짝 적어둘게냥.");
+  }, [selectedLine?.id, translation?.id, translation?.translatedText, translation?.memoText]);
+
+  return (
+    <section className="widget-section lyric-memo-widget" aria-labelledby="lyric-memo-title">
+      <SectionHeader title="번역 메모" />
+      {selectedLine?.text ? (
+        <>
+          <p className="memo-context" id="memo-context"><span>{formatTimestamp(selectedLine.startTimeMs)}</span> "{selectedLine.text}"</p>
+          <label className="memo-field">번역문<textarea id="translated-text" value={translatedText} onChange={(event) => setTranslatedText(event.target.value)} placeholder="이 줄의 한국어 번역을 적어줘냥" /></label>
+          <label className="memo-field">작업 메모<textarea id="translation-memo" value={memoText} onChange={(event) => setMemoText(event.target.value)} placeholder="이 가사를 작업에 어떻게 붙일지 적어줘냥" /></label>
+          <div className="memo-actions">
+            <button className="action-button primary compact" id="save-memo" type="button" onClick={() => onSaveMemo(translatedText, memoText)}>메모 저장</button>
+            <button className="action-button compact danger" id="delete-memo" type="button" onClick={onDeleteMemo}>메모 삭제</button>
+            <span id="memo-save-state">{translation?.status || ""}</span>
+          </div>
+        </>
+      ) : <p className="state-message">곡을 재생하면 현재 가사와 한국어 메모를 만질 수 있다냥.</p>}
+    </section>
+  );
+}
+
+function LyricsWidget({
+  currentTrack,
+  lyricSource,
+  selectedLine,
+  translation,
+  lyricsExpanded,
+  onToggleExpanded,
+  onSavePiece,
+}: {
+  currentTrack: Track | null;
+  lyricSource: LyricSource | null;
+  selectedLine: SelectedLine | null;
+  translation: Translation | null;
+  lyricsExpanded: boolean;
+  onToggleExpanded: () => void;
+  onSavePiece: () => void;
+}) {
+  const fullLines = lyricSource?.lines || [];
+  const lineText = selectedLine?.text || (currentTrack ? "처음 듣는 곡이면 가사 발자국을 굽는 중이다냥." : "아직 재생 중인 곡이 없다냥.");
+
   return (
     <section className="widget-group lyrics-widget" aria-label="가사 창">
       <div className="widget-group-head">
@@ -490,19 +947,26 @@ function LyricsWidget({ currentTrack }: { currentTrack: Track | null }) {
           <h2>가사 창</h2>
           <p>지금 흐르는 문장을 보고, 펼치면 전체 가사를 본다냥</p>
         </div>
-        <button className="lyrics-panel-toggle" id="lyrics-panel-toggle" type="button" aria-expanded="false" aria-controls="lyrics-full-list" title="가사 펼치기" aria-label="가사 펼치기">
+        <button className="lyrics-panel-toggle" id="lyrics-panel-toggle" type="button" aria-expanded={lyricsExpanded} aria-controls="lyrics-full-list" title={lyricsExpanded ? "가사 접기" : "가사 펼치기"} aria-label={lyricsExpanded ? "가사 접기" : "가사 펼치기"} onClick={onToggleExpanded}>
           <Icon name="chevronDown" />
         </button>
       </div>
-      <div className="lyrics-preview">
-        <p>{currentTrack ? "처음 듣는 곡이면 가사 발자국을 굽는 중이다냥." : "아직 재생 중인 곡이 없다냥."}</p>
-        <button className="action-button compact" id="save-lyric-piece" type="button" disabled>현재 줄 저장</button>
-        <ol className="lyrics-full-list" id="lyrics-full-list">
-          <li className="lyrics-line">
-            <span>{formatTimestamp(0)}</span>
-            <p>{currentTrack ? "가사 API 연결은 다음 단계에서 붙인다냥." : "곡을 먼저 골라줘냥."}</p>
-          </li>
-        </ol>
+      <div className={`lyrics-preview ${selectedLine ? "playing" : ""} ${lyricsExpanded ? "expanded" : ""}`}>
+        <p>{lineText}</p>
+        {translation?.translatedText && <small>{translation.translatedText}</small>}
+        <button className="action-button compact" id="save-lyric-piece" type="button" disabled={!selectedLine?.text} onClick={onSavePiece}>현재 줄 저장</button>
+        {lyricsExpanded && (
+          <ol className="lyrics-full-list" id="lyrics-full-list">
+            {fullLines.length ? fullLines.map((line) => (
+              <li className={`lyrics-line${line.index === selectedLine?.lineIndex ? " active" : ""}`} data-line-index={line.index} key={line.index}>
+                <span>{formatTimestamp(line.startTimeMs)}</span>
+                <p>{line.text}</p>
+              </li>
+            )) : (
+              <li className="lyrics-line empty"><p>아직 불러온 가사가 없다냥.</p></li>
+            )}
+          </ol>
+        )}
       </div>
     </section>
   );
@@ -512,6 +976,7 @@ export default function App() {
   const [auth, setAuth] = useState<AuthSession | null>(() => readJson<AuthSession | null>("kurostep.auth", null));
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [notice, setNotice] = useState<Notice>({ kind: "notice", message: "작업실 불러오는 중이냥..." });
   const [workspace, setWorkspace] = useState<Workspace>({
     tasks: [],
@@ -523,12 +988,185 @@ export default function App() {
   });
   const [playlistPage, setPlaylistPage] = useState(1);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [savedLyricPieces] = useState(() => readJson<SavedLyricPiece[]>("kurostep.savedLyricPieces", []));
+  const [repeatMode, setRepeatMode] = useState(false);
+  const [playbackPosition, setPlaybackPosition] = useState(0);
+  const [trackDuration, setTrackDuration] = useState(0);
+  const [youtubeVisible, setYoutubeVisible] = useState(false);
+  const [pawWidgetVisible, setPawWidgetVisible] = useState(() => readJson<boolean>("kurostep.pawWidgetVisible", true));
+  const [lyricsOverlayVisible, setLyricsOverlayVisible] = useState(false);
+  const [volume, setVolume] = useState(() => Number(window.localStorage.getItem("kurostep.volume") || 80));
+  const [lyric, setLyric] = useState<Lyric | null>(null);
+  const [lyricSource, setLyricSource] = useState<LyricSource | null>(null);
+  const [selectedLine, setSelectedLine] = useState<SelectedLine | null>(null);
+  const [translation, setTranslation] = useState<Translation | null>(null);
+  const [translationCache, setTranslationCache] = useState<Record<string, Translation>>({});
+  const [lyricsExpanded, setLyricsExpanded] = useState(false);
+  const [savedLyricPieces, setSavedLyricPieces] = useState(() => readJson<SavedLyricPiece[]>("kurostep.savedLyricPieces", []));
   const authRef = useRef<AuthSession | null>(auth);
+  const lyricWarmupRef = useRef(new Map<number, Promise<LyricSource>>());
 
   useEffect(() => {
     authRef.current = auth;
+    postShellMessage({ type: "auth_state", authenticated: Boolean(auth) });
   }, [auth]);
+
+  useEffect(() => {
+    function handleShellMessage(event: MessageEvent) {
+      const data = event.data as { source?: string; action?: string };
+      if (data?.source === "kurostep-shell" && data.action === "open_settings") {
+        setSettingsOpen(true);
+      }
+    }
+    window.addEventListener("message", handleShellMessage);
+    return () => window.removeEventListener("message", handleShellMessage);
+  }, []);
+
+  useEffect(() => {
+    if (!auth) return;
+    void invokeNative("set_paw_visible", { visible: pawWidgetVisible }).catch(() => {});
+  }, [auth, pawWidgetVisible]);
+
+  useEffect(() => {
+    if (!auth) return;
+    void invokeNative("set_lyrics_visible", {
+      visible: lyricsOverlayVisible,
+      line: selectedLine?.text || "",
+      translation: translation?.translatedText || "",
+    }).catch((error) => {
+      setNotice({ kind: "error", message: `가사 오버레이 갱신을 못 했다냥: ${(error as Error).message || error}` });
+    });
+  }, [auth, lyricsOverlayVisible, selectedLine?.text, translation?.translatedText]);
+
+  const warmTrackLyricCache = useCallback(async (trackId: number, session = authRef.current) => {
+    const cacheKey = `kurostep.lyrics.${trackId}`;
+    const cached = readJson<LyricSource | null>(cacheKey, null);
+    if (cached?.lines?.length && cached?.lyric) {
+      return cached;
+    }
+    const existing = lyricWarmupRef.current.get(trackId);
+    if (existing) {
+      return existing;
+    }
+    const warmup = api<LyricFetchResponse>(`/api/tracks/${trackId}/lyrics/fetch`, { method: "POST" }, session)
+      .then((response) => {
+        const source = parseLyricSource(response);
+        if (source.lines.length) {
+          writeJson(cacheKey, source);
+        }
+        return source;
+      })
+      .finally(() => {
+        lyricWarmupRef.current.delete(trackId);
+      });
+    lyricWarmupRef.current.set(trackId, warmup);
+    return warmup;
+  }, []);
+
+  const loadTrackLyrics = useCallback(async (track: Track | null, session = authRef.current) => {
+    if (!track?.id) {
+      setLyric(null);
+      setLyricSource(null);
+      setSelectedLine(null);
+      setTranslation(null);
+      return;
+    }
+
+    const cacheKey = `kurostep.lyrics.${track.id}`;
+    const cached = readJson<LyricSource | null>(cacheKey, null);
+    if (cached?.lines?.length) {
+      setLyric(cached.lyric || null);
+      setLyricSource(cached);
+      return;
+    }
+
+    setNotice({ kind: "notice", message: "처음 듣는 곡이면 가사 발자국을 굽는 중이다냥." });
+    try {
+      const source = await warmTrackLyricCache(track.id, session);
+      setLyric(source.lyric || null);
+      setLyricSource(source);
+      setNotice({ kind: "notice", message: "가사 발자국 준비 완료냥." });
+    } catch (error) {
+      setLyric(null);
+      setLyricSource(null);
+      setSelectedLine(null);
+      setTranslation(null);
+      setNotice({ kind: "error", message: `싱크 가사를 아직 못 찾았다냥: ${(error as Error).message}` });
+    }
+  }, [warmTrackLyricCache]);
+
+  useEffect(() => {
+    setPlaybackPosition(0);
+    setTrackDuration(workspace.currentTrack?.durationSeconds || 0);
+    setSelectedLine(null);
+    setTranslation(null);
+    void loadTrackLyrics(workspace.currentTrack, authRef.current);
+  }, [workspace.currentTrack?.id, loadTrackLyrics]);
+
+  useEffect(() => {
+    const nextLine = chooseLineByPlaybackTime(lyric, lyricSource, playbackPosition);
+    if (nextLine?.id !== selectedLine?.id || nextLine?.lineIndex !== selectedLine?.lineIndex) {
+      setSelectedLine(nextLine);
+      if (!nextLine?.id) {
+        setTranslation(null);
+      }
+    }
+  }, [playbackPosition, lyric, lyricSource, selectedLine?.id, selectedLine?.lineIndex]);
+
+  useEffect(() => {
+    if (!auth?.userId || !selectedLine?.id || !selectedLine.text) return;
+    const key = String(selectedLine.id);
+    if (translationCache[key]) {
+      setTranslation(translationCache[key]);
+      return;
+    }
+
+    let cancelled = false;
+    api<Translation[]>(`/api/lyric-line-refs/${selectedLine.id}/translations?userId=${auth.userId}`, {}, auth)
+      .then(async (translations) => {
+        if (cancelled) return;
+        const savedKorean = translations.find((item) => item.languageCode === "ko") || translations[0];
+        if (savedKorean) {
+          setTranslation(savedKorean);
+          setTranslationCache((current) => ({ ...current, [key]: savedKorean }));
+          return;
+        }
+        const created = await api<Translation>(`/api/lyric-line-refs/${selectedLine.id}/translations/auto-draft?userId=${auth.userId}`, {
+          method: "POST",
+          body: JSON.stringify({
+            sourceText: selectedLine.text,
+            sourceLanguageCode: "en",
+            targetLanguageCode: "ko",
+            memoText: window.localStorage.getItem("kurostep.translationMemo") || "작업 중 떠오른 번역 느낌을 살짝 적어둘게냥.",
+          }),
+        }, auth);
+        if (cancelled) return;
+        setTranslation(created);
+        setTranslationCache((current) => ({ ...current, [key]: created }));
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setTranslation(null);
+          setNotice({ kind: "error", message: `번역 메모는 잠깐 놓쳤다냥: ${(error as Error).message}` });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [auth?.userId, selectedLine?.id, selectedLine?.text, translationCache]);
+
+  useEffect(() => {
+    if (!auth || !workspace.playlistTracks.length) return;
+    const currentPlaylistTrackId = workspace.currentTrack?.playlistTrackId;
+    const currentIndex = workspace.playlistTracks.findIndex((track) => track.playlistTrackId === currentPlaylistTrackId);
+    const startIndex = Math.max(currentIndex, 0);
+    const upcoming = workspace.playlistTracks.slice(startIndex, startIndex + 3);
+    upcoming.forEach((playlistTrack, index) => {
+      window.setTimeout(() => {
+        void warmTrackLyricCache(playlistTrack.trackId, auth).catch(() => {});
+      }, 900 * index);
+    });
+  }, [auth, workspace.currentTrack?.playlistTrackId, workspace.playlistTracks, warmTrackLyricCache]);
 
   const refreshWorkspace = useCallback(async (session = authRef.current) => {
     if (!session?.userId) {
@@ -662,7 +1300,18 @@ export default function App() {
     setAuth(null);
     setWorkspace({ tasks: [], work: null, counts: { ...emptyCounts }, playlist: null, playlistTracks: [], currentTrack: null });
     setIsPlaying(false);
+    setPlaybackPosition(0);
+    setTrackDuration(0);
     setNotice({ kind: "notice", message: "다음 작업 때 또 보자냥." });
+    postShellMessage({ type: "auth_state", authenticated: false });
+  }
+
+  async function exitApp() {
+    try {
+      await invokeNative("exit_app");
+    } catch {
+      window.close();
+    }
   }
 
   async function createTask(title: string) {
@@ -787,6 +1436,8 @@ export default function App() {
     try {
       const work = await api<CreatorTask>(`/api/tasks/${workspace.work.id}/current-playlist-track/${playlistTrack.playlistTrackId}?userId=${auth.userId}`, { method: "PATCH" }, auth);
       const detail = await api<Track>(`/api/tracks/${playlistTrack.trackId}`, {}, auth);
+      setPlaybackPosition(0);
+      setTrackDuration(detail.durationSeconds || 0);
       setWorkspace((current) => ({
         ...current,
         work,
@@ -801,9 +1452,15 @@ export default function App() {
 
   async function removeTrack(playlistTrack: PlaylistTrack) {
     if (!auth?.userId || !workspace.playlist) return;
+    const removingCurrent = workspace.currentTrack?.playlistTrackId === playlistTrack.playlistTrackId;
     try {
       await api<void>(`/api/playlists/${workspace.playlist.id}/tracks/${playlistTrack.trackId}?userId=${auth.userId}`, { method: "DELETE" }, auth);
       await refreshWorkspace(auth);
+      if (removingCurrent) {
+        setPlaybackPosition(0);
+        setTrackDuration(0);
+        setIsPlaying(false);
+      }
       setNotice({ kind: "notice", message: "BGM 바구니에서 곡을 뺐다냥." });
     } catch (error) {
       setNotice({ kind: "error", message: (error as Error).message });
@@ -833,47 +1490,240 @@ export default function App() {
     }
   }
 
+  async function saveMemo(translatedText: string, memoText: string) {
+    if (!auth?.userId || !selectedLine?.id) {
+      setNotice({ kind: "notice", message: "아직 저장할 가사 줄이 없다냥." });
+      return;
+    }
+    try {
+      const saved = await api<Translation>(`/api/lyric-line-refs/${selectedLine.id}/translations?userId=${auth.userId}`, {
+        method: "POST",
+        body: JSON.stringify({
+          languageCode: "ko",
+          translatedText: translatedText || selectedLine.text,
+          memoText,
+        }),
+      }, auth);
+      setTranslation(saved);
+      setTranslationCache((current) => ({ ...current, [String(selectedLine.id)]: saved }));
+      window.localStorage.setItem("kurostep.translationMemo", memoText);
+      setNotice({ kind: "notice", message: "번역 메모를 서버에 콕 저장했다냥." });
+    } catch (error) {
+      setNotice({ kind: "error", message: (error as Error).message });
+    }
+  }
+
+  async function deleteMemo() {
+    if (!auth?.userId || !selectedLine?.id || !translation?.id) {
+      setNotice({ kind: "notice", message: "아직 지울 번역 메모가 없다냥." });
+      return;
+    }
+    try {
+      await api<void>(`/api/lyric-line-refs/${selectedLine.id}/translations?userId=${auth.userId}&languageCode=ko`, { method: "DELETE" }, auth);
+      setTranslation(null);
+      setTranslationCache((current) => {
+        const next = { ...current };
+        delete next[String(selectedLine.id)];
+        return next;
+      });
+      setNotice({ kind: "notice", message: "이 줄의 번역 메모를 지웠다냥." });
+    } catch (error) {
+      setNotice({ kind: "error", message: (error as Error).message });
+    }
+  }
+
+  async function saveCurrentLyricPiece() {
+    if (!selectedLine?.text) {
+      setNotice({ kind: "notice", message: "아직 저장할 가사 줄이 없다냥." });
+      return;
+    }
+
+    const piece: SavedLyricPiece = {
+      id: `${selectedLine.id || selectedLine.lineIndex || Date.now()}-${Date.now()}`,
+      lineRefId: selectedLine.id || null,
+      trackId: workspace.currentTrack?.id || null,
+      trackTitle: workspace.currentTrack?.title || "작업곡",
+      lineText: selectedLine.text,
+      translatedText: translation?.translatedText || "",
+      memoText: translation?.memoText || "",
+      savedAt: new Date().toISOString(),
+    };
+
+    setSavedLyricPieces((current) => {
+      const next = [piece, ...current.filter((item) => item.lineRefId !== piece.lineRefId)].slice(0, 20);
+      writeJson("kurostep.savedLyricPieces", next);
+      return next;
+    });
+    window.localStorage.setItem("kurostep.translationMemo", piece.memoText || "저장한 가사 조각");
+    setNotice({ kind: "notice", message: "현재 가사 조각을 저장했다냥." });
+
+    if (selectedLine.id && auth?.userId) {
+      await saveMemo(piece.translatedText || selectedLine.text, piece.memoText || "저장한 가사 조각");
+    }
+  }
+
+  function deleteSavedLyricPiece(pieceId: string) {
+    setSavedLyricPieces((current) => {
+      const next = current.filter((piece) => piece.id !== pieceId);
+      writeJson("kurostep.savedLyricPieces", next);
+      return next;
+    });
+    setNotice({ kind: "notice", message: "저장한 가사 조각을 지웠다냥." });
+  }
+
+  async function moveTrack(offset: number, autoplay = isPlaying) {
+    if (!workspace.playlistTracks.length || !workspace.currentTrack) return;
+    const currentIndex = Math.max(
+      workspace.playlistTracks.findIndex((track) => track.playlistTrackId === workspace.currentTrack?.playlistTrackId),
+      0,
+    );
+    let nextIndex = currentIndex + offset;
+    if (nextIndex < 0) {
+      nextIndex = repeatMode ? workspace.playlistTracks.length - 1 : 0;
+    }
+    if (nextIndex >= workspace.playlistTracks.length) {
+      nextIndex = repeatMode ? 0 : workspace.playlistTracks.length - 1;
+    }
+    const nextTrack = workspace.playlistTracks[nextIndex];
+    if (!nextTrack || nextTrack.playlistTrackId === workspace.currentTrack.playlistTrackId) return;
+    await selectTrack(nextTrack);
+    setIsPlaying(Boolean(autoplay));
+  }
+
+  function skipPlayback(seconds: number) {
+    const duration = trackDuration || workspace.currentTrack?.durationSeconds || 0;
+    const max = duration > 0 ? Math.max(duration - 1, 0) : 24 * 60 * 60;
+    setPlaybackPosition((current) => Math.min(Math.max(current + seconds, 0), max));
+    setNotice({ kind: "notice", message: seconds > 0 ? "10초 앞으로 폴짝" : "10초 뒤로 살금" });
+  }
+
+  function seekPlayback(seconds: number) {
+    const duration = trackDuration || workspace.currentTrack?.durationSeconds || 0;
+    const max = duration > 0 ? Math.max(duration - 1, 0) : 24 * 60 * 60;
+    setPlaybackPosition(Math.min(Math.max(seconds, 0), max));
+  }
+
+  function changeVolume(nextVolume: number) {
+    const normalized = Math.min(Math.max(Number(nextVolume) || 0, 0), 100);
+    if (normalized > 0) {
+      window.localStorage.setItem("kurostep.previousVolume", String(normalized));
+    }
+    window.localStorage.setItem("kurostep.volume", String(normalized));
+    setVolume(normalized);
+  }
+
   const visibleNotice = loading ? { kind: "notice" as const, message: "작업실 불러오는 중이냥..." } : notice;
 
   if (!auth) {
     return (
-      <WidgetShell rightAction="exit">
+      <WidgetShell rightAction="exit" onExit={exitApp}>
         <p className={`app-status ${visibleNotice.kind === "error" ? "error" : ""}`} id="app-status">{visibleNotice.message}</p>
         <AuthScreen busy={busy} onSubmit={handleAuth} />
       </WidgetShell>
     );
   }
 
+  if (settingsOpen) {
+    return <SettingsScreen auth={auth} onBack={() => setSettingsOpen(false)} onLogout={logout} onExit={exitApp} />;
+  }
+
   return (
-    <WidgetShell rightAction="settings" onLogout={logout}>
+    <WidgetShell rightAction="settings" onSettings={() => setSettingsOpen(true)} onExit={exitApp}>
       <p className={`app-status ${visibleNotice.kind === "error" ? "error" : ""}`} id="app-status">{visibleNotice.message}</p>
       <div className="global-widget-controls" aria-label="위젯 열고 닫기">
-        <button className="action-button primary" id="toggle-paw-widget" type="button" aria-pressed="true">작업 발자국 ON</button>
-        <button className="action-button" id="global-lyrics-toggle" type="button" aria-pressed="false">가사 오버레이 OFF</button>
+        <button
+          className={`action-button ${pawWidgetVisible ? "primary" : ""}`}
+          id="toggle-paw-widget"
+          type="button"
+          aria-pressed={pawWidgetVisible}
+          onClick={() => {
+            setPawWidgetVisible((value) => {
+              const next = !value;
+              writeJson("kurostep.pawWidgetVisible", next);
+              setNotice({ kind: "notice", message: next ? "작업 발자국 창을 펼쳤다냥." : "작업 발자국 창을 접었다냥." });
+              return next;
+            });
+          }}
+        >
+          작업 발자국 {pawWidgetVisible ? "ON" : "OFF"}
+        </button>
+        <button
+          className={`action-button ${lyricsOverlayVisible ? "primary" : ""}`}
+          id="global-lyrics-toggle"
+          type="button"
+          aria-pressed={lyricsOverlayVisible}
+          onClick={() => {
+            setLyricsOverlayVisible((value) => {
+              const next = !value;
+              setNotice({ kind: "notice", message: next ? "가사 창 띄웠다냥." : "가사 창 접었다냥." });
+              return next;
+            });
+          }}
+        >
+          가사 오버레이 {lyricsOverlayVisible ? "ON" : "OFF"}
+        </button>
       </div>
       <div className="widget-stack">
-        <TaskPawWidget
-          workspace={workspace}
-          savedLyricPieces={savedLyricPieces}
-          onSelectTask={(task) => setWorkspace((current) => ({ ...current, work: task }))}
-          onCreateTask={createTask}
-          onUpdateStatus={updateStatus}
-          onDeleteTask={deleteTask}
-        />
         <MusicPlayerWidget
           track={workspace.currentTrack}
           tracks={workspace.playlistTracks}
           playlist={workspace.playlist}
           page={playlistPage}
           isPlaying={isPlaying}
-          onTogglePlay={() => setIsPlaying((value) => !value)}
+          repeatMode={repeatMode}
+          position={playbackPosition}
+          duration={trackDuration}
+          volume={volume}
+          youtubeVisible={youtubeVisible}
+          onTogglePlay={() => {
+            if (!workspace.currentTrack) return;
+            setIsPlaying((value) => !value);
+            setNotice({ kind: "notice", message: isPlaying ? "잠깐 멈춰둘게냥" : "YouTube BGM 재생 중이냥." });
+          }}
+          onPlayingChange={setIsPlaying}
+          onPositionChange={setPlaybackPosition}
+          onDurationChange={setTrackDuration}
+          onVolumeChange={changeVolume}
+          onToggleYoutube={() => setYoutubeVisible((value) => !value)}
+          onMoveTrack={moveTrack}
+          onSkip={skipPlayback}
+          onSeek={seekPlayback}
+          onToggleRepeat={() => {
+            setRepeatMode((value) => !value);
+            setNotice({ kind: "notice", message: repeatMode ? "반복 산책 OFF" : "반복 산책 ON" });
+          }}
           onSelectTrack={selectTrack}
           onRegisterLink={registerLink}
           onRemoveTrack={removeTrack}
           onShuffle={shufflePlaylist}
           onPage={setPlaylistPage}
         />
-        <LyricsWidget currentTrack={workspace.currentTrack} />
+        <LyricsWidget
+          currentTrack={workspace.currentTrack}
+          lyricSource={lyricSource}
+          selectedLine={selectedLine}
+          translation={translation}
+          lyricsExpanded={lyricsExpanded}
+          onToggleExpanded={() => setLyricsExpanded((value) => !value)}
+          onSavePiece={saveCurrentLyricPiece}
+        />
+        {pawWidgetVisible && (
+          <aside className="detached-widget paw-detached-widget" aria-label="작업 발자국 위젯">
+            <TaskPawWidget
+              workspace={workspace}
+              savedLyricPieces={savedLyricPieces}
+              selectedLine={selectedLine}
+              translation={translation}
+              onSelectTask={(task) => setWorkspace((current) => ({ ...current, work: task }))}
+              onCreateTask={createTask}
+              onUpdateStatus={updateStatus}
+              onDeleteTask={deleteTask}
+              onSaveMemo={saveMemo}
+              onDeleteMemo={deleteMemo}
+              onDeletePiece={deleteSavedLyricPiece}
+            />
+          </aside>
+        )}
       </div>
     </WidgetShell>
   );

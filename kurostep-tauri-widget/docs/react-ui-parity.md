@@ -52,11 +52,23 @@
 - 트랙 선택: 현재 작업 카드의 currentPlaylistTrack 갱신
 - 트랙 제거: 플레이리스트에서 해당 곡 제거
 - 셔플: 서버 reorder API 호출
+- YouTube IFrame 플레이어: `YT.Player`를 React ref로 보관해서 재렌더와 분리
+- 재생/일시정지, 이전/다음, 10초 이동, 진행바 seek, 반복, 볼륨 조절
+- 메인 위젯 순서: `BGM 턴테이블 -> 가사 창`, 작업 발자국은 보조 위젯 영역으로 분리
+- LRCLIB 가사 fetch 및 localStorage 캐시
+- 플레이리스트 현재/다음 곡 가사 prewarm
+- 재생 위치 기반 현재 가사 줄 선택
+- 현재 줄 번역 auto-draft 조회/생성
+- 번역문/작업 메모 저장, 삭제
+- 현재 가사 조각 localStorage 저장, 삭제
+- 가사 오버레이 `set_lyrics_visible` Tauri/shell 메시지 연결
+- 작업 발자국 창 `set_paw_visible` Tauri/shell 메시지 연결
+- 설정 화면: 로그인 계정, 닉네임, 로그아웃, 앱 종료
+- shell `auth_state`, `open_settings` 메시지 연동
 
 ## 아직 React로 옮기는 중인 범위
-- YouTube IFrame 실제 재생 제어
-- 트랙 전환 시 iframe 보존과 버퍼링 최소화
-- LRCLIB 가사 fetch, localStorage 캐시, 선번역/선준비 큐
-- 현재 줄 저장과 번역 메모 저장/삭제
-- 가사 오버레이 별도 창 동기화
-- Tauri shell window minimize/exit/settings 실제 invoke 연결
+- 실제 Tauri 앱에서 YouTube IFrame 재생 검증
+- 앱 내부 shell의 최소화/드래그 세부 검증
+- 가사 오버레이 창에서 `lyrics:update` 이벤트 수신 UI 최종 검증
+- LRCLIB가 한국곡/특정 영상 가사를 못 찾을 때 사용자 입력 가사 등록 대안
+- 플레이리스트 드래그 앤 드롭 순서 변경 UI
