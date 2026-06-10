@@ -2,6 +2,11 @@
 **/target/
 **/.DS_Store
 *.log
+02_백엔드세미용/
+KuroStep/
+infra/
+.github/workflows/backend-ci.yml
+.github/workflows/deploy-ec2.yml
 .idea/
 **/.idea/
 **/build/

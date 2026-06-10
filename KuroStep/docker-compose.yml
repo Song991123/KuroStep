@@ -1,9 +1,0 @@
-services:
-  kurostep-api:
-    build:
-      context: .
-    container_name: kurostep-api
-    ports:
-      - "8080:8080"
-    environment:
-      KUROSTEP_JWT_SECRET: "kurostep-docker-demo-secret-change-before-production"
