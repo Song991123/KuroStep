@@ -3,16 +3,16 @@ import { escapeHtml } from "./html.js";
 
 const STATUS_LABELS = {
   TODO: "할 일",
-  DOING: "진행 중",
-  DONE: "완료",
+  DOING: "걷는 중",
+  DONE: "발도장",
 };
 
 export function TodayWorkWidget(work) {
   if (!work) {
     return `
       <section class="widget-section today-work">
-        ${SectionHeader("TODO")}
-        <p class="state-message">오늘 할 작업이 아직 없어요.</p>
+        ${SectionHeader("오늘 할 일")}
+        <p class="state-message">오늘 찍을 발자국이 아직 없다냥.</p>
       </section>
     `;
   }
@@ -32,7 +32,7 @@ export function TodayWorkWidget(work) {
 
   return `
     <section class="widget-section today-work" aria-labelledby="today-work-title">
-      ${SectionHeader("TODO")}
+      ${SectionHeader("오늘 할 일")}
       <div class="task-header">
         <h3 class="task-title" id="today-work-title">${escapeHtml(work.title)}</h3>
       </div>

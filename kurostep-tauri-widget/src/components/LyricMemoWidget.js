@@ -5,15 +5,15 @@ export function LyricMemoWidget(lyricMemo) {
   if (!lyricMemo) {
     return `
       <section class="widget-section lyric-memo-widget">
-        ${SectionHeader("가사 번역 편집")}
-        <p class="state-message">곡을 재생하면 현재 가사와 번역문을 편집할 수 있어요.</p>
+        ${SectionHeader("번역 메모")}
+        <p class="state-message">곡을 재생하면 현재 가사와 한국어 메모를 만질 수 있다냥.</p>
       </section>
     `;
   }
 
   return `
     <section class="widget-section lyric-memo-widget" aria-labelledby="translation-memo-title">
-      ${SectionHeader("가사 번역 편집")}
+      ${SectionHeader("번역 메모")}
       <p class="memo-context" id="translation-memo-title">
         <span>${escapeHtml(lyricMemo.timestamp)}</span>
         "${escapeHtml(lyricMemo.line)}"

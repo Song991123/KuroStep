@@ -361,7 +361,7 @@ async function loadDashboard() {
       return;
     }
     await ensureWorkspaceData();
-    appState.notice = "오늘 작업 위젯 준비 완료냥";
+    appState.notice = "오늘 발자국장 준비 완료냥";
   } catch (error) {
     appState.error = `작업 정보를 못 불러왔어냥: ${error.message}`;
   } finally {
@@ -424,7 +424,7 @@ async function handleAuthSubmit(event) {
       ),
     });
     writeJson("kurostep.auth", appState.auth);
-    appState.notice = appState.authMode === "signup" ? "가입 완료냥. 작업실로 들어간다냥." : "어서 와냥. 오늘 작업 펼친다냥.";
+    appState.notice = appState.authMode === "signup" ? "가입 완료냥. 작업실로 들어간다냥." : "어서 와냥. 오늘 발자국을 펼친다냥.";
     await ensureWorkspaceData();
   } catch (error) {
     appState.auth = null;
@@ -1337,8 +1337,8 @@ function sectionHeader(title, actionLabel, actionId) {
 function statusLabel(status) {
   const labels = {
     TODO: "할 일",
-    DOING: "진행 중",
-    DONE: "완료",
+    DOING: "걷는 중",
+    DONE: "발도장",
   };
   return labels[status] || status;
 }
@@ -1376,7 +1376,7 @@ function authWidget() {
         </span>
         <p class="auth-eyebrow">KuroStep</p>
         <h1 id="auth-title">${isSignup ? "작업실 만들기" : "작업실 들어가기"}</h1>
-        <p>${isSignup ? "오늘의 작업 카드와 BGM을 함께 묶어둘 계정을 만든다냥." : "로그인하면 투두, 플레이어, 가사가 차례대로 열린다냥."}</p>
+        <p>${isSignup ? "오늘 발자국과 BGM, 가사 메모를 함께 묶어둘 계정을 만든다냥." : "로그인하면 발자국장, 턴테이블, 가사 창이 차례대로 열린다냥."}</p>
       </div>
       <div class="auth-switch" role="tablist" aria-label="인증 방식">
         <button class="${!isSignup ? "active" : ""}" id="auth-login-tab" type="button">로그인</button>
@@ -1411,7 +1411,7 @@ function appNoticeWidget() {
 
 function todayWorkWidget(work, counts) {
   if (!work) {
-    return emptySection("TODO", "오늘 할 작업이 아직 없다냥.");
+    return emptySection("오늘 할 일", "오늘 찍을 발자국이 아직 없다냥.");
   }
 
   const statuses = ["TODO", "DOING", "DONE"];
@@ -1424,7 +1424,7 @@ function todayWorkWidget(work, counts) {
 
   return `
     <section class="widget-section today-work" aria-labelledby="today-work-title">
-      ${sectionHeader("TODO")}
+      ${sectionHeader("오늘 할 일")}
       <div class="task-header">
         <h3 class="task-title" id="today-work-title">${escapeHtml(work.title)}</h3>
       </div>
@@ -1432,7 +1432,7 @@ function todayWorkWidget(work, counts) {
       <div class="meta-grid" aria-label="작업 카드 상세">
         <span>날짜 ${escapeHtml(work.taskDate || "-")}</span>
         <span>상태 ${escapeHtml(statusLabel(work.status))}</span>
-        <span>플리 ${escapeHtml(work.playlistId ? `#${work.playlistId}` : "미연결")}</span>
+        <span>BGM 바구니 ${escapeHtml(work.playlistId ? `#${work.playlistId}` : "미연결")}</span>
         <span>현재곡 ${escapeHtml(work.currentPlaylistTrackId ? `#${work.currentPlaylistTrackId}` : "없음")}</span>
       </div>
       <div class="status-badges" aria-label="작업 상태">
@@ -1566,12 +1566,12 @@ function playlistWidget(tracks) {
 
 function lyricMemoWidget(line, translation) {
   if (!line) {
-    return emptySection("가사 번역 편집", "곡을 재생하면 현재 가사와 번역문을 만질 수 있다냥.");
+    return emptySection("번역 메모", "곡을 재생하면 현재 가사와 한국어 메모를 만질 수 있다냥.");
   }
 
   return `
     <section class="widget-section lyric-memo-widget" aria-labelledby="translation-memo-title">
-      ${sectionHeader("가사 번역 편집")}
+      ${sectionHeader("번역 메모")}
       <p class="memo-context" id="memo-context">
         <span>${escapeHtml(formatTimestamp(line.startTimeMs))}</span>
         "${escapeHtml(line.text)}"
@@ -1582,8 +1582,8 @@ function lyricMemoWidget(line, translation) {
       <textarea class="memo-input" id="translation-memo" rows="2">${escapeHtml(translation?.memoText || readMemoFallback())}</textarea>
       <p class="memo-save-state" id="memo-save-state" aria-live="polite">${escapeHtml(translation?.status || "")}</p>
       <div class="button-row">
-        <button class="action-button" id="auto-translate" type="button">초안 다시</button>
-        <button class="action-button primary" id="save-memo" type="button">저장</button>
+        <button class="action-button" id="auto-translate" type="button">초안 다시냥</button>
+        <button class="action-button primary" id="save-memo" type="button">콕 저장</button>
       </div>
     </section>
   `;
@@ -1598,31 +1598,49 @@ function emptySection(title, message) {
   `;
 }
 
-function todoMemoWidget() {
+function widgetGroup(className, title, subtitle, content) {
   return `
-    <section class="widget-group todo-memo-widget" aria-label="투두와 번역 메모">
+    <section class="widget-group ${escapeHtml(className)}" aria-label="${escapeHtml(title)}">
       <div class="widget-group-head">
-        <h2>투두 + 번역 메모</h2>
-        <span>${escapeHtml(appState.auth?.nickname || "KuroStep")}</span>
+        <div>
+          <h2>${escapeHtml(title)}</h2>
+          <p>${escapeHtml(subtitle)}</p>
+        </div>
       </div>
-      ${todayWorkWidget(appState.work, appState.counts)}
-      ${lyricMemoWidget(appState.selectedLine, appState.translation)}
+      ${content}
     </section>
   `;
 }
 
+function taskPawWidget() {
+  return widgetGroup(
+    "task-paw-widget",
+    "오늘 발자국",
+    "오늘 할 일과 작업 상태를 살금살금 정리한다냥",
+    todayWorkWidget(appState.work, appState.counts)
+  );
+}
+
+function lyricDeskWidget() {
+  return widgetGroup(
+    "lyric-desk-widget",
+    "가사 손질장",
+    "원문 옆에 한국어 번역과 떠오른 느낌을 콕 남긴다냥",
+    lyricMemoWidget(appState.selectedLine, appState.translation)
+  );
+}
+
 function musicPlayerWidget() {
-  return `
-    <section class="widget-group music-player-widget" aria-label="노래 플레이어">
-      <div class="widget-group-head">
-        <h2>노래 플레이어</h2>
-        <span>YouTube BGM</span>
-      </div>
+  return widgetGroup(
+    "music-player-widget",
+    "BGM 턴테이블",
+    "작업 카드에 붙인 곡을 여기서 조심조심 튼다냥",
+    `
       ${playerWidget(appState.currentTrack)}
       ${youtubeLinkWidget()}
       ${playlistWidget(appState.playlistTracks)}
-    </section>
-  `;
+    `
+  );
 }
 
 function lyricsWidget() {
@@ -1645,9 +1663,12 @@ function lyricsWidget() {
     : `<li class="lyrics-line empty"><p>아직 불러온 가사가 없다냥.</p></li>`;
 
   return `
-    <section class="widget-group lyrics-widget" aria-label="가사">
+    <section class="widget-group lyrics-widget" aria-label="가사 창">
       <div class="widget-group-head">
-        <h2>가사</h2>
+        <div>
+          <h2>가사 창</h2>
+          <p>지금 흐르는 문장을 보고, 펼치면 전체 가사를 본다냥</p>
+        </div>
         <button class="lyrics-panel-toggle" id="lyrics-panel-toggle" type="button" aria-expanded="${appState.lyricsPanelExpanded}" aria-controls="lyrics-full-list" title="${appState.lyricsPanelExpanded ? "가사 접기" : "가사 펼치기"}" aria-label="${appState.lyricsPanelExpanded ? "가사 접기" : "가사 펼치기"}">
           ${iconSvg(appState.lyricsPanelExpanded ? "chevronUp" : "chevronDown")}
         </button>
@@ -1671,9 +1692,12 @@ function render() {
 
   app.innerHTML = widgetShell(`
     ${appNoticeWidget()}
-    ${todoMemoWidget()}
+    <div class="widget-stack" aria-label="KuroStep 위젯 모음">
+    ${taskPawWidget()}
+    ${lyricDeskWidget()}
     ${musicPlayerWidget()}
     ${lyricsWidget()}
+    </div>
   `);
 
   bindWindowControls();
