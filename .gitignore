@@ -2,3 +2,11 @@
 **/target/
 **/.DS_Store
 *.log
+.idea/
+**/.idea/
+**/build/
+**/.gradle/
+*.iml
+HELP.md
+02_백엔드세미용/playlist_260404_0/
+02_백엔드세미용/*.pdf

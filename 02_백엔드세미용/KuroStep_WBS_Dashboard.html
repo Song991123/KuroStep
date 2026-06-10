@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KuroStep Backend WBS Dashboard</title>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --panel: #ffffff;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d8dee9;
+      --green: #16704f;
+      --blue: #315b9c;
+      --amber: #a65b00;
+      --violet: #6846a6;
+      --red: #9a3d3d;
+      --green-bg: #e8f6ef;
+      --blue-bg: #edf3ff;
+      --amber-bg: #fff2dd;
+      --violet-bg: #f2edff;
+      --red-bg: #faeaea;
+      --shadow: 0 12px 28px rgba(23, 32, 51, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+
+    .page {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }
+
+    header {
+      display: grid;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 32px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 20px;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.95em;
+    }
+
+    .subtitle {
+      max-width: 860px;
+      color: var(--muted);
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric,
+    .panel,
+    .card,
+    .lane,
+    .log-box {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .metric {
+      padding: 16px;
+    }
+
+    .metric strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 28px;
+      line-height: 1;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .section {
+      margin-top: 26px;
+    }
+
+    .status-strip {
+      display: grid;
+      grid-template-columns: 3fr 1fr;
+      gap: 14px;
+    }
+
+    .panel {
+      padding: 16px;
+    }
+
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .step {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .log-box {
+      padding: 14px;
+      background: #111827;
+      color: #e5e7eb;
+      overflow-x: auto;
+    }
+
+    .log-box pre {
+      margin: 0;
+      white-space: pre-wrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .lane {
+      min-width: 0;
+      padding: 14px;
+    }
+
+    .lane-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      font-weight: 800;
+    }
+
+    .count {
+      min-width: 34px;
+      border-radius: 999px;
+      padding: 2px 8px;
+      color: #fff;
+      text-align: center;
+      font-size: 13px;
+    }
+
+    .count.done {
+      background: var(--green);
+    }
+
+    .count.doing {
+      background: var(--amber);
+    }
+
+    .count.next {
+      background: var(--blue);
+    }
+
+    .item {
+      margin-bottom: 10px;
+      padding: 11px 11px 12px;
+      border: 1px solid var(--line);
+      border-left-width: 5px;
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .item:last-child {
+      margin-bottom: 0;
+    }
+
+    .item.done {
+      border-left-color: var(--green);
+      background: var(--green-bg);
+    }
+
+    .item.doing {
+      border-left-color: var(--amber);
+      background: var(--amber-bg);
+    }
+
+    .item.next {
+      border-left-color: var(--blue);
+      background: var(--blue-bg);
+    }
+
+    .area {
+      display: inline-block;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .task {
+      margin-bottom: 7px;
+      font-weight: 800;
+    }
+
+    .next-action {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .roadmap {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .card {
+      min-height: 132px;
+      padding: 14px;
+    }
+
+    .card.primary {
+      background: var(--blue-bg);
+      border-color: rgba(49, 91, 156, 0.4);
+    }
+
+    .number {
+      display: inline-grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      margin-bottom: 10px;
+      border-radius: 999px;
+      background: var(--blue);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .evidence {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    li {
+      margin: 6px 0;
+    }
+
+    .out-of-scope {
+      background: var(--violet-bg);
+      border-color: rgba(104, 70, 166, 0.28);
+    }
+
+    @media (max-width: 980px) {
+      .summary-grid,
+      .board,
+      .roadmap,
+      .two-col,
+      .status-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      .page {
+        padding: 24px 14px 36px;
+      }
+
+      h1 {
+        font-size: 26px;
+      }
+
+      .summary-grid,
+      .board,
+      .roadmap,
+      .two-col,
+      .status-strip {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <div>
+        <h1>KuroStep Backend WBS Dashboard</h1>
+        <p class="subtitle">2026-06-09 기준. 현재 작업 범위는 Spring Boot 백엔드와 Tauri 최소 위젯 연동이며, YouTube iframe 이슈는 트러블슈팅으로 관리한다.</p>
+      </div>
+      <section class="summary-grid" aria-label="진행 요약">
+        <div class="metric">
+          <strong>9</strong>
+          <span>완료된 기능 축</span>
+        </div>
+        <div class="metric">
+          <strong>3</strong>
+          <span>실제 외부/HTTP 검증 로그</span>
+        </div>
+        <div class="metric">
+          <strong>5</strong>
+          <span>다음 검증 작업</span>
+        </div>
+        <div class="metric">
+          <strong>1</strong>
+          <span>Tauri 재생 이슈</span>
+        </div>
+      </section>
+    </header>
+
+    <section class="section status-strip" aria-label="현재 검증 상태">
+      <div class="panel">
+        <h2>검증된 백엔드 흐름</h2>
+        <div class="flow">
+          <span class="step">회원가입</span>
+          <span class="step">로그인</span>
+          <span class="step">JWT 인증</span>
+          <span class="step">YouTube Track 등록</span>
+          <span class="step">Playlist 생성</span>
+          <span class="step">곡 추가</span>
+          <span class="step">Task 생성</span>
+          <span class="step">Playlist 연결</span>
+          <span class="step">현재 곡 설정</span>
+          <span class="step">상태 변경</span>
+          <span class="step">LRCLIB 가사 조회</span>
+          <span class="step">라인 58개 생성</span>
+          <span class="step">MyMemory 번역 초안</span>
+        </div>
+      </div>
+      <div class="log-box">
+        <pre>track 1 https://www.youtube.com/watch?v=dQw4w9WgXcQ
+lyric 1 lines 58 hasSourceText true
+draft 1 MYMEMORY AUTO_DRAFT 절대 포기하지 않을 거예요</pre>
+      </div>
+    </section>
+
+    <section class="section" aria-label="다음 백엔드 작업">
+      <h2>다음 작업 순서</h2>
+      <div class="roadmap">
+        <article class="card primary">
+          <span class="number">1</span>
+          <h3>Docker 검증</h3>
+          <p class="evidence">Docker build 또는 compose 실행 성공 로그 확보</p>
+        </article>
+        <article class="card primary">
+          <span class="number">2</span>
+          <h3>Swagger 수동 확인</h3>
+          <p class="evidence">핵심 API 시나리오를 Swagger에서 1회 확인</p>
+        </article>
+        <article class="card">
+          <span class="number">3</span>
+          <h3>발표 데모 정리</h3>
+          <p class="evidence"><code>http/kurostep-demo.http</code> 기준 5분 흐름 작성</p>
+        </article>
+        <article class="card">
+          <span class="number">4</span>
+          <h3>권한 검증</h3>
+          <p class="evidence">보강 가능하면 테스트 추가, 아니면 한계 문서화</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" aria-label="WBS 보드">
+      <h2>백엔드 WBS 상태</h2>
+      <div class="board">
+        <section class="lane" aria-label="실제 검증 완료">
+          <div class="lane-title">실제 검증 완료 <span class="count done">다수</span></div>
+          <article class="item done"><span class="area">Auth/Security</span><div class="task">JWT 기반 회원가입/로그인/인증</div><p class="next-action">보호 API 검증 증거를 보고서에 반영</p></article>
+          <article class="item done"><span class="area">Security</span><div class="task">Spring Security로 /api/** 보호</div><p class="next-action">사용자별 권한 한계만 정리</p></article>
+          <article class="item done"><span class="area">Swagger</span><div class="task">OpenAPI 의존성 추가 및 문서 접근</div><p class="next-action">핵심 API 수동 확인으로 연결</p></article>
+          <article class="item done"><span class="area">Track</span><div class="task">YouTube sourceUrl/sourceId 저장</div><p class="next-action">실제 링크 등록 로그 활용</p></article>
+          <article class="item done"><span class="area">Lyrics</span><div class="task">LRCLIB 실제 호출 및 라인 58개 생성</div><p class="next-action">검증 로그를 보고서에 그대로 반영</p></article>
+          <article class="item done"><span class="area">Translation</span><div class="task">MyMemory 번역 초안 생성</div><p class="next-action">AUTO_DRAFT 결과를 외부 연동 증거로 사용</p></article>
+          <article class="item done"><span class="area">Test/HTTP</span><div class="task">./gradlew test 통과 및 HTTP 검증</div><p class="next-action">발표 전 최종 1회 재실행</p></article>
+          <article class="item done"><span class="area">문서</span><div class="task">WBS/보고서 최신화</div><p class="next-action">Docker와 Swagger 수동 확인 결과가 생기면 추가</p></article>
+        </section>
+
+        <section class="lane" aria-label="진행 중">
+          <div class="lane-title">진행 중 <span class="count doing">2</span></div>
+          <article class="item doing"><span class="area">시연</span><div class="task">발표용 데모 시나리오 정리</div><p class="next-action">HTTP 파일 기준으로 5분 흐름 압축</p></article>
+          <article class="item doing"><span class="area">검증</span><div class="task">Swagger 핵심 API 수동 확인 준비</div><p class="next-action">회원가입부터 번역 초안까지 핵심 흐름 선택</p></article>
+        </section>
+
+        <section class="lane" aria-label="필수 잔여">
+          <div class="lane-title">필수 잔여 <span class="count next">2+</span></div>
+          <article class="item next"><span class="area">Docker</span><div class="task">빌드/실행 검증</div><p class="next-action">Docker build 또는 compose 실행 로그 확보</p></article>
+          <article class="item next"><span class="area">Swagger</span><div class="task">핵심 API 수동 확인</div><p class="next-action">문서화 화면에서 실제 요청 흐름 확인</p></article>
+          <article class="item next"><span class="area">Auth/Security</span><div class="task">사용자별 권한 검증 보강 또는 문서화</div><p class="next-action">시간에 따라 테스트 추가 또는 한계 명시</p></article>
+        </section>
+      </div>
+    </section>
+
+    <section class="section two-col" aria-label="완료 범위와 제외 범위">
+      <div class="panel">
+        <h2>현재 백엔드 완료 범위</h2>
+        <ul>
+          <li>JWT 기반 회원가입/로그인/인증</li>
+          <li>Spring Security로 <code>/api/**</code> 보호</li>
+          <li>Swagger/OpenAPI 문서 접근</li>
+          <li>Track, Playlist, Task 핵심 CRUD와 연결 흐름</li>
+          <li>LRCLIB 실제 호출과 가사 라인 참조 58개 생성</li>
+          <li>MyMemory 실제 호출과 번역 초안 생성</li>
+          <li>공통 예외 응답, 테스트, HTTP 검증</li>
+        </ul>
+      </div>
+      <div class="panel out-of-scope">
+        <h2>현재 작업 대상에서 제외</h2>
+        <ul>
+          <li>Tauri 최소 위젯</li>
+          <li>Tauri 오버레이</li>
+          <li>프론트 UI 구현</li>
+        </ul>
+        <p class="subtitle">KuroStep 전체 기획에는 남지만, 현재 일정 관리는 Spring Boot 백엔드 구현과 검증만 다룬다.</p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
