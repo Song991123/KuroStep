@@ -525,6 +525,7 @@ function MusicPlayerWidget({
   duration,
   volume,
   youtubeVisible,
+  canRegisterLinks,
   onTogglePlay,
   onPlayingChange,
   onPositionChange,
@@ -552,6 +553,7 @@ function MusicPlayerWidget({
   duration: number;
   volume: number;
   youtubeVisible: boolean;
+  canRegisterLinks: boolean;
   onTogglePlay: () => void;
   onPlayingChange: (playing: boolean) => void;
   onPositionChange: (seconds: number) => void;
@@ -563,7 +565,7 @@ function MusicPlayerWidget({
   onSeek: (seconds: number) => void;
   onToggleRepeat: () => void;
   onSelectTrack: (playlistTrack: PlaylistTrack) => void;
-  onRegisterLink: (url: string) => void;
+  onRegisterLink: (url: string) => Promise<boolean>;
   onRemoveTrack: (playlistTrack: PlaylistTrack) => void;
   onShuffle: () => void;
   onReorderTracks: (playlistTrackIds: number[]) => void;
@@ -721,6 +723,15 @@ function MusicPlayerWidget({
     onSkip(seconds);
   }
 
+  async function submitLink() {
+    const value = url.trim();
+    if (!value) return;
+    const registered = await onRegisterLink(value);
+    if (registered) {
+      setUrl("");
+    }
+  }
+
   function dropTrack(targetPlaylistTrackId: number) {
     if (!draggingPlaylistTrackId || draggingPlaylistTrackId === targetPlaylistTrackId) {
       setDraggingPlaylistTrackId(null);
@@ -805,11 +816,12 @@ function MusicPlayerWidget({
         <SectionHeader title="YOUTUBE LINK" />
         <form className="link-form" id="link-widget-title" onSubmit={(event) => {
           event.preventDefault();
-          onRegisterLink(url);
-          setUrl("");
+          submitLink();
         }}>
           <input className="form-input wide" value={url} onChange={(event) => setUrl(event.target.value)} type="url" placeholder="영상 또는 플레이리스트 링크를 붙여넣어줘냥" aria-label="유튜브 링크" />
-          <button className="action-button primary" type="submit">링크 불러오기</button>
+          <button className="action-button primary" type="button" disabled={!canRegisterLinks} onClick={() => void submitLink()}>
+            {canRegisterLinks ? "링크 불러오기" : "준비 중"}
+          </button>
         </form>
       </section>
       <section className="widget-section playlist-widget" aria-labelledby="playlist-title">
@@ -1035,12 +1047,17 @@ export default function App() {
   const [lyricsExpanded, setLyricsExpanded] = useState(false);
   const [savedLyricPieces, setSavedLyricPieces] = useState(() => readJson<SavedLyricPiece[]>("kurostep.savedLyricPieces", []));
   const authRef = useRef<AuthSession | null>(auth);
+  const workspaceRef = useRef<Workspace>(workspace);
   const lyricWarmupRef = useRef(new Map<number, Promise<LyricSource>>());
 
   useEffect(() => {
     authRef.current = auth;
     postShellMessage({ type: "auth_state", authenticated: Boolean(auth) });
   }, [auth]);
+
+  useEffect(() => {
+    workspaceRef.current = workspace;
+  }, [workspace]);
 
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
@@ -1318,7 +1335,6 @@ export default function App() {
       });
       writeJson("kurostep.auth", session);
       setAuth(session);
-      await refreshWorkspace(session);
     } catch (error) {
       window.localStorage.removeItem("kurostep.auth");
       setNotice({ kind: "error", message: authErrorMessage(error, mode) });
@@ -1346,6 +1362,34 @@ export default function App() {
     }
   }
 
+  async function reloadTasks(session = authRef.current) {
+    if (!session?.userId) return;
+    const tasks = await api<CreatorTask[]>(`/api/tasks/today?userId=${session.userId}`, {}, session);
+    setWorkspace((current) => {
+      const currentWorkId = current.work?.id;
+      const work = tasks.find((task) => task.id === currentWorkId) || tasks.find((task) => task.status === "DOING") || tasks[0] || null;
+      return {
+        ...current,
+        tasks,
+        work,
+        counts: countTaskStatuses(tasks),
+      };
+    });
+  }
+
+  async function reloadPlaylistTracks(session = authRef.current, options: { selectFirstWhenEmpty?: boolean } = {}) {
+    const playlist = workspaceRef.current.playlist;
+    if (!session?.userId || !playlist) return [];
+    const playlistTracks = await api<PlaylistTrack[]>(`/api/playlists/${playlist.id}/tracks?userId=${session.userId}`, {}, session);
+    setWorkspace((current) => ({ ...current, playlistTracks }));
+    setPlaylistPage((current) => Math.min(current, getPlaylistPageCount(playlistTracks.length)));
+
+    if (options.selectFirstWhenEmpty && !workspaceRef.current.currentTrack && playlistTracks[0]) {
+      await selectTrack(playlistTracks[0]);
+    }
+    return playlistTracks;
+  }
+
   async function createTask(title: string) {
     if (!auth?.userId || !title.trim()) {
       setNotice({ kind: "error", message: "할 일 이름을 적어줘냥." });
@@ -1356,7 +1400,7 @@ export default function App() {
         method: "POST",
         body: JSON.stringify({ title: title.trim(), description: "", taskDate: todayIso() }),
       }, auth);
-      await refreshWorkspace(auth);
+      await reloadTasks(auth);
       setNotice({ kind: "notice", message: "새 할 일을 발자국장에 넣었다냥." });
     } catch (error) {
       setNotice({ kind: "error", message: (error as Error).message });
@@ -1370,7 +1414,7 @@ export default function App() {
         method: "PATCH",
         body: JSON.stringify({ status }),
       }, auth);
-      await refreshWorkspace(auth);
+      await reloadTasks(auth);
       setNotice({ kind: "notice", message: `작업 상태를 ${statusLabel(status)}로 옮겼다냥.` });
     } catch (error) {
       setNotice({ kind: "error", message: (error as Error).message });
@@ -1381,7 +1425,7 @@ export default function App() {
     if (!auth?.userId || !workspace.work) return;
     try {
       await api<void>(`/api/tasks/${workspace.work.id}?userId=${auth.userId}`, { method: "DELETE" }, auth);
-      await refreshWorkspace(auth);
+      await reloadTasks(auth);
       setNotice({ kind: "notice", message: "할 일을 살짝 치웠다냥." });
     } catch (error) {
       setNotice({ kind: "error", message: (error as Error).message });
@@ -1417,13 +1461,17 @@ export default function App() {
   }
 
   async function registerLink(url: string) {
-    if (!auth?.userId || !workspace.playlist) return;
+    const currentWorkspace = workspaceRef.current;
+    if (!auth?.userId || !currentWorkspace.playlist) {
+      setNotice({ kind: "error", message: "BGM 바구니가 아직 준비 중이다냥. 잠깐 뒤 다시 눌러줘냥." });
+      return false;
+    }
     const sourceUrl = url.trim();
     const sourceId = extractYoutubeId(sourceUrl);
     const playlistId = extractYoutubePlaylistId(sourceUrl);
     if (!sourceUrl || (!sourceId && !playlistId)) {
       setNotice({ kind: "error", message: "YouTube 영상이나 플레이리스트 링크를 넣어줘냥." });
-      return;
+      return false;
     }
     try {
       setNotice({ kind: "notice", message: "YouTube 링크를 작업 바구니에 담는 중이냥..." });
@@ -1443,30 +1491,48 @@ export default function App() {
         }
         const count = Math.min(Math.max(Number(answer) || 0, 1), preview.tracks.length, 50);
         const drafts = preview.tracks.slice(0, count);
+        let firstAddedTrackId: number | null = null;
         for (const draft of drafts) {
           const track = await findOrCreateTrackDraft(draft);
-          await api<void>(`/api/playlists/${workspace.playlist.id}/tracks/${track.id}?userId=${auth.userId}`, { method: "POST" }, auth).catch((error) => {
+          firstAddedTrackId ??= track.id;
+          await api<void>(`/api/playlists/${currentWorkspace.playlist.id}/tracks/${track.id}?userId=${auth.userId}`, { method: "POST" }, auth).catch((error) => {
             if (!String((error as Error).message).includes("이미")) throw error;
           });
+        }
+        const playlistTracks = await reloadPlaylistTracks(auth);
+        if (!workspaceRef.current.currentTrack && firstAddedTrackId) {
+          const firstAddedPlaylistTrack = playlistTracks.find((item) => item.trackId === firstAddedTrackId) || playlistTracks[0];
+          if (firstAddedPlaylistTrack) {
+            await selectTrack(firstAddedPlaylistTrack);
+          }
         }
         setNotice({ kind: "notice", message: `${drafts.length}곡을 BGM 바구니에 넣었다냥.` });
       } else {
         const track = await findOrCreateTrack(sourceUrl, sourceId);
-        await api<void>(`/api/playlists/${workspace.playlist.id}/tracks/${track.id}?userId=${auth.userId}`, { method: "POST" }, auth).catch((error) => {
+        await api<void>(`/api/playlists/${currentWorkspace.playlist.id}/tracks/${track.id}?userId=${auth.userId}`, { method: "POST" }, auth).catch((error) => {
           if (!String((error as Error).message).includes("이미")) throw error;
         });
+        const playlistTracks = await reloadPlaylistTracks(auth);
+        if (!workspaceRef.current.currentTrack) {
+          const addedPlaylistTrack = playlistTracks.find((item) => item.trackId === track.id) || playlistTracks[0];
+          if (addedPlaylistTrack) {
+            await selectTrack(addedPlaylistTrack);
+          }
+        }
         setNotice({ kind: "notice", message: "곡을 BGM 바구니에 넣었다냥." });
       }
-      await refreshWorkspace(auth);
+      return true;
     } catch (error) {
       setNotice({ kind: "error", message: (error as Error).message });
+      return false;
     }
   }
 
   async function selectTrack(playlistTrack: PlaylistTrack) {
-    if (!auth?.userId || !workspace.work) return;
+    const currentWorkspace = workspaceRef.current;
+    if (!auth?.userId || !currentWorkspace.work) return;
     try {
-      const work = await api<CreatorTask>(`/api/tasks/${workspace.work.id}/current-playlist-track/${playlistTrack.playlistTrackId}?userId=${auth.userId}`, { method: "PATCH" }, auth);
+      const work = await api<CreatorTask>(`/api/tasks/${currentWorkspace.work.id}/current-playlist-track/${playlistTrack.playlistTrackId}?userId=${auth.userId}`, { method: "PATCH" }, auth);
       const detail = await api<Track>(`/api/tracks/${playlistTrack.trackId}`, {}, auth);
       setPlaybackPosition(0);
       setTrackDuration(detail.durationSeconds || 0);
@@ -1487,11 +1553,17 @@ export default function App() {
     const removingCurrent = workspace.currentTrack?.playlistTrackId === playlistTrack.playlistTrackId;
     try {
       await api<void>(`/api/playlists/${workspace.playlist.id}/tracks/${playlistTrack.trackId}?userId=${auth.userId}`, { method: "DELETE" }, auth);
-      await refreshWorkspace(auth);
+      const playlistTracks = await reloadPlaylistTracks(auth);
       if (removingCurrent) {
-        setPlaybackPosition(0);
-        setTrackDuration(0);
-        setIsPlaying(false);
+        const replacement = playlistTracks[0] || null;
+        if (replacement) {
+          await selectTrack(replacement);
+        } else {
+          setWorkspace((current) => ({ ...current, currentTrack: null }));
+          setPlaybackPosition(0);
+          setTrackDuration(0);
+          setIsPlaying(false);
+        }
       }
       setNotice({ kind: "notice", message: "BGM 바구니에서 곡을 뺐다냥." });
     } catch (error) {
@@ -1666,9 +1738,10 @@ export default function App() {
   const visibleNotice = loading ? { kind: "notice" as const, message: "작업실 불러오는 중이냥..." } : notice;
 
   if (!auth) {
+    const showAuthNotice = visibleNotice.kind === "error" || busy;
     return (
       <WidgetShell rightAction="exit" onExit={exitApp}>
-        <p className={`app-status ${visibleNotice.kind === "error" ? "error" : ""}`} id="app-status">{visibleNotice.message}</p>
+        {showAuthNotice && <p className={`app-status ${visibleNotice.kind === "error" ? "error" : ""}`} id="app-status">{visibleNotice.message}</p>}
         <AuthScreen busy={busy} onSubmit={handleAuth} />
       </WidgetShell>
     );
@@ -1747,6 +1820,7 @@ export default function App() {
           duration={trackDuration}
           volume={volume}
           youtubeVisible={youtubeVisible}
+          canRegisterLinks={Boolean(workspace.playlist) && !loading}
           onTogglePlay={() => {
             if (!workspace.currentTrack) return;
             setIsPlaying((value) => !value);

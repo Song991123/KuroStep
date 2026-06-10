@@ -71,6 +71,11 @@
 - GitHub Pages 배포를 정적 `src` 업로드에서 `npm run build:react` 산출물(`dist-react`) 업로드로 전환
 - 로컬 검증 완료: `view=main`은 BGM 턴테이블/가사 창만 렌더, `view=paw`는 작업 발자국만 렌더
 - 로컬 shell 검증 완료: `shell.html?view=main&content=로컬 React URL`에서 로그인 후 shell 설정/종료 버튼 노출 확인
+- 단일 YouTube 영상 링크 추가 검증 완료: 트랙 생성, 플레이리스트 추가, 현재 트랙 지정, 가사 fetch 요청 확인
+- YouTube 플레이리스트 링크 추가 검증 완료: preview API 호출, 사용자가 입력한 수량만큼 트랙 생성/추가 확인
+- 현재 트랙이 있는 상태에서 새 영상 링크 추가 검증 완료: 플레이리스트에는 곡이 추가되고 NOW PLAYING 현재 곡은 유지
+- React dev 환경의 중복 생성 원인이던 `React.StrictMode` 제거
+- Tauri dev 검증 완료: 임시 content URL로 로컬 React 화면을 shell 안에 표시 확인
 
 ## 아직 React로 옮기는 중인 범위
 - 실제 Tauri 앱에서 YouTube IFrame 재생 검증
