@@ -222,6 +222,16 @@ async function playCurrentAudio() {
   appState.notice = "YouTube BGM 재생 중이냥.";
 }
 
+async function confirmYoutubePlaybackStarted() {
+  if (!youtubePlayer?.getPlayerState || !window.YT?.PlayerState) {
+    return true;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  const state = youtubePlayer.getPlayerState();
+  return state === window.YT.PlayerState.PLAYING || state === window.YT.PlayerState.BUFFERING;
+}
+
 function pauseCurrentAudio() {
   youtubePlayer?.pauseVideo?.();
 }
@@ -1169,14 +1179,21 @@ async function deleteMemo() {
 }
 
 async function togglePlayback() {
-  appState.isPlaying = !appState.isPlaying;
   appState.error = "";
 
   try {
-    if (appState.isPlaying) {
+    if (!appState.isPlaying) {
+      appState.isPlaying = true;
+      updatePlaybackDom();
       await playCurrentAudio();
+      const started = await confirmYoutubePlaybackStarted();
+      if (!started) {
+        appState.isPlaying = false;
+        appState.notice = "YouTube가 바로 재생을 막았어냥. 영상 펼치기로 한 번 깨워줘냥.";
+      }
     } else {
       pauseCurrentAudio();
+      appState.isPlaying = false;
       appState.notice = "잠깐 멈춰둘게냥";
     }
   } catch (error) {
