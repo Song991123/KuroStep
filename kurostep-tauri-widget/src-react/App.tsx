@@ -671,18 +671,26 @@ type WidgetShellProps = {
 };
 
 function WidgetShell({ title, notice = "", error = "", children, onSettings, onExit, compact = false }: WidgetShellProps) {
+  const shellClassName = [
+    "widget",
+    compact ? "compact" : "",
+    embedded ? "embedded" : "",
+  ].filter(Boolean).join(" ");
+
   return (
-    <main className={compact ? "widget compact" : "widget"}>
-      <header className="window-bar" data-tauri-drag-region>
-        <button className="window-button" type="button" onClick={() => window.__TAURI__?.window?.getCurrentWindow?.()?.minimize?.()} aria-label="최소화">
-          <Minus size={14} />
-        </button>
-        <strong data-tauri-drag-region>{title}</strong>
-        <span className="window-actions">
-          {onSettings && <button className="ghost-button" onClick={onSettings}><Settings size={13} />설정</button>}
-          {onExit && <button className="ghost-button dark" onClick={onExit}>종료</button>}
-        </span>
-      </header>
+    <main className={shellClassName}>
+      {!embedded && (
+        <header className="window-bar" data-tauri-drag-region>
+          <button className="window-button" type="button" onClick={() => window.__TAURI__?.window?.getCurrentWindow?.()?.minimize?.()} aria-label="최소화">
+            <Minus size={14} />
+          </button>
+          <strong data-tauri-drag-region>{title}</strong>
+          <span className="window-actions">
+            {onSettings && <button className="ghost-button" onClick={onSettings}><Settings size={13} />설정</button>}
+            {onExit && <button className="ghost-button dark" onClick={onExit}>종료</button>}
+          </span>
+        </header>
+      )}
       <section className="widget-body">
         {(error || notice) && <p className={error ? "status error" : "status"}>{error || notice}</p>}
         {children}

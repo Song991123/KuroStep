@@ -52,8 +52,20 @@ button {
   box-shadow: 0 10px 30px rgb(0 0 0 / 15%);
 }
 
+.widget.embedded {
+  width: 100vw;
+  height: 100vh;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .widget.compact {
   height: min(520px, 100vh);
+}
+
+.widget.compact.embedded {
+  height: 100vh;
 }
 
 .window-bar {
@@ -148,6 +160,10 @@ button {
   overflow: auto;
   padding: 10px 12px 18px;
   scrollbar-width: none;
+}
+
+.widget.embedded .widget-body {
+  height: 100%;
 }
 
 .status {

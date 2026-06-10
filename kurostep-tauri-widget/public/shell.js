@@ -1,5 +1,6 @@
 const DEPLOYED_BASE_URL = "https://song991123.github.io/KuroStep/";
 const DEPLOYED_ORIGIN = new URL(DEPLOYED_BASE_URL).origin;
+const CONTENT_VERSION = "react-tsx-2";
 const params = new URLSearchParams(window.location.search);
 const view = params.get("view") || "main";
 const shellWindow = document.querySelector("#shell-window");
@@ -26,7 +27,7 @@ function contentUrl() {
   }
   url.searchParams.set("embedded", "1");
   url.searchParams.set("shell", "tauri");
-  url.searchParams.set("v", "react-tsx-1");
+  url.searchParams.set("v", CONTENT_VERSION);
   return url.toString();
 }
 
