@@ -224,11 +224,8 @@ cd KuroStep
 ## 문서
 
 - [최종 보고서](docs/report/final-report.md)
-- [프로젝트 기획서](docs/design/project-plan.md)
-- [데이터 딕셔너리](docs/design/data-dictionary.md)
-- [클래스 다이어그램](docs/design/class-diagram.md)
-- [정규화 검토](docs/design/normalization-review.md)
-- [진행 WBS](docs/project-management/progress-todo.md)
+
+학습 메모, WBS, 러프 기획 문서는 `_local-notes/project-archive/`로 분리해 공개 포트폴리오 트리에서 제외했습니다.
 
 ## 회고
 
