@@ -4,13 +4,7 @@ on:
   push:
     branches: ["main", "master"]
     paths:
-      - "kurostep-tauri-widget/src-react/**"
-      - "kurostep-tauri-widget/public/**"
-      - "kurostep-tauri-widget/index.html"
-      - "kurostep-tauri-widget/package.json"
-      - "kurostep-tauri-widget/package-lock.json"
-      - "kurostep-tauri-widget/tsconfig.json"
-      - "kurostep-tauri-widget/vite.config.js"
+      - "kurostep-tauri-widget/src/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -38,25 +32,10 @@ jobs:
         with:
           enablement: true
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: kurostep-tauri-widget/package-lock.json
-
-      - name: Install frontend dependencies
-        working-directory: kurostep-tauri-widget
-        run: npm ci
-
-      - name: Build React widget
-        working-directory: kurostep-tauri-widget
-        run: npm run build:web
-
-      - name: Upload React widget
+      - name: Upload static widget
         uses: actions/upload-pages-artifact@v3
         with:
-          path: kurostep-tauri-widget/dist
+          path: kurostep-tauri-widget/src
 
       - name: Deploy to GitHub Pages
         id: deployment

@@ -909,8 +909,7 @@ async function registerTrackFromInputs() {
 
   if (!sourceUrl) {
     appState.error = "YouTube 링크를 먼저 넣어줘냥.";
-    refreshLinkWidgetDom();
-    updatePlaybackDom();
+    render();
     return;
   }
 
@@ -918,8 +917,7 @@ async function registerTrackFromInputs() {
   const playlistId = extractYoutubePlaylistId(sourceUrl);
   if (!sourceId && !playlistId) {
     appState.error = "이 링크에서는 YouTube 영상이나 플레이리스트 ID를 못 찾았다냥.";
-    refreshLinkWidgetDom();
-    updatePlaybackDom();
+    render();
     return;
   }
 
@@ -1311,8 +1309,7 @@ async function changeStatus(status) {
   } catch (error) {
     appState.error = error.message;
   } finally {
-    refreshTaskPawWidgetDom();
-    updatePlaybackDom();
+    render();
   }
 }
 
@@ -1327,38 +1324,6 @@ async function refreshTasksOnly() {
   }
 }
 
-async function refreshWorkspaceWidgetsOnly() {
-  if (!appState.auth?.userId) {
-    return;
-  }
-
-  const currentPlaylistTrackId = appState.currentTrack?.playlistTrackId;
-  await refreshTasksOnly();
-
-  if (appState.playlist?.id) {
-    appState.playlistTracks = await api(`/api/playlists/${appState.playlist.id}/tracks?userId=${appState.auth.userId}`);
-    appState.playlistPage = Math.min(appState.playlistPage, getPlaylistPageCount(appState.playlistTracks.length));
-  }
-
-  if (currentPlaylistTrackId) {
-    const stillCurrent = appState.playlistTracks.find((track) => track.playlistTrackId === currentPlaylistTrackId);
-    if (stillCurrent && appState.currentTrack) {
-      appState.currentTrack = {
-        ...appState.currentTrack,
-        ...stillCurrent,
-        id: stillCurrent.trackId || appState.currentTrack.id,
-        playlistTrackId: stillCurrent.playlistTrackId,
-      };
-    }
-  }
-
-  refreshTaskPawWidgetDom();
-  refreshPlaylistWidgetDom();
-  updateGlobalControlsDom();
-  updatePlaybackDom();
-  updateLyricsPreviewDom();
-}
-
 function selectTask(taskId) {
   const task = appState.tasks.find((item) => item.id === Number(taskId));
   if (!task || task.id === appState.work?.id) {
@@ -1369,8 +1334,7 @@ function selectTask(taskId) {
   appState.taskFormOpen = false;
   appState.taskEditing = false;
   appState.notice = `${task.title} 발자국을 펼쳤다냥.`;
-  refreshTaskPawWidgetDom();
-  updatePlaybackDom();
+  render();
 }
 
 async function saveTaskFromForm(event) {
@@ -1382,8 +1346,7 @@ async function saveTaskFromForm(event) {
 
   if (!title || !taskDate) {
     appState.error = "할 일 이름과 날짜를 적어줘냥.";
-    refreshTaskPawWidgetDom();
-    updatePlaybackDom();
+    render();
     return;
   }
 
@@ -1409,8 +1372,7 @@ async function saveTaskFromForm(event) {
   } catch (error) {
     appState.error = error.message;
   } finally {
-    refreshTaskPawWidgetDom();
-    updatePlaybackDom();
+    render();
   }
 }
 
@@ -1430,8 +1392,7 @@ async function deleteCurrentTask() {
   } catch (error) {
     appState.error = error.message;
   } finally {
-    refreshTaskPawWidgetDom();
-    updatePlaybackDom();
+    render();
   }
 }
 
@@ -1461,8 +1422,7 @@ async function saveMemo() {
   } catch (error) {
     appState.error = error.message;
   } finally {
-    updateLyricMemoDom();
-    updatePlaybackDom();
+    render();
   }
 }
 
@@ -1487,9 +1447,7 @@ async function deleteMemo() {
   } catch (error) {
     appState.error = error.message;
   } finally {
-    updateLyricMemoDom();
-    refreshSavedLyricPiecesDom();
-    updatePlaybackDom();
+    render();
   }
 }
 
@@ -1700,7 +1658,7 @@ function seekPlaybackByPointer(event, translateLine = false) {
   const duration = appState.currentTrack?.durationSeconds || 0;
   seekPlaybackToSeconds(duration * Math.min(Math.max(ratio, 0), 1), translateLine).catch((error) => {
     appState.error = error.message;
-    updatePlaybackDom();
+    render();
   });
 }
 
@@ -1788,8 +1746,7 @@ async function removePlaylistTrack(trackId) {
     updatePlaybackDom();
   } catch (error) {
     appState.error = error.message;
-    refreshPlaylistWidgetDom();
-    updatePlaybackDom();
+    render();
   }
 }
 
@@ -1861,8 +1818,7 @@ async function reorderPlaylistTracks(orderedIds) {
   } catch (error) {
     appState.error = error.message;
   } finally {
-    refreshPlaylistWidgetDom();
-    updatePlaybackDom();
+    render();
   }
 }
 
@@ -2122,17 +2078,6 @@ function refreshPlaylistWidgetDom() {
   }
   current.outerHTML = playlistWidget(appState.playlistTracks);
   bindPlaylistInteractions();
-}
-
-function refreshTaskPawWidgetDom() {
-  const current = document.querySelector(".task-paw-widget");
-  if (!current) {
-    return;
-  }
-  current.outerHTML = taskPawWidget();
-  bindTaskPawInteractions();
-  updateLyricMemoDom();
-  refreshSavedLyricPiecesDom();
 }
 
 function bindLyricsPanelToggle() {
@@ -2758,29 +2703,20 @@ function bindActions() {
     updateGlobalControlsDom();
     updateLyricsPreviewDom();
   });
-  bindTaskPawInteractions();
-  bindLyricsPanelToggle();
-  bindPlayerInteractions();
-}
-
-function bindTaskPawInteractions() {
   document.querySelector("#open-task-create")?.addEventListener("click", () => {
     appState.taskFormOpen = true;
     appState.taskEditing = false;
-    refreshTaskPawWidgetDom();
-    updatePlaybackDom();
+    render();
   });
   document.querySelector("#open-task-edit")?.addEventListener("click", () => {
     appState.taskFormOpen = true;
     appState.taskEditing = true;
-    refreshTaskPawWidgetDom();
-    updatePlaybackDom();
+    render();
   });
   document.querySelector("#cancel-task-form")?.addEventListener("click", () => {
     appState.taskFormOpen = false;
     appState.taskEditing = false;
-    refreshTaskPawWidgetDom();
-    updatePlaybackDom();
+    render();
   });
   document.querySelector("#task-form")?.addEventListener("submit", saveTaskFromForm);
   document.querySelector("#delete-task")?.addEventListener("click", deleteCurrentTask);
@@ -2790,24 +2726,6 @@ function bindTaskPawInteractions() {
   document.querySelectorAll("[data-status]").forEach((button) => {
     button.addEventListener("click", () => changeStatus(button.dataset.status));
   });
-  document.querySelector("#save-memo")?.addEventListener("click", saveMemo);
-  document.querySelector("#delete-memo")?.addEventListener("click", deleteMemo);
-  document.querySelector("#save-lyric-piece")?.addEventListener("click", saveCurrentLyricPiece);
-  document.querySelector("#auto-translate")?.addEventListener("click", async () => {
-    if (!appState.currentTrack?.id) {
-      appState.notice = "먼저 곡을 골라줘냥.";
-      updatePlaybackDom();
-      return;
-    }
-    await ensureLyricAndTranslation(appState.auth.userId, appState.currentTrack.id);
-    updateLyricMemoDom();
-    updateLyricsPreviewDom();
-    updatePlaybackDom();
-  });
-  bindSavedLyricPieceActions();
-}
-
-function bindPlayerInteractions() {
   document.querySelector("#youtube-video-toggle")?.addEventListener("click", async () => {
     appState.youtubeVideoVisible = !appState.youtubeVideoVisible;
     appState.notice = appState.youtubeVideoVisible
@@ -2820,9 +2738,10 @@ function bindPlayerInteractions() {
       updatePlaybackDom();
     } catch (error) {
       appState.error = error.message;
-      updatePlaybackDom();
+      render();
     }
   });
+  bindLyricsPanelToggle();
   document.querySelector("#play-toggle")?.addEventListener("click", togglePlayback);
   document.querySelector("#skip-back")?.addEventListener("click", () => skipPlayback(-10));
   document.querySelector("#skip-forward")?.addEventListener("click", () => skipPlayback(10));
@@ -2837,16 +2756,22 @@ function bindPlayerInteractions() {
   document.querySelector("#shuffle-playlist")?.addEventListener("click", shufflePlaylistTracks);
   document.querySelector("#playlist-prev-page")?.addEventListener("click", () => {
     appState.playlistPage = Math.max(appState.playlistPage - 1, 1);
-    refreshPlaylistWidgetDom();
-    updatePlaybackDom();
+    render();
   });
   document.querySelector("#playlist-next-page")?.addEventListener("click", () => {
     appState.playlistPage = Math.min(appState.playlistPage + 1, getPlaylistPageCount(appState.playlistTracks.length));
-    refreshPlaylistWidgetDom();
-    updatePlaybackDom();
+    render();
   });
+  document.querySelector("#save-memo")?.addEventListener("click", saveMemo);
+  document.querySelector("#delete-memo")?.addEventListener("click", deleteMemo);
+  document.querySelector("#save-lyric-piece")?.addEventListener("click", saveCurrentLyricPiece);
+  bindSavedLyricPieceActions();
   document.querySelector("#register-track-link")?.addEventListener("click", registerTrackFromInputs);
   bindPlaylistInteractions();
+  document.querySelector("#auto-translate")?.addEventListener("click", async () => {
+    await ensureLyricAndTranslation(appState.auth.userId, appState.currentTrack.id);
+    render();
+  });
 }
 
 function bindSavedLyricPieceActions() {
@@ -3095,12 +3020,7 @@ async function setPawWidgetVisible(visible) {
     appState.notice = visible ? "작업 발자국을 펼쳤다냥." : "작업 발자국을 접었다냥.";
   }
 
-  if (!isTauriApp && !isEmbeddedContent) {
-    render();
-    return;
-  }
-  updateGlobalControlsDom();
-  updatePlaybackDom();
+  render();
 }
 
 async function syncPawWidgetWindowIfNeeded() {
@@ -3142,10 +3062,7 @@ window.addEventListener("storage", (event) => {
   }
 
   if (event.key === "kurostep.workspaceChangedAt" && appState.auth) {
-    refreshWorkspaceWidgetsOnly().catch((error) => {
-      appState.error = `작업 정보를 새로 맞추지 못했다냥: ${error.message}`;
-      updatePlaybackDom();
-    });
+    loadDashboard();
     return;
   }
 
