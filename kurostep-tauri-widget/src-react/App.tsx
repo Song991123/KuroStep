@@ -539,6 +539,7 @@ function MusicPlayerWidget({
   onRegisterLink,
   onRemoveTrack,
   onShuffle,
+  onReorderTracks,
   onPage,
 }: {
   track: Track | null;
@@ -565,11 +566,13 @@ function MusicPlayerWidget({
   onRegisterLink: (url: string) => void;
   onRemoveTrack: (playlistTrack: PlaylistTrack) => void;
   onShuffle: () => void;
+  onReorderTracks: (playlistTrackIds: number[]) => void;
   onPage: (page: number) => void;
 }) {
   const [url, setUrl] = useState("");
   const [playerReady, setPlayerReady] = useState(false);
   const [playerError, setPlayerError] = useState("");
+  const [draggingPlaylistTrackId, setDraggingPlaylistTrackId] = useState<number | null>(null);
   const playerRef = useRef<YouTubePlayer | null>(null);
   const videoIdRef = useRef("");
   const timerRef = useRef<number | null>(null);
@@ -718,6 +721,26 @@ function MusicPlayerWidget({
     onSkip(seconds);
   }
 
+  function dropTrack(targetPlaylistTrackId: number) {
+    if (!draggingPlaylistTrackId || draggingPlaylistTrackId === targetPlaylistTrackId) {
+      setDraggingPlaylistTrackId(null);
+      return;
+    }
+
+    const orderedIds = tracks.map((item) => item.playlistTrackId);
+    const fromIndex = orderedIds.indexOf(draggingPlaylistTrackId);
+    const toIndex = orderedIds.indexOf(targetPlaylistTrackId);
+    if (fromIndex < 0 || toIndex < 0) {
+      setDraggingPlaylistTrackId(null);
+      return;
+    }
+
+    const [moved] = orderedIds.splice(fromIndex, 1);
+    orderedIds.splice(toIndex, 0, moved);
+    onReorderTracks(orderedIds);
+    setDraggingPlaylistTrackId(null);
+  }
+
   return (
     <section className="widget-group music-player-widget" aria-label="BGM 턴테이블">
       <div className="widget-group-head">
@@ -797,7 +820,15 @@ function MusicPlayerWidget({
         <p className="playlist-name">{playlist?.name || "오늘의 작업 BGM"} · {tracks.length}곡 · {page}/{pageCount}쪽</p>
         <ol className="playlist-list" id="playlist-title">
           {visibleTracks.map((playlistTrack) => (
-            <li className={`playlist-item${playlistTrack.playlistTrackId === track?.playlistTrackId ? " playing" : ""}`} draggable="true" key={playlistTrack.playlistTrackId}>
+            <li
+              className={`playlist-item${playlistTrack.playlistTrackId === track?.playlistTrackId ? " playing" : ""}${playlistTrack.playlistTrackId === draggingPlaylistTrackId ? " dragging" : ""}`}
+              draggable="true"
+              key={playlistTrack.playlistTrackId}
+              onDragStart={() => setDraggingPlaylistTrackId(playlistTrack.playlistTrackId)}
+              onDragEnd={() => setDraggingPlaylistTrackId(null)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => dropTrack(playlistTrack.playlistTrackId)}
+            >
               <button className="drag-handle" type="button" title="끌어서 순서 바꾸기" aria-label="끌어서 순서 바꾸기"><Icon name="grip" /></button>
               <span
                 className="playlist-track"
@@ -1491,6 +1522,25 @@ export default function App() {
     }
   }
 
+  async function reorderPlaylist(playlistTrackIds: number[]) {
+    if (!auth?.userId || !workspace.playlist) return;
+    if (playlistTrackIds.length !== workspace.playlistTracks.length) {
+      setNotice({ kind: "error", message: "플레이리스트 순서를 다시 확인해줘냥." });
+      return;
+    }
+
+    try {
+      const tracks = await api<PlaylistTrack[]>(`/api/playlists/${workspace.playlist.id}/tracks/reorder?userId=${auth.userId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ playlistTrackIds }),
+      }, auth);
+      setWorkspace((current) => ({ ...current, playlistTracks: tracks }));
+      setNotice({ kind: "notice", message: "BGM 순서를 살금 바꿨다냥." });
+    } catch (error) {
+      setNotice({ kind: "error", message: (error as Error).message });
+    }
+  }
+
   async function saveMemo(translatedText: string, memoText: string) {
     if (!auth?.userId || !selectedLine?.id) {
       setNotice({ kind: "notice", message: "아직 저장할 가사 줄이 없다냥." });
@@ -1718,6 +1768,7 @@ export default function App() {
           onRegisterLink={registerLink}
           onRemoveTrack={removeTrack}
           onShuffle={shufflePlaylist}
+          onReorderTracks={reorderPlaylist}
           onPage={setPlaylistPage}
         />
         <LyricsWidget
