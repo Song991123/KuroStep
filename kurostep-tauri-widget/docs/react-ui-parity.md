@@ -66,8 +66,10 @@
 - 설정 화면: 로그인 계정, 닉네임, 로그아웃, 앱 종료
 - shell `auth_state`, `open_settings` 메시지 연동
 - Tauri shell iframe URL을 `view=main/paw` 쿼리 기반 React 라우팅으로 전환
+- Tauri shell 메시지 검증 origin을 배포 URL 고정값이 아니라 실제 iframe content URL 기준으로 계산
 - GitHub Pages 배포를 정적 `src` 업로드에서 `npm run build:react` 산출물(`dist-react`) 업로드로 전환
 - 로컬 검증 완료: `view=main`은 BGM 턴테이블/가사 창만 렌더, `view=paw`는 작업 발자국만 렌더
+- 로컬 shell 검증 완료: `shell.html?view=main&content=로컬 React URL`에서 로그인 후 shell 설정/종료 버튼 노출 확인
 
 ## 아직 React로 옮기는 중인 범위
 - 실제 Tauri 앱에서 YouTube IFrame 재생 검증
