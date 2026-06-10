@@ -699,11 +699,26 @@ function extractYoutubePlaylistId(url) {
   }
 }
 
-async function fetchYoutubeMetadata(sourceUrl, sourceId) {
-  const fallback = {
-    title: `YouTube 작업곡 ${sourceId}`,
+function youtubeFallbackMetadata(sourceId) {
+  return {
+    title: `YouTube track ${sourceId}`,
     artist: "YouTube",
   };
+}
+
+function withTimeout(promise, timeoutMs, fallback) {
+  let timeoutId;
+  const timeout = new Promise((resolve) => {
+    timeoutId = window.setTimeout(() => resolve(fallback), timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => {
+    window.clearTimeout(timeoutId);
+  });
+}
+
+async function fetchYoutubeMetadata(sourceUrl, sourceId) {
+  const fallback = youtubeFallbackMetadata(sourceId);
 
   const endpoints = [
     `https://noembed.com/embed?url=${encodeURIComponent(sourceUrl)}`,
@@ -762,7 +777,11 @@ async function attachTrackToWorkspace(userId, track, makeCurrent = true) {
 
 async function registerSingleTrackFromUrl(userId, sourceUrl, sourceId) {
   const hadCurrentTrack = Boolean(appState.currentTrack);
-  const metadata = await fetchYoutubeMetadata(sourceUrl, sourceId);
+  const metadata = await withTimeout(
+    fetchYoutubeMetadata(sourceUrl, sourceId),
+    METADATA_TIMEOUT_MS + 800,
+    youtubeFallbackMetadata(sourceId),
+  );
   const track = await findOrCreateTrack({
     title: metadata.title,
     artist: metadata.artist,
