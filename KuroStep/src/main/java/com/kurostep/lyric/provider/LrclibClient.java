@@ -70,9 +70,14 @@ public class LrclibClient implements LyricsProviderClient {
         Set<SearchCandidate> candidates = new LinkedHashSet<>();
         String title = normalizeTitle(track.getTitle());
         String artist = normalizeArtist(track.getArtist());
+        String titleWithoutArtist = removeArtistPrefix(title, artist);
+        String rawTitleWithoutArtist = removeArtistPrefix(track.getTitle(), artist);
 
+        candidates.add(new SearchCandidate(titleWithoutArtist, artist));
         candidates.add(new SearchCandidate(title, artist));
+        candidates.add(new SearchCandidate(rawTitleWithoutArtist, artist));
         candidates.add(new SearchCandidate(track.getTitle(), artist));
+        candidates.add(new SearchCandidate(titleWithoutArtist, null));
         candidates.add(new SearchCandidate(title, null));
 
         return candidates.stream()
@@ -124,6 +129,24 @@ public class LrclibClient implements LyricsProviderClient {
                 .replaceAll("(?i)\\s*official\\s*$", "")
                 .replaceAll("\\s+", " ")
                 .trim();
+    }
+
+    private String removeArtistPrefix(String title, String artist) {
+        if (!hasText(title) || !hasText(artist)) {
+            return title;
+        }
+
+        String normalizedTitle = title.strip();
+        String normalizedArtist = artist.strip();
+        String lowerTitle = normalizedTitle.toLowerCase();
+        String lowerArtist = normalizedArtist.toLowerCase();
+        String prefix = lowerArtist + " - ";
+
+        if (lowerTitle.startsWith(prefix)) {
+            return normalizedTitle.substring(normalizedArtist.length() + 3).strip();
+        }
+
+        return normalizedTitle;
     }
 
     private Optional<LrclibRecord> fetchFirst(String uri) {

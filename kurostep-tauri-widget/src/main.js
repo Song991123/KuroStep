@@ -899,9 +899,18 @@ async function ensureLyricAndTranslation(userId, trackId) {
   let fetchResponse = null;
 
   if (!lyricSource?.lines?.length) {
-    fetchResponse = await api(`/api/tracks/${trackId}/lyrics/fetch`, { method: "POST" });
-    lyricSource = parseLyricSource(fetchResponse);
-    writeJson(cacheKey, lyricSource);
+    try {
+      fetchResponse = await api(`/api/tracks/${trackId}/lyrics/fetch`, { method: "POST" });
+      lyricSource = parseLyricSource(fetchResponse);
+      writeJson(cacheKey, lyricSource);
+    } catch (error) {
+      appState.lyric = null;
+      appState.lyricSource = null;
+      appState.selectedLine = null;
+      appState.translation = null;
+      appState.notice = `싱크 가사를 아직 못 찾았다냥: ${error.message}`;
+      return;
+    }
   }
 
   appState.lyric = fetchResponse?.lyric || (await getLatestLyric(trackId));
@@ -912,7 +921,10 @@ async function ensureLyricAndTranslation(userId, trackId) {
     appState.translation = null;
   }
 
-  await ensureSelectedLineTranslation(userId);
+  await ensureSelectedLineTranslation(userId).catch((error) => {
+    appState.translation = null;
+    appState.notice = `가사는 불러왔고, 번역 메모는 나중에 다시 시도할게냥: ${error.message}`;
+  });
 }
 
 async function ensureSelectedLineTranslation(userId) {
@@ -1405,14 +1417,44 @@ async function syncLyricsOverlay() {
   if (!appState.lyricsOverlayVisible) {
     return;
   }
+  const payload = {
+    visible: true,
+    line: appState.selectedLine?.text || "",
+    translation: appState.translation?.translatedText || "",
+  };
   const invoke = window.__TAURI__?.core?.invoke;
   if (invoke) {
-    await invoke("set_lyrics_visible", {
-      visible: true,
-      line: appState.selectedLine?.text || "",
-      translation: appState.translation?.translatedText || "",
-    });
+    try {
+      await invoke("set_lyrics_visible", payload);
+    } catch (error) {
+      appState.error = `가사 오버레이 갱신을 못 했다냥: ${error.message || error}`;
+    }
+    return;
   }
+
+  postShellMessage({
+    type: "native_command",
+    command: "set_lyrics_visible",
+    payload,
+  });
+}
+
+function hasSyncedLyricLines() {
+  const refs = appState.lyric?.lines || [];
+  return refs.some((line) => Number.isFinite(line.startTimeMs));
+}
+
+function lyricSyncStatusText() {
+  if (!appState.currentTrack) {
+    return "곡을 고르면 가사를 찾아볼게냥.";
+  }
+  if (!appState.lyricSource?.lines?.length) {
+    return "아직 불러온 가사가 없다냥.";
+  }
+  if (!hasSyncedLyricLines()) {
+    return "시간표가 없는 가사라 자동 싱크는 못 맞춘다냥.";
+  }
+  return "";
 }
 
 function updatePlaybackDom() {
@@ -1957,7 +1999,8 @@ function musicPlayerWidget() {
 
 function lyricsWidget() {
   const currentLine = appState.selectedLine?.text || "";
-  const lineText = currentLine || "아직 재생 중이 아닙니다";
+  const syncStatus = lyricSyncStatusText();
+  const lineText = currentLine || syncStatus || "아직 재생 중이 아닙니다";
   const sourceLines = appState.lyricSource?.lines || [];
   const fullLyrics = sourceLines.length
     ? sourceLines
@@ -1987,6 +2030,7 @@ function lyricsWidget() {
       </div>
       <div class="lyrics-preview ${appState.isPlaying ? "playing" : ""} ${appState.lyricsPanelExpanded ? "expanded" : ""}">
         <p>${escapeHtml(lineText)}</p>
+        ${syncStatus && currentLine ? `<small>${escapeHtml(syncStatus)}</small>` : ""}
         ${appState.lyricsPanelExpanded ? `<ol class="lyrics-full-list" id="lyrics-full-list">${fullLyrics}</ol>` : ""}
       </div>
     </section>
