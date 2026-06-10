@@ -5,6 +5,7 @@
 .idea/
 **/.idea/
 **/build/
+**/dist/
 **/.gradle/
 **/.terraform/
 **/.terraform.lock.hcl
