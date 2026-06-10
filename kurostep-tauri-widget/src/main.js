@@ -1594,6 +1594,43 @@ async function movePlaylistTrack(offset) {
   await setCurrentPlaylistTrack(nextTrack, { autoplay: appState.isPlaying });
 }
 
+async function removePlaylistTrack(trackId) {
+  if (!appState.playlist?.id || !trackId) {
+    return;
+  }
+
+  const removingCurrent = appState.currentTrack?.id === Number(trackId);
+  const currentIndex = appState.playlistTracks.findIndex((track) => track.trackId === Number(trackId));
+  try {
+    await api(`/api/playlists/${appState.playlist.id}/tracks/${trackId}?userId=${appState.auth.userId}`, { method: "DELETE" });
+    appState.playlistTracks = await api(`/api/playlists/${appState.playlist.id}/tracks?userId=${appState.auth.userId}`);
+    appState.notice = "BGM 바구니에서 곡을 뺐다냥.";
+
+    if (removingCurrent) {
+      const nextTrack = appState.playlistTracks[Math.min(Math.max(currentIndex, 0), appState.playlistTracks.length - 1)];
+      if (nextTrack) {
+        await setCurrentPlaylistTrack(nextTrack, { autoplay: appState.isPlaying });
+      } else {
+        pauseCurrentAudio();
+        appState.currentTrack = null;
+        appState.isPlaying = false;
+        appState.lyric = null;
+        appState.lyricSource = null;
+        appState.selectedLine = null;
+        appState.translation = null;
+        render();
+      }
+      return;
+    }
+
+    refreshPlaylistWidgetDom();
+    updatePlaybackDom();
+  } catch (error) {
+    appState.error = error.message;
+    render();
+  }
+}
+
 async function setCurrentPlaylistTrack(playlistTrack, options = {}) {
   const autoplay = options.autoplay ?? appState.isPlaying;
   const userId = appState.auth.userId;
@@ -2296,6 +2333,7 @@ function playlistWidget(tracks) {
             <small>${escapeHtml(track.artist || "Unknown")} · #${escapeHtml(track.trackId)}</small>
           </span>
           <span class="playlist-duration">${escapeHtml(formatDuration(duration))}</span>
+          <button class="mini-icon-button danger playlist-remove-button" data-remove-track-id="${escapeHtml(track.trackId)}" type="button" title="플레이리스트에서 곡 제거" aria-label="플레이리스트에서 곡 제거">${iconSvg("trash")}</button>
         </li>
       `;
     })
@@ -2637,7 +2675,7 @@ function bindPlaylistInteractions() {
     const playlistTrack = appState.playlistTracks.find((track) => track.playlistTrackId === playlistTrackId);
 
     item.addEventListener("click", (event) => {
-      if (event.target.closest(".drag-handle")) {
+      if (event.target.closest(".drag-handle") || event.target.closest("[data-remove-track-id]")) {
         return;
       }
       if (playlistTrack) {
@@ -2685,6 +2723,13 @@ function bindPlaylistInteractions() {
       orderedIds.splice(fromIndex, 1);
       orderedIds.splice(toIndex, 0, fromId);
       reorderPlaylistTracks(orderedIds);
+    });
+  });
+
+  document.querySelectorAll("[data-remove-track-id]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      removePlaylistTrack(Number(button.dataset.removeTrackId));
     });
   });
 }
