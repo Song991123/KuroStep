@@ -77,24 +77,6 @@ let progressScrubbing = false;
 let draggedPlaylistTrackId = null;
 let syncedPawWindowVisible = null;
 
-function readUserAddedTrackIds() {
-  const value = readJson("kurostep.userAddedTrackIds");
-  return Array.isArray(value) ? value : [];
-}
-
-function rememberUserAddedTrack(track) {
-  const ids = new Set(readUserAddedTrackIds());
-  if (track?.id) {
-    ids.add(String(track.id));
-  }
-  writeJson("kurostep.userAddedTrackIds", [...ids]);
-}
-
-function isUserAddedPlaylistTrack(playlistTrack) {
-  const ids = readUserAddedTrackIds();
-  return ids.includes(String(playlistTrack.trackId));
-}
-
 function resetPlaybackPosition() {
   appState.playbackPositionSeconds = 0;
   appState.isPlaying = false;
@@ -556,7 +538,7 @@ async function ensureWorkspaceData() {
   }
   appState.playlist = playlists[0];
   const playlistTracks = await api(`/api/playlists/${appState.playlist.id}/tracks?userId=${userId}`);
-  appState.playlistTracks = playlistTracks.filter(isUserAddedPlaylistTrack);
+  appState.playlistTracks = playlistTracks;
   appState.playlistPage = Math.min(appState.playlistPage, getPlaylistPageCount(appState.playlistTracks.length));
 
   if (appState.work.playlistId !== appState.playlist.id) {
@@ -694,11 +676,10 @@ async function fetchYoutubeMetadata(sourceUrl, sourceId) {
 }
 
 async function attachTrackToWorkspace(userId, track, makeCurrent = true) {
-  rememberUserAddedTrack(track);
   await ensurePlaylistTrack(userId, appState.playlist.id, track.id);
 
   const playlistTracks = await api(`/api/playlists/${appState.playlist.id}/tracks?userId=${userId}`);
-  appState.playlistTracks = playlistTracks.filter(isUserAddedPlaylistTrack);
+  appState.playlistTracks = playlistTracks;
 
   const playlistTrack =
     appState.playlistTracks.find((item) => item.trackId === track.id) || appState.playlistTracks.at(-1);
