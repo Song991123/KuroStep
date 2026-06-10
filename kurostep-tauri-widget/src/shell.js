@@ -23,7 +23,7 @@ function contentUrl() {
   const url = new URL(view === "paw" ? "paw.html" : "", baseUrl);
   url.searchParams.set("embedded", "1");
   url.searchParams.set("shell", "tauri");
-  url.searchParams.set("v", "20260610-10");
+  url.searchParams.set("v", "20260610-11");
   return url.toString();
 }
 

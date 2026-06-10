@@ -16,6 +16,7 @@ const API_BASE_URL = window.localStorage.getItem("kurostep.apiBaseUrl") || DEFAU
 const YOUTUBE_APP_ORIGIN = window.location.origin;
 const PLAYLIST_PAGE_SIZE = 10;
 const API_TIMEOUT_MS = 12000;
+const METADATA_TIMEOUT_MS = 3500;
 const PLAYBACK_TICK_MS = 250;
 const LYRIC_SYNC_LOOKAHEAD_MS = 350;
 
@@ -704,8 +705,10 @@ async function fetchYoutubeMetadata(sourceUrl, sourceId) {
   ];
 
   for (const endpoint of endpoints) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), METADATA_TIMEOUT_MS);
     try {
-      const response = await fetch(endpoint);
+      const response = await fetch(endpoint, { signal: controller.signal });
       if (!response.ok) {
         continue;
       }
@@ -716,6 +719,8 @@ async function fetchYoutubeMetadata(sourceUrl, sourceId) {
       };
     } catch {
       // Browser/Tauri CORS or network failures fall through to the next source.
+    } finally {
+      window.clearTimeout(timeout);
     }
   }
 
