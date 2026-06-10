@@ -11,8 +11,8 @@
 
 ## 현재 기준
 
-- 현재 날짜: 2026-06-09
-- 마지막 갱신: 2026-06-09 15:53 KST
+- 현재 날짜: 2026-06-10
+- 마지막 갱신: 2026-06-10 12:10 KST
 - 마감: 2026-06-10 저녁 보고
 - 현재 범위: KuroStep Spring Boot 백엔드 + Tauri 최소 위젯 연동
 - 현재 전략: 기능을 삭제하지 않고, 실제 구현/검증 상태와 남은 리스크를 분리해서 기록한다.
@@ -24,6 +24,7 @@ KuroStep 백엔드는 테스트와 실제 HTTP 요청 기준으로 핵심 백엔
 Tauri 최소 위젯은 Spring Boot API와 연결되어 작업 카드, 곡, 플레이리스트, 가사 라인, 번역 초안을 표시한다.
 가사 오버레이는 별도 `lyrics` 창으로 현재 가사/번역을 전달하는 구조가 구현되어 있다.
 YouTube 공식 iframe의 앱 내부 재생은 구현을 시도했으나 macOS Tauri WebView에서 `Error 153`이 재현되어 트러블슈팅 항목으로 기록한다.
+GitHub Pages 배포와 백엔드 CI는 성공했고, AWS EC2 배포를 위한 Terraform/Docker/GitHub Actions 파일을 추가했다.
 
 WBS 시각화 파일:
 
@@ -95,7 +96,12 @@ draft 1 MYMEMORY AUTO_DRAFT 절대 포기하지 않을 거예요
 | Tauri | 최소 위젯 API 연동 | 최소 구현 완료 | `kurostep-tauri-widget/src/main.js` | 발표 시 백엔드 API 응답이 위젯에 표시되는 흐름 설명 |
 | Tauri | 가사 오버레이 창 이벤트 연동 | 최소 구현 완료 | `kurostep-tauri-widget/src-tauri/src/lib.rs`, `src/lyrics.js` | 자막 ON/OFF와 현재 라인 전달 구조 설명 |
 | Tauri | 앱 내부 YouTube iframe 플레이어 시도 | 트러블슈팅 기록 | `kurostep-tauri-widget/src/main.js`, 최종 보고서 15장 | `Error 153` 원인과 HTTPS 프론트 대안 설명 |
-| 실행/배포 | Docker 빌드/실행 검증 | 필수 잔여 | 없음 | 다음 작업으로 진행 |
+| 실행/배포 | 로컬 Dockerfile 구성 | 최소 구현 완료 | `KuroStep/Dockerfile`, `KuroStep/docker-compose.yml` | 필요 시 `docker compose up --build`로 확인 |
+| 실행/배포 | EC2 운영 Docker Compose 구성 | 코드 준비 완료 | `KuroStep/Dockerfile.prod`, `KuroStep/docker-compose.prod.yml`, `.env.prod.example`, `application-prod.yaml` | AWS 서버에서 실행 확인 필요 |
+| 실행/배포 | Terraform EC2 인프라 코드 | 코드 준비 완료 | `infra/main.tf`, `variables.tf`, `outputs.tf`, `user-data.sh` | AWS 인증 후 `terraform plan/apply` |
+| 실행/배포 | GitHub Actions EC2 배포 workflow | 코드 준비 완료 | `.github/workflows/deploy-ec2.yml` | GitHub Secrets 등록 후 수동 실행 |
+| 실행/배포 | GitHub Pages 위젯 배포 | 실제 검증 완료 | `.github/workflows/pages.yml`, `https://song991123.github.io/KuroStep/` | EC2 HTTPS API 연결 필요 |
+| 실행/배포 | 백엔드 CI | 실제 검증 완료 | `.github/workflows/backend-ci.yml`, GitHub Actions 성공 결과 | 발표 자료에 CI 통과 반영 |
 | API 문서화 | Swagger 핵심 API 수동 확인 | 필수 잔여 | Swagger UI | 회원가입부터 번역 초안까지 핵심 흐름 확인 |
 | Auth/Security | 사용자별 권한 검증 보강 또는 문서화 | 필수 잔여 | Service 권한 검증 코드 | 남은 시간에 보강하거나 보고서에 한계 명시 |
 
@@ -116,17 +122,19 @@ draft 1 MYMEMORY AUTO_DRAFT 절대 포기하지 않을 거예요
 | Test/HTTP | `./gradlew test` 통과, HTTP 데모 시나리오 검증 | 테스트와 수동 검증 모두 확보 |
 | Tauri | 최소 위젯 API 연동, 가사 오버레이 이벤트 구조 | 백엔드 결과를 데스크톱 위젯으로 표시함 |
 | Tauri/YouTube | 공식 iframe 앱 내부 재생 시도 및 `Error 153` 재현 | 실제 제약을 트러블슈팅으로 기록함 |
+| CI/CD | GitHub Pages 배포, 백엔드 CI, EC2 deploy workflow 작성 | GitHub 기반 자동화 구조를 설명할 수 있음 |
+| AWS/IaC | Terraform으로 EC2, 보안그룹, Elastic IP 코드화 | 콘솔 수동 클릭이 아닌 코드 기반 인프라 관리 근거 |
 
 ## 다음 작업 순서
 
 | 우선순위 | 할 일 | 목표 | 최소 완료 기준 |
 |---|---|---|---|
-| 1 | Docker 빌드/실행 검증 | 로컬 실행 환경 증거 확보 | Docker build 또는 compose 실행 성공 |
-| 2 | Swagger 핵심 API 수동 확인 | 문서화 화면에서 흐름 확인 | 회원가입/로그인/Track/Task/Lyrics/Translation 중 핵심 API 확인 |
-| 3 | 발표용 데모 시나리오 정리 | 발표 중 헤매지 않게 순서 고정 | `http/kurostep-demo.http` 기준 5분 시나리오 작성 |
-| 4 | 사용자별 권한 검증 보강 또는 문서화 | 인증/인가 한계 관리 | 보강 가능하면 테스트 추가, 아니면 보고서에 명시 |
-| 5 | Tauri 위젯/가사 오버레이 시연 확인 | 백엔드와 데스크톱 위젯 연결 증거 확보 | 작업/곡/가사/번역 표시와 자막 ON/OFF 확인 |
-| 6 | 최종 테스트 재실행 | 발표 전 안정성 확인 | `./gradlew test` 성공 |
+| 1 | AWS 인증/키 준비 | Terraform 실행 준비 | AWS access key 또는 로컬 AWS CLI 인증 완료 |
+| 2 | Terraform plan/apply | EC2 서버 생성 | `infra` output으로 public IP 확인 |
+| 3 | GitHub Secrets 등록 | EC2 자동 배포 준비 | `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, DB/JWT secret 등록 |
+| 4 | EC2 deploy workflow 수동 실행 | Spring Boot + MySQL 컨테이너 실행 | GitHub Actions deploy 성공 |
+| 5 | EC2 API 직접 확인 | 배포 서버 동작 증거 확보 | `http://EC2_PUBLIC_IP:8080/swagger-ui/index.html` 또는 `/api` 요청 확인 |
+| 6 | HTTPS 후속 판단 | GitHub Pages와 API 연결 | 도메인/Nginx/Let's Encrypt 적용 여부 결정 |
 
 ## 현재 리스크 기록
 
@@ -138,8 +146,11 @@ draft 1 MYMEMORY AUTO_DRAFT 절대 포기하지 않을 거예요
 - `저작권보호심의 제도와 동향 25년 3호` 자료를 참고해 유튜브 광고 제거, 광고 자동 스킵, 다운로드, 스트림 추출은 법적 리스크가 큰 항목으로 분리한다.
 - 스트림 추출, 음원 다운로드, 광고 제거 기능은 공식 임베드 흐름이 아니므로 발표용 구현 범위로 잡지 않는다.
 - 앱 내부 재생을 유지하려면 GitHub Pages 등 HTTPS로 배포된 프론트를 Tauri가 로드하는 구조를 추가 검토한다.
+- GitHub Pages는 HTTPS이므로 EC2 API가 HTTP만 제공하면 Mixed Content 정책에 걸릴 수 있다.
+- EC2 배포 직후에는 `http://EC2_PUBLIC_IP:8080`로 직접 API를 확인하고, GitHub Pages와 연결하려면 HTTPS 설정이 필요하다.
+- Terraform과 GitHub Actions 배포 코드는 준비됐지만 실제 AWS 적용은 AWS 인증 정보와 GitHub Secrets 등록이 필요하다.
 - 이후 백엔드 구현 중 발생하는 Security, JWT, JPA, Provider, Docker 문제도 같은 방식으로 증상/원인/해결 과정을 누적 기록한다.
 
 ## 지금 당장 할 1개 작업
 
-Tauri 위젯에서 백엔드 데이터 표시와 가사 오버레이 ON/OFF를 확인하고, 그 다음 Docker 빌드/실행을 검증한다.
+AWS 콘솔에서 액세스 키/SSH 키/GitHub Secrets를 준비한 뒤 `infra` 기준으로 Terraform plan을 실행한다.

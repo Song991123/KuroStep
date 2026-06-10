@@ -1,0 +1,23 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/kurostep?serverTimezone=Asia/Seoul&characterEncoding=UTF-8}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${SPRING_DATASOURCE_USERNAME:kurostep}
+    password: ${SPRING_DATASOURCE_PASSWORD:kurostep}
+
+  h2:
+    console:
+      enabled: false
+
+  jpa:
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+    properties:
+      hibernate:
+        format_sql: false
+    open-in-view: false
+
+logging:
+  level:
+    org.hibernate.SQL: info
+

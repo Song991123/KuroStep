@@ -177,6 +177,8 @@ draft 1 MYMEMORY AUTO_DRAFT 절대 포기하지 않을 거예요
 - Gradle
 - Swagger / springdoc-openapi
 - Docker
+- Terraform
+- GitHub Actions
 - AWS EC2
 - Tauri
 
@@ -656,34 +658,79 @@ com.kurostep
 
 ### Dockerfile 작성
 
-Docker 적용은 이번 MVP의 확장 계획으로 정리한다.
+Docker 적용을 위해 로컬 개발용 실행 파일과 EC2 배포용 실행 파일을 분리했다.
 
-- Spring Boot 애플리케이션을 jar로 빌드한다.
-- Docker 이미지에서 jar 파일을 실행한다.
-- DB 접속 정보와 JWT secret은 환경변수로 분리한다.
+| 파일 | 역할 |
+|---|---|
+| `KuroStep/Dockerfile` | 로컬에서 Gradle 빌드 산출물을 이미지로 실행 |
+| `KuroStep/Dockerfile.prod` | GitHub Actions가 빌드한 `app.jar`를 EC2에서 실행 |
+| `KuroStep/docker-compose.yml` | 로컬 H2 기반 API 컨테이너 실행 |
+| `KuroStep/docker-compose.prod.yml` | EC2에서 Spring Boot API와 MySQL 컨테이너 실행 |
+| `KuroStep/.env.prod.example` | 운영 환경변수 예시 |
+| `KuroStep/src/main/resources/application-prod.yaml` | MySQL, 운영 로그, H2 console 비활성화 설정 |
+
+운영 프로필에서는 DB 접속 정보와 JWT secret을 코드에 직접 적지 않고 환경변수로 주입한다.
 
 ### 컨테이너 실행
 
-- Docker Compose로 MySQL 컨테이너를 실행하는 구성을 향후 적용한다.
-- Spring Boot 컨테이너와 MySQL 컨테이너를 연결한다.
-- 주요 API 동작은 현재 H2와 실제 HTTP 요청으로 먼저 검증했다.
+- 로컬 개발에서는 H2 메모리 DB로 빠르게 기능을 확인한다.
+- EC2 배포에서는 `docker-compose.prod.yml`로 MySQL 컨테이너와 Spring Boot 컨테이너를 함께 실행한다.
+- MySQL 데이터는 Docker volume `kurostep-mysql-data`에 저장한다.
+- `mysql` 컨테이너 healthcheck가 통과한 뒤 `kurostep-api` 컨테이너가 실행된다.
 
 ## 14. 배포
 
 ### AWS EC2 배포
 
-AWS EC2 배포는 이번 보고에서는 확장 계획으로 설명한다.
+AWS EC2 배포를 코드로 관리하기 위해 Terraform 기반 인프라 설정을 추가했다.
 
-- EC2 인스턴스를 생성한다.
-- 보안 그룹에서 애플리케이션 포트를 허용한다.
-- Docker와 Docker Compose를 설치한다.
-- Spring Boot API와 MySQL 컨테이너를 실행한다.
+| 파일 | 역할 |
+|---|---|
+| `infra/versions.tf` | Terraform 및 AWS Provider 버전 정의 |
+| `infra/variables.tf` | 리전, 인스턴스 타입, SSH 허용 대역 변수화 |
+| `infra/main.tf` | EC2, 보안그룹, Key Pair, Elastic IP 생성 |
+| `infra/outputs.tf` | EC2 public IP, API URL, SSH 명령 출력 |
+| `infra/user-data.sh` | EC2 최초 실행 시 Docker와 Docker Compose 설치 |
+| `infra/README.md` | AWS 인증, Terraform 실행, GitHub Secrets 등록 절차 |
+
+Terraform 실행 흐름:
+
+```bash
+cd infra
+terraform init
+terraform plan
+terraform apply
+```
+
+생성 대상:
+
+- Ubuntu 22.04 EC2 1대
+- 보안그룹: `22`, `80`, `443`, `8080`
+- Elastic IP
+- Docker / Docker Compose 설치
 
 ### 서비스 실행 확인
 
-- 현재 MVP에서는 로컬 H2 환경에서 서버 실행 로그와 API 동작을 확인했다.
-- 회원가입, 로그인, 곡 등록, 플레이리스트 생성, 작업 생성 API를 실제 HTTP 요청으로 테스트했다.
-- 배포 서버 API와 Tauri 클라이언트 연동은 향후 확장으로 남긴다.
+- GitHub Pages로 Tauri 위젯 정적 화면 배포를 완료했다.
+- GitHub Actions에서 백엔드 테스트 CI가 통과했다.
+- EC2 배포용 GitHub Actions workflow를 추가했다.
+- AWS 계정의 EC2 접속 정보와 GitHub Secrets를 등록하면 `main` 브랜치 push 또는 수동 실행으로 EC2 배포를 진행할 수 있다.
+
+배포 workflow:
+
+| 파일 | 역할 |
+|---|---|
+| `.github/workflows/backend-ci.yml` | Spring Boot 테스트 자동 실행 |
+| `.github/workflows/pages.yml` | GitHub Pages에 Tauri 위젯 정적 배포 |
+| `.github/workflows/deploy-ec2.yml` | 빌드한 Spring Boot jar를 EC2에 전송하고 Docker Compose 재시작 |
+
+현재 확인된 URL:
+
+- GitHub Repository: `https://github.com/Song991123/KuroStep`
+- GitHub Pages: `https://song991123.github.io/KuroStep/`
+- 임시 EC2 API URL 형식: `http://EC2_PUBLIC_IP:8080`
+
+GitHub Pages는 HTTPS이므로 브라우저에서 직접 API를 호출하려면 EC2 API에도 HTTPS 설정이 필요하다. 발표 이후에는 도메인 연결, Nginx reverse proxy, Let's Encrypt 인증서 설정을 추가한다.
 
 ## 15. 트러블슈팅
 
@@ -702,6 +749,8 @@ AWS EC2 배포는 이번 보고에서는 확장 계획으로 설명한다.
 | YouTube 플레이어 화면과 광고 노출 여부 | 공식 IFrame Player API는 광고 제거 옵션을 제공하지 않으며, 화면 숨김과 광고 제어는 다른 문제임 |
 | YouTube 광고 제거 구현의 법적 리스크 | 참고한 2025 저작권보호심의 자료에서 유튜브 광고 제거 앱이 불법행위 또는 부정경쟁행위로 평가될 가능성이 크다고 설명됨 |
 | Tauri 가사 위젯과 메인 위젯 상태 동기화 필요 | 메인 창과 가사 오버레이 창이 별도 WebView로 동작하므로 이벤트 전달 구조가 필요함 |
+| GitHub Pages에서 EC2 HTTP API 호출 제한 | HTTPS 페이지에서 HTTP API를 호출하면 브라우저 Mixed Content 정책에 의해 차단될 수 있음 |
+| AWS 배포 정보 노출 위험 | DB 비밀번호, JWT secret, SSH key를 코드에 커밋하면 보안 사고가 발생할 수 있음 |
 
 ### 해결 과정
 
@@ -722,6 +771,9 @@ AWS EC2 배포는 이번 보고에서는 확장 계획으로 설명한다.
 - `저작권보호심의 제도와 동향 25년 3호` 자료를 참고해 광고 제거, 광고 자동 스킵, 다운로드, 스트림 추출은 세미 구현 범위에서 제외했다.
 - 광고가 발생할 경우 자동 우회하지 않고 사용자가 직접 정지, 음소거, 볼륨 조절, 다음 곡 이동을 선택할 수 있는 방향으로 정리했다.
 - 가사 위젯은 Tauri의 별도 `lyrics` 창을 두고, 메인 창에서 `set_lyrics_visible` 명령을 호출해 현재 가사 라인과 번역문을 `lyrics:update` 이벤트로 전달하는 방식으로 구현했다.
+- GitHub Pages 배포 화면은 정상 렌더링을 확인했지만, HTTPS 프론트에서 EC2 HTTP API를 호출하는 문제를 고려해 도메인 + Nginx + Let's Encrypt HTTPS 설정을 후속 작업으로 분리했다.
+- EC2 인프라는 Terraform 코드로 생성하도록 구성하고, AWS 계정 인증과 GitHub Secrets 등록 후 배포 workflow를 실행하는 구조로 정리했다.
+- 민감정보는 `.env.prod.example`에 예시만 남기고 실제 값은 GitHub Secrets 또는 EC2 서버의 `.env` 파일로 주입한다.
 
 ## 16. 프로젝트 회고
 
@@ -741,7 +793,7 @@ AWS EC2 배포는 이번 보고에서는 확장 계획으로 설명한다.
 - 테스트 범위를 더 넓혀 예외 상황을 체계적으로 검증할 필요가 있다.
 - 조회 성능 개선을 위해 fetch join, 인덱스 설계, 캐시 전략을 추가로 학습할 필요가 있다.
 - JWT 필터 기반 인증/인가를 완성해 `userId` 요청 파라미터를 로그인 사용자 정보로 교체해야 한다.
-- Swagger, Docker, EC2, Tauri 연동을 순차적으로 보강해야 한다.
+- EC2 HTTPS 적용, 배포 서버 API와 GitHub Pages/Tauri 연동을 최종 확인해야 한다.
 
 ### 향후 확장 계획
 

@@ -6,6 +6,7 @@
 **/.idea/
 **/build/
 **/.gradle/
+**/.terraform/
 *.iml
 HELP.md
 02_백엔드세미용/playlist_260404_0/
