@@ -58,6 +58,7 @@ const appState = {
   settingsOpen: false,
   taskFormOpen: false,
   taskEditing: false,
+  tasks: [],
   work: null,
   counts: { TODO: 0, DOING: 0, DONE: 0 },
   playlist: null,
@@ -537,6 +538,7 @@ function logout() {
   notifyShellAuthState();
   appState.settingsOpen = false;
   appState.work = null;
+  appState.tasks = [];
   appState.playlist = null;
   appState.playlistTracks = [];
   appState.currentTrack = null;
@@ -570,6 +572,7 @@ async function ensureWorkspaceData() {
   }
 
   appState.counts = countTaskStatuses(tasks);
+  appState.tasks = tasks;
   appState.work = tasks.find((task) => task.status === "DOING") || tasks[0];
 
   let playlists = await api(`/api/playlists?userId=${userId}`);
@@ -592,6 +595,7 @@ async function ensureWorkspaceData() {
     appState.work = await api(`/api/tasks/${appState.work.id}/playlist/${appState.playlist.id}?userId=${userId}`, {
       method: "PATCH",
     });
+    appState.tasks = appState.tasks.map((task) => (task.id === appState.work.id ? appState.work : task));
   }
 
   const currentPlaylistTrack =
@@ -618,6 +622,7 @@ async function ensureWorkspaceData() {
       `/api/tasks/${appState.work.id}/current-playlist-track/${currentPlaylistTrack.playlistTrackId}?userId=${userId}`,
       { method: "PATCH" },
     );
+    appState.tasks = appState.tasks.map((task) => (task.id === appState.work.id ? appState.work : task));
   }
 
   appState.lyric = null;
@@ -1174,10 +1179,26 @@ async function changeStatus(status) {
 
 async function refreshTasksOnly() {
   const tasks = await api(`/api/tasks/today?userId=${appState.auth.userId}`);
+  appState.tasks = tasks;
   appState.counts = countTaskStatuses(tasks);
   if (tasks.length) {
     appState.work = tasks.find((task) => task.id === appState.work?.id) || tasks[0];
+  } else {
+    appState.work = null;
   }
+}
+
+function selectTask(taskId) {
+  const task = appState.tasks.find((item) => item.id === Number(taskId));
+  if (!task || task.id === appState.work?.id) {
+    return;
+  }
+
+  appState.work = task;
+  appState.taskFormOpen = false;
+  appState.taskEditing = false;
+  appState.notice = `${task.title} 발자국을 펼쳤다냥.`;
+  render();
 }
 
 async function saveTaskFromForm(event) {
@@ -1936,13 +1957,43 @@ function taskFormWidget(work) {
   `;
 }
 
-function todayWorkWidget(work, counts) {
+function taskListWidget(tasks, selectedTask) {
+  if (!tasks.length) {
+    return `<p class="state-message">오늘 찍을 발자국이 아직 없다냥.</p>`;
+  }
+
+  return `
+    <ol class="todo-list" aria-label="오늘 할 일 목록">
+      ${tasks
+        .map((task) => {
+          const selected = task.id === selectedTask?.id ? " selected" : "";
+          return `
+            <li>
+              <button class="todo-item${selected}" data-task-id="${escapeHtml(task.id)}" type="button" aria-pressed="${task.id === selectedTask?.id}">
+                <span class="todo-status-dot ${escapeHtml(task.status || "TODO")}"></span>
+                <span class="todo-text">
+                  <strong>${escapeHtml(task.title)}</strong>
+                  <small>${escapeHtml(task.description || task.taskDate || "메모 없는 발자국")}</small>
+                </span>
+                <span class="todo-status-label">${escapeHtml(statusLabel(task.status))}</span>
+              </button>
+            </li>
+          `;
+        })
+        .join("")}
+    </ol>
+  `;
+}
+
+function todayWorkWidget(work, counts, tasks = []) {
   if (!work) {
     return `
       <section class="widget-section today-work" aria-labelledby="today-work-title">
-        ${sectionHeader("오늘 할 일")}
-        <p class="state-message">오늘 찍을 발자국이 아직 없다냥.</p>
-        <button class="action-button primary" id="open-task-create" type="button">${iconSvg("plus")}<span>할 일 추가</span></button>
+        <div class="task-list-head">
+          ${sectionHeader("오늘 할 일")}
+          <button class="mini-icon-button" id="open-task-create" type="button" title="할 일 추가" aria-label="할 일 추가">${iconSvg("plus")}</button>
+        </div>
+        ${taskListWidget(tasks, work)}
         ${taskFormWidget(null)}
       </section>
     `;
@@ -1958,11 +2009,14 @@ function todayWorkWidget(work, counts) {
 
   return `
     <section class="widget-section today-work" aria-labelledby="today-work-title">
-      ${sectionHeader("오늘 할 일")}
+      <div class="task-list-head">
+        ${sectionHeader("오늘 할 일")}
+        <button class="mini-icon-button" id="open-task-create" type="button" title="할 일 추가" aria-label="할 일 추가">${iconSvg("plus")}</button>
+      </div>
+      ${taskListWidget(tasks, work)}
       <div class="task-header">
         <h3 class="task-title" id="today-work-title">${escapeHtml(work.title)}</h3>
         <div class="task-actions">
-          <button class="mini-icon-button" id="open-task-create" type="button" title="할 일 추가" aria-label="할 일 추가">${iconSvg("plus")}</button>
           <button class="mini-icon-button" id="open-task-edit" type="button" title="할 일 수정" aria-label="할 일 수정">${iconSvg("edit")}</button>
           <button class="mini-icon-button danger" id="delete-task" type="button" title="할 일 삭제" aria-label="할 일 삭제">${iconSvg("trash")}</button>
         </div>
@@ -2170,7 +2224,7 @@ function taskPawWidget() {
     "작업 발자국",
     "오늘 할 일과 번역 메모를 한 발자국씩 만진다냥",
     `
-      ${todayWorkWidget(appState.work, appState.counts)}
+      ${todayWorkWidget(appState.work, appState.counts, appState.tasks)}
       ${lyricMemoWidget(appState.selectedLine, appState.translation)}
     `
   );
@@ -2327,6 +2381,9 @@ function bindActions() {
   });
   document.querySelector("#task-form")?.addEventListener("submit", saveTaskFromForm);
   document.querySelector("#delete-task")?.addEventListener("click", deleteCurrentTask);
+  document.querySelectorAll("[data-task-id]").forEach((button) => {
+    button.addEventListener("click", () => selectTask(button.dataset.taskId));
+  });
   document.querySelectorAll("[data-status]").forEach((button) => {
     button.addEventListener("click", () => changeStatus(button.dataset.status));
   });
