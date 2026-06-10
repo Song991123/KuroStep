@@ -1,0 +1,43 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: kurostep-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-kurostep}
+      MYSQL_USER: ${MYSQL_USER:-kurostep}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - kurostep-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  kurostep-api:
+    build:
+      context: .
+    container_name: kurostep-api
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-kurostep}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-kurostep}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+      KUROSTEP_JWT_SECRET: ${KUROSTEP_JWT_SECRET}
+      KUROSTEP_JWT_EXPIRATION_MINUTES: ${KUROSTEP_JWT_EXPIRATION_MINUTES:-120}
+
+volumes:
+  kurostep-mysql-data:
+
