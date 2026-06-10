@@ -750,6 +750,7 @@ async function attachTrackToWorkspace(userId, track, makeCurrent = true) {
 }
 
 async function registerSingleTrackFromUrl(userId, sourceUrl, sourceId) {
+  const hadCurrentTrack = Boolean(appState.currentTrack);
   const metadata = await fetchYoutubeMetadata(sourceUrl, sourceId);
   const track = await findOrCreateTrack({
     title: metadata.title,
@@ -761,8 +762,10 @@ async function registerSingleTrackFromUrl(userId, sourceUrl, sourceId) {
     durationSeconds: null,
   });
 
-  await attachTrackToWorkspace(userId, track, true);
-  appState.notice = "YouTube 링크를 플레이리스트에 넣고 바로 틀 준비했다냥.";
+  await attachTrackToWorkspace(userId, track, !hadCurrentTrack);
+  appState.notice = hadCurrentTrack
+    ? "YouTube 링크를 플레이리스트 뒤에 넣었다냥."
+    : "첫 곡을 플레이리스트에 넣었다냥. 재생 버튼을 누르면 시작한다냥.";
   broadcastWorkspaceChanged();
 }
 
@@ -871,7 +874,8 @@ async function registerTrackFromInputs() {
   appState.linkSaving = true;
   appState.error = "";
   appState.notice = "YouTube 링크를 작업 바구니에 담는 중이냥...";
-  render();
+  refreshLinkWidgetDom();
+  updatePlaybackDom();
 
   try {
     await ensureAuth();
@@ -885,16 +889,15 @@ async function registerTrackFromInputs() {
     } else {
       await registerSingleTrackFromUrl(userId, sourceUrl, sourceId);
     }
-    urlInput.value = "";
     appState.linkSaving = false;
-    render();
-    if (appState.currentTrack && !playlistId) {
-      await togglePlayback();
-    }
+    refreshLinkWidgetDom();
+    refreshPlaylistWidgetDom();
+    updatePlaybackDom();
   } catch (error) {
     appState.error = error.message;
     appState.linkSaving = false;
-    render();
+    refreshLinkWidgetDom();
+    updatePlaybackDom();
   }
 }
 
@@ -1485,25 +1488,37 @@ async function movePlaylistTrack(offset) {
 async function setCurrentPlaylistTrack(playlistTrack, options = {}) {
   const autoplay = options.autoplay ?? appState.isPlaying;
   const userId = appState.auth.userId;
+  if (playlistTrack.playlistTrackId === appState.currentTrack?.playlistTrackId) {
+    if (autoplay && !appState.isPlaying) {
+      await togglePlayback();
+    }
+    return;
+  }
+
   appState.playbackPositionSeconds = 0;
   appState.preparedTrackId = null;
+  pauseCurrentAudio();
+  youtubePlayer = null;
+  youtubePlayerReady = false;
+  youtubePlayerVideoId = "";
   appState.work = await api(
     `/api/tasks/${appState.work.id}/current-playlist-track/${playlistTrack.playlistTrackId}?userId=${userId}`,
     { method: "PATCH" },
   );
   appState.currentTrack = await hydratePlaylistTrack(playlistTrack);
-  youtubePlayerVideoId = "";
   await ensureLyricAndTranslation(userId, playlistTrack.trackId);
   appState.notice = "현재 곡을 바꿨다냥";
   await syncLyricsOverlay();
+  appState.isPlaying = Boolean(autoplay);
   render();
   if (autoplay) {
-    appState.isPlaying = true;
     await playCurrentAudio().catch((error) => {
       appState.error = `재생을 시작하지 못했다냥: ${error.message}`;
       appState.isPlaying = false;
+      render();
     });
     syncPlaybackTimer();
+    updatePlaybackDom();
   }
 }
 
@@ -1743,6 +1758,28 @@ function updateGlobalControlsDom() {
     lyricsButton.setAttribute("aria-pressed", String(appState.lyricsOverlayVisible));
     lyricsButton.textContent = `가사 오버레이 ${appState.lyricsOverlayVisible ? "ON" : "OFF"}`;
   }
+}
+
+function bindLinkImportAction() {
+  bindLinkImportAction();
+}
+
+function refreshLinkWidgetDom() {
+  const current = document.querySelector(".link-widget");
+  if (!current) {
+    return;
+  }
+  current.outerHTML = youtubeLinkWidget();
+  bindLinkImportAction();
+}
+
+function refreshPlaylistWidgetDom() {
+  const current = document.querySelector(".playlist-widget");
+  if (!current) {
+    return;
+  }
+  current.outerHTML = playlistWidget(appState.playlistTracks);
+  bindPlaylistInteractions();
 }
 
 function bindLyricsPanelToggle() {
