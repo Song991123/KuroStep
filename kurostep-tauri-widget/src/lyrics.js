@@ -19,7 +19,7 @@ dragRegion.addEventListener("mousedown", startWindowDrag);
 window.__TAURI__?.event?.listen?.("lyrics:update", (event) => {
   const payload = event.payload ?? {};
 
-  lineElement.textContent = payload.line || "아직 재생 중이 아닙니다";
+  lineElement.textContent = payload.line || "가사 발자국을 기다리는 중이다냥.";
 
   if (payload.translation) {
     translationElement.textContent = payload.translation;

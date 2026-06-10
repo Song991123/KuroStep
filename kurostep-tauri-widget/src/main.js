@@ -1727,7 +1727,9 @@ function lyricSyncStatusText() {
     return "곡을 고르면 가사를 찾아볼게냥.";
   }
   if (!appState.lyricSource?.lines?.length) {
-    return "아직 불러온 가사가 없다냥.";
+    return appState.isPlaying
+      ? "처음 듣는 곡이라 가사를 찾는 중이다냥."
+      : "재생하면 가사를 찾아볼게냥.";
   }
   if (!hasSyncedLyricLines()) {
     return "시간표가 없는 가사라 자동 싱크는 못 맞춘다냥.";
