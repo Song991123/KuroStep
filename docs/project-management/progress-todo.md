@@ -12,7 +12,7 @@
 ## 현재 기준
 
 - 현재 날짜: 2026-06-10
-- 마지막 갱신: 2026-06-10 12:10 KST
+- 마지막 갱신: 2026-06-10 12:40 KST
 - 마감: 2026-06-10 저녁 보고
 - 현재 범위: KuroStep Spring Boot 백엔드 + Tauri 최소 위젯 연동
 - 현재 전략: 기능을 삭제하지 않고, 실제 구현/검증 상태와 남은 리스크를 분리해서 기록한다.
@@ -25,6 +25,9 @@ Tauri 최소 위젯은 Spring Boot API와 연결되어 작업 카드, 곡, 플�
 가사 오버레이는 별도 `lyrics` 창으로 현재 가사/번역을 전달하는 구조가 구현되어 있다.
 YouTube 공식 iframe의 앱 내부 재생은 구현을 시도했으나 macOS Tauri WebView에서 `Error 153`이 재현되어 트러블슈팅 항목으로 기록한다.
 GitHub Pages 배포와 백엔드 CI는 성공했고, AWS EC2 배포를 위한 Terraform/Docker/GitHub Actions 파일을 추가했다.
+포폴용 공개 문서는 `docs/` 구조로 정리했고, 루트 `README.md`는 한국 포폴용 첫 화면 문서로 재작성했다.
+Terraform 보안 파일(`tfstate`, `tfvars`, `.env`, SSH key 등)은 `.gitignore`로 차단했다.
+EC2용 SSH 키와 로컬 `terraform.tfvars`는 준비했지만, 현재 로컬 AWS credential이 `InvalidClientTokenId`로 실패해 실제 `terraform plan/apply`는 AWS 인증 갱신 후 진행해야 한다.
 
 WBS 시각화 파일:
 
@@ -98,8 +101,10 @@ draft 1 MYMEMORY AUTO_DRAFT 절대 포기하지 않을 거예요
 | Tauri | 앱 내부 YouTube iframe 플레이어 시도 | 트러블슈팅 기록 | `kurostep-tauri-widget/src/main.js`, 최종 보고서 15장 | `Error 153` 원인과 HTTPS 프론트 대안 설명 |
 | 실행/배포 | 로컬 Dockerfile 구성 | 최소 구현 완료 | `KuroStep/Dockerfile`, `KuroStep/docker-compose.yml` | 필요 시 `docker compose up --build`로 확인 |
 | 실행/배포 | EC2 운영 Docker Compose 구성 | 코드 준비 완료 | `KuroStep/Dockerfile.prod`, `KuroStep/docker-compose.prod.yml`, `.env.prod.example`, `application-prod.yaml` | AWS 서버에서 실행 확인 필요 |
-| 실행/배포 | Terraform EC2 인프라 코드 | 코드 준비 완료 | `infra/main.tf`, `variables.tf`, `outputs.tf`, `user-data.sh` | AWS 인증 후 `terraform plan/apply` |
-| 실행/배포 | GitHub Actions EC2 배포 workflow | 코드 준비 완료 | `.github/workflows/deploy-ec2.yml` | GitHub Secrets 등록 후 수동 실행 |
+| 실행/배포 | Terraform EC2 인프라 코드 | 코드 준비 완료 / AWS 인증 대기 | `infra/main.tf`, `variables.tf`, `outputs.tf`, `user-data.sh`, `terraform.tfvars.example` | AWS credential 갱신 후 `terraform plan/apply` |
+| 실행/배포 | Terraform 보안 파일 차단 | 실제 반영 완료 | `.gitignore` | `terraform.tfstate`, `*.tfvars`, `.env`, SSH key Git 추적 금지 유지 |
+| 실행/배포 | EC2 SSH 키/로컬 tfvars 준비 | 로컬 준비 완료 | `~/.ssh/kurostep_ec2`, `infra/terraform.tfvars` | AWS 인증 후 plan 실행 |
+| 실행/배포 | GitHub Actions EC2 배포 workflow | 코드 준비 완료 | `.github/workflows/deploy-ec2.yml` | EC2 생성, GitHub Secrets 등록 후 수동 실행 |
 | 실행/배포 | GitHub Pages 위젯 배포 | 실제 검증 완료 | `.github/workflows/pages.yml`, `https://song991123.github.io/KuroStep/` | EC2 HTTPS API 연결 필요 |
 | 실행/배포 | 백엔드 CI | 실제 검증 완료 | `.github/workflows/backend-ci.yml`, GitHub Actions 성공 결과 | 발표 자료에 CI 통과 반영 |
 | API 문서화 | Swagger 핵심 API 수동 확인 | 필수 잔여 | Swagger UI | 회원가입부터 번역 초안까지 핵심 흐름 확인 |
@@ -129,7 +134,7 @@ draft 1 MYMEMORY AUTO_DRAFT 절대 포기하지 않을 거예요
 
 | 우선순위 | 할 일 | 목표 | 최소 완료 기준 |
 |---|---|---|---|
-| 1 | AWS 인증/키 준비 | Terraform 실행 준비 | AWS access key 또는 로컬 AWS CLI 인증 완료 |
+| 1 | AWS credential 갱신 | Terraform 실행 준비 | `aws sts get-caller-identity` 성공 |
 | 2 | Terraform plan/apply | EC2 서버 생성 | `infra` output으로 public IP 확인 |
 | 3 | GitHub Secrets 등록 | EC2 자동 배포 준비 | `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, DB/JWT secret 등록 |
 | 4 | EC2 deploy workflow 수동 실행 | Spring Boot + MySQL 컨테이너 실행 | GitHub Actions deploy 성공 |
@@ -149,8 +154,10 @@ draft 1 MYMEMORY AUTO_DRAFT 절대 포기하지 않을 거예요
 - GitHub Pages는 HTTPS이므로 EC2 API가 HTTP만 제공하면 Mixed Content 정책에 걸릴 수 있다.
 - EC2 배포 직후에는 `http://EC2_PUBLIC_IP:8080`로 직접 API를 확인하고, GitHub Pages와 연결하려면 HTTPS 설정이 필요하다.
 - Terraform과 GitHub Actions 배포 코드는 준비됐지만 실제 AWS 적용은 AWS 인증 정보와 GitHub Secrets 등록이 필요하다.
+- 현재 AWS CLI는 `InvalidClientTokenId`로 실패한다. 새 access key/secret key로 `aws configure`를 다시 실행해야 한다.
+- EC2 deploy workflow는 서버와 GitHub Secrets가 없을 때 push마다 실패하지 않도록 `workflow_dispatch` 수동 실행 전용으로 바꿨다.
 - 이후 백엔드 구현 중 발생하는 Security, JWT, JPA, Provider, Docker 문제도 같은 방식으로 증상/원인/해결 과정을 누적 기록한다.
 
 ## 지금 당장 할 1개 작업
 
-AWS 콘솔에서 액세스 키/SSH 키/GitHub Secrets를 준비한 뒤 `infra` 기준으로 Terraform plan을 실행한다.
+AWS 콘솔에서 새 Access Key를 발급하고 로컬에서 `aws configure`를 다시 실행한 뒤 `aws sts get-caller-identity`로 인증을 확인한다.
