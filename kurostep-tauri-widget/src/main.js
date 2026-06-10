@@ -1214,15 +1214,17 @@ async function saveTaskFromForm(event) {
 }
 
 async function deleteCurrentTask() {
-  if (!appState.work?.id || !window.confirm("이 할 일을 지울까냥?")) {
+  if (!appState.work?.id) {
     return;
   }
 
   try {
+    const deletedTaskId = appState.work.id;
     await api(`/api/tasks/${appState.work.id}?userId=${appState.auth.userId}`, { method: "DELETE" });
     appState.notice = "할 일을 살짝 치웠다냥.";
-    appState.work = null;
-    await ensureWorkspaceData();
+    appState.tasks = appState.tasks.filter((task) => task.id !== deletedTaskId);
+    appState.work = appState.tasks[0] || null;
+    await refreshTasksOnly();
     broadcastWorkspaceChanged();
   } catch (error) {
     appState.error = error.message;
