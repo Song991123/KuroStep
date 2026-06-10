@@ -1,4 +1,7 @@
-const API_BASE_URL = window.localStorage.getItem("kurostep.apiBaseUrl") || "http://localhost:8080";
+const DEFAULT_API_BASE_URL = window.location.hostname.endsWith("github.io")
+  ? "https://54-116-185-226.sslip.io"
+  : "http://localhost:8080";
+const API_BASE_URL = window.localStorage.getItem("kurostep.apiBaseUrl") || DEFAULT_API_BASE_URL;
 const YOUTUBE_APP_ORIGIN = window.location.origin;
 
 const appState = {

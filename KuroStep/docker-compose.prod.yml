@@ -38,6 +38,21 @@ services:
       KUROSTEP_JWT_SECRET: ${KUROSTEP_JWT_SECRET}
       KUROSTEP_JWT_EXPIRATION_MINUTES: ${KUROSTEP_JWT_EXPIRATION_MINUTES:-120}
 
+  caddy:
+    image: caddy:2.8
+    container_name: kurostep-caddy
+    restart: unless-stopped
+    depends_on:
+      - kurostep-api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - kurostep-caddy-data:/data
+      - kurostep-caddy-config:/config
+
 volumes:
   kurostep-mysql-data:
-
+  kurostep-caddy-data:
+  kurostep-caddy-config:
