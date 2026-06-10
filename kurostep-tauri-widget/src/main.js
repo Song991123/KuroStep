@@ -571,6 +571,10 @@ function broadcastWorkspaceChanged() {
   window.localStorage.setItem("kurostep.workspaceChangedAt", String(Date.now()));
 }
 
+function broadcastSavedLyricPiecesChanged() {
+  window.localStorage.setItem("kurostep.savedLyricPiecesChangedAt", String(Date.now()));
+}
+
 async function ensureWorkspaceData() {
   const userId = appState.auth.userId;
   let tasks = await api(`/api/tasks/today?userId=${userId}`);
@@ -1469,15 +1473,18 @@ async function saveCurrentLyricPiece() {
   appState.savedLyricPieces = [piece, ...appState.savedLyricPieces.filter((item) => item.lineRefId !== piece.lineRefId)].slice(0, 20);
   writeJson("kurostep.savedLyricPieces", appState.savedLyricPieces);
   appState.notice = "현재 가사 조각을 저장했다냥.";
+  window.localStorage.setItem("kurostep.translationMemo", piece.memoText || "저장한 가사 조각");
   refreshSavedLyricPiecesDom();
+  updateLyricMemoDom();
   updatePlaybackDom();
+  broadcastSavedLyricPiecesChanged();
 
   if (!line.id || !appState.auth?.userId) {
     return;
   }
 
   try {
-    await api(`/api/lyric-line-refs/${line.id}/translations?userId=${appState.auth.userId}`, {
+    appState.translation = await api(`/api/lyric-line-refs/${line.id}/translations?userId=${appState.auth.userId}`, {
       method: "POST",
       body: JSON.stringify({
         languageCode: "ko",
@@ -1485,6 +1492,9 @@ async function saveCurrentLyricPiece() {
         memoText: piece.memoText || "저장한 가사 조각",
       }),
     });
+    appState.translationCache[String(line.id)] = appState.translation;
+    updateLyricMemoDom();
+    broadcastWorkspaceChanged();
   } catch {
     // Local save is the primary UX guarantee; server memo sync can be retried later.
   }
@@ -1496,6 +1506,7 @@ function deleteSavedLyricPiece(pieceId) {
   appState.notice = "저장한 가사 조각을 지웠다냥.";
   refreshSavedLyricPiecesDom();
   updatePlaybackDom();
+  broadcastSavedLyricPiecesChanged();
 }
 
 async function togglePlayback() {
@@ -3052,6 +3063,13 @@ window.addEventListener("storage", (event) => {
 
   if (event.key === "kurostep.workspaceChangedAt" && appState.auth) {
     loadDashboard();
+    return;
+  }
+
+  if (event.key === "kurostep.savedLyricPieces" || event.key === "kurostep.savedLyricPiecesChangedAt") {
+    appState.savedLyricPieces = readJson("kurostep.savedLyricPieces") || [];
+    refreshSavedLyricPiecesDom();
+    updatePlaybackDom();
   }
 });
 
