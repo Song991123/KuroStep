@@ -52,6 +52,10 @@ type Notice = {
   message: string;
 };
 
+type PendingPlaylistImport = YouTubePlaylistPreview & {
+  count: number;
+};
+
 type YouTubePlayer = {
   cueVideoById: (options: { videoId: string; startSeconds?: number }) => void;
   playVideo: () => void;
@@ -526,6 +530,7 @@ function MusicPlayerWidget({
   volume,
   youtubeVisible,
   canRegisterLinks,
+  pendingPlaylistImport,
   onTogglePlay,
   onPlayingChange,
   onPositionChange,
@@ -538,6 +543,9 @@ function MusicPlayerWidget({
   onToggleRepeat,
   onSelectTrack,
   onRegisterLink,
+  onPendingPlaylistCountChange,
+  onConfirmPlaylistImport,
+  onCancelPlaylistImport,
   onRemoveTrack,
   onShuffle,
   onReorderTracks,
@@ -554,6 +562,7 @@ function MusicPlayerWidget({
   volume: number;
   youtubeVisible: boolean;
   canRegisterLinks: boolean;
+  pendingPlaylistImport: PendingPlaylistImport | null;
   onTogglePlay: () => void;
   onPlayingChange: (playing: boolean) => void;
   onPositionChange: (seconds: number) => void;
@@ -566,6 +575,9 @@ function MusicPlayerWidget({
   onToggleRepeat: () => void;
   onSelectTrack: (playlistTrack: PlaylistTrack) => void;
   onRegisterLink: (url: string) => Promise<boolean>;
+  onPendingPlaylistCountChange: (count: number) => void;
+  onConfirmPlaylistImport: () => void;
+  onCancelPlaylistImport: () => void;
   onRemoveTrack: (playlistTrack: PlaylistTrack) => void;
   onShuffle: () => void;
   onReorderTracks: (playlistTrackIds: number[]) => void;
@@ -823,6 +835,27 @@ function MusicPlayerWidget({
             {canRegisterLinks ? "링크 불러오기" : "준비 중"}
           </button>
         </form>
+        {pendingPlaylistImport && (
+          <div className="playlist-import-panel" aria-label="플레이리스트 담기 확인">
+            <strong>플레이리스트 {pendingPlaylistImport.trackCount}곡을 찾았다냥.</strong>
+            <p>지금은 앞 {pendingPlaylistImport.tracks.length}곡까지 바로 담을 수 있다냥.</p>
+            <label>
+              담을 곡 수
+              <input
+                className="form-input small"
+                type="number"
+                min="1"
+                max={pendingPlaylistImport.tracks.length}
+                value={pendingPlaylistImport.count}
+                onChange={(event) => onPendingPlaylistCountChange(Number(event.target.value))}
+              />
+            </label>
+            <div className="inline-actions">
+              <button className="action-button primary" type="button" onClick={onConfirmPlaylistImport}>담기</button>
+              <button className="action-button compact" type="button" onClick={onCancelPlaylistImport}>취소</button>
+            </div>
+          </div>
+        )}
       </section>
       <section className="widget-section playlist-widget" aria-labelledby="playlist-title">
         <div className="section-head">
@@ -1039,6 +1072,7 @@ export default function App() {
   const [pawWidgetVisible, setPawWidgetVisible] = useState(() => readJson<boolean>("kurostep.pawWidgetVisible", true));
   const [lyricsOverlayVisible, setLyricsOverlayVisible] = useState(false);
   const [volume, setVolume] = useState(() => Number(window.localStorage.getItem("kurostep.volume") || 80));
+  const [pendingPlaylistImport, setPendingPlaylistImport] = useState<PendingPlaylistImport | null>(null);
   const [lyric, setLyric] = useState<Lyric | null>(null);
   const [lyricSource, setLyricSource] = useState<LyricSource | null>(null);
   const [selectedLine, setSelectedLine] = useState<SelectedLine | null>(null);
@@ -1488,32 +1522,16 @@ export default function App() {
           method: "POST",
           body: JSON.stringify({ playlistUrl: sourceUrl }),
         }, auth);
-        const answer = window.prompt(
-          `플레이리스트에서 ${preview.trackCount}곡을 찾았다냥. 앞에서 몇 곡까지 넣을까냥? 최대 50곡까지 가능하다냥.`,
-          String(Math.min(preview.trackCount, 10)),
-        );
-        if (!answer) {
-          setNotice({ kind: "notice", message: "플레이리스트 담기를 멈췄다냥." });
-          return;
+        const previewCount = preview.tracks.length;
+        if (!previewCount) {
+          setNotice({ kind: "error", message: "담을 수 있는 공개 영상을 찾지 못했다냥." });
+          return false;
         }
-        const count = Math.min(Math.max(Number(answer) || 0, 1), preview.tracks.length, 50);
-        const drafts = preview.tracks.slice(0, count);
-        let firstAddedTrackId: number | null = null;
-        for (const draft of drafts) {
-          const track = await findOrCreateTrackDraft(draft);
-          firstAddedTrackId ??= track.id;
-          await api<void>(`/api/playlists/${currentWorkspace.playlist.id}/tracks/${track.id}?userId=${auth.userId}`, { method: "POST" }, auth).catch((error) => {
-            if (!String((error as Error).message).includes("이미")) throw error;
-          });
-        }
-        const playlistTracks = await reloadPlaylistTracks(auth);
-        if (shouldAutoSelectAddedTrack && firstAddedTrackId && !workspaceRef.current.currentTrack) {
-          const firstAddedPlaylistTrack = playlistTracks.find((item) => item.trackId === firstAddedTrackId) || playlistTracks[0];
-          if (firstAddedPlaylistTrack) {
-            await selectTrack(firstAddedPlaylistTrack);
-          }
-        }
-        setNotice({ kind: "notice", message: `${drafts.length}곡을 BGM 바구니에 넣었다냥.` });
+        setPendingPlaylistImport({
+          ...preview,
+          count: previewCount,
+        });
+        setNotice({ kind: "notice", message: `플레이리스트 ${preview.trackCount}곡을 찾았다냥. 담을 곡 수를 확인해줘냥.` });
       } else {
         const track = await findOrCreateTrack(sourceUrl, sourceId);
         await api<void>(`/api/playlists/${currentWorkspace.playlist.id}/tracks/${track.id}?userId=${auth.userId}`, { method: "POST" }, auth).catch((error) => {
@@ -1531,6 +1549,50 @@ export default function App() {
       setNotice({ kind: "error", message: (error as Error).message });
       return false;
     }
+  }
+
+  function changePendingPlaylistCount(count: number) {
+    setPendingPlaylistImport((current) => {
+      if (!current) return current;
+      const normalized = Math.min(Math.max(Number(count) || 1, 1), current.tracks.length);
+      return { ...current, count: normalized };
+    });
+  }
+
+  async function confirmPlaylistImport() {
+    const current = pendingPlaylistImport;
+    const currentWorkspace = workspaceRef.current;
+    if (!current || !auth?.userId || !currentWorkspace.playlist) return;
+
+    try {
+      setNotice({ kind: "notice", message: "플레이리스트 곡을 BGM 바구니에 담는 중이냥..." });
+      const shouldAutoSelectAddedTrack = !workspaceRef.current.currentTrack;
+      const drafts = current.tracks.slice(0, current.count);
+      let firstAddedTrackId: number | null = null;
+      for (const draft of drafts) {
+        const track = await findOrCreateTrackDraft(draft);
+        firstAddedTrackId ??= track.id;
+        await api<void>(`/api/playlists/${currentWorkspace.playlist.id}/tracks/${track.id}?userId=${auth.userId}`, { method: "POST" }, auth).catch((error) => {
+          if (!String((error as Error).message).includes("이미")) throw error;
+        });
+      }
+      const playlistTracks = await reloadPlaylistTracks(auth);
+      if (shouldAutoSelectAddedTrack && firstAddedTrackId && !workspaceRef.current.currentTrack) {
+        const firstAddedPlaylistTrack = playlistTracks.find((item) => item.trackId === firstAddedTrackId) || playlistTracks[0];
+        if (firstAddedPlaylistTrack) {
+          await selectTrack(firstAddedPlaylistTrack);
+        }
+      }
+      setPendingPlaylistImport(null);
+      setNotice({ kind: "notice", message: `${drafts.length}곡을 BGM 바구니에 넣었다냥.` });
+    } catch (error) {
+      setNotice({ kind: "error", message: (error as Error).message });
+    }
+  }
+
+  function cancelPlaylistImport() {
+    setPendingPlaylistImport(null);
+    setNotice({ kind: "notice", message: "플레이리스트 담기를 멈췄다냥." });
   }
 
   async function selectTrack(playlistTrack: PlaylistTrack) {
@@ -1591,11 +1653,12 @@ export default function App() {
     const removingCurrent = currentWorkspace.currentTrack?.playlistTrackId === playlistTrack.playlistTrackId;
     const replacement = currentWorkspace.playlistTracks.find((item) => item.playlistTrackId !== playlistTrack.playlistTrackId) || null;
     try {
+      let updatedWork = currentWorkspace.work;
       if (removingCurrent && currentWorkspace.work) {
         if (replacement) {
-          await api<CreatorTask>(`/api/tasks/${currentWorkspace.work.id}/current-playlist-track/${replacement.playlistTrackId}?userId=${auth.userId}`, { method: "PATCH" }, auth);
+          updatedWork = await api<CreatorTask>(`/api/tasks/${currentWorkspace.work.id}/current-playlist-track/${replacement.playlistTrackId}?userId=${auth.userId}`, { method: "PATCH" }, auth);
         } else {
-          await api<CreatorTask>(`/api/tasks/${currentWorkspace.work.id}/current-playlist-track?userId=${auth.userId}`, { method: "DELETE" }, auth);
+          updatedWork = await api<CreatorTask>(`/api/tasks/${currentWorkspace.work.id}/current-playlist-track?userId=${auth.userId}`, { method: "DELETE" }, auth);
         }
       }
 
@@ -1603,7 +1666,12 @@ export default function App() {
       const playlistTracks = await reloadPlaylistTracks(auth);
       if (removingCurrent) {
         if (!replacement || !playlistTracks.length) {
-          updateWorkspaceState((current) => ({ ...current, currentTrack: null }));
+          updateWorkspaceState((current) => ({
+            ...current,
+            work: updatedWork,
+            tasks: updatedWork ? current.tasks.map((task) => (task.id === updatedWork?.id ? updatedWork : task)) : current.tasks,
+            currentTrack: null,
+          }));
           setPlaybackPosition(0);
           setTrackDuration(0);
           setIsPlaying(false);
@@ -1611,6 +1679,8 @@ export default function App() {
           const detail = await api<Track>(`/api/tracks/${replacement.trackId}`, {}, auth);
           updateWorkspaceState((current) => ({
             ...current,
+            work: updatedWork,
+            tasks: updatedWork ? current.tasks.map((task) => (task.id === updatedWork?.id ? updatedWork : task)) : current.tasks,
             currentTrack: { ...detail, playlistTrackId: replacement.playlistTrackId, playlistName: current.playlist?.name },
           }));
         }
@@ -1871,6 +1941,7 @@ export default function App() {
           volume={volume}
           youtubeVisible={youtubeVisible}
           canRegisterLinks={Boolean(workspace.playlist) && !loading}
+          pendingPlaylistImport={pendingPlaylistImport}
           onTogglePlay={() => {
             if (!workspace.currentTrack) return;
             setIsPlaying((value) => !value);
@@ -1890,6 +1961,9 @@ export default function App() {
           }}
           onSelectTrack={selectTrack}
           onRegisterLink={registerLink}
+          onPendingPlaylistCountChange={changePendingPlaylistCount}
+          onConfirmPlaylistImport={() => void confirmPlaylistImport()}
+          onCancelPlaylistImport={cancelPlaylistImport}
           onRemoveTrack={removeTrack}
           onShuffle={shufflePlaylist}
           onReorderTracks={reorderPlaylist}

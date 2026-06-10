@@ -1,4 +1,5 @@
 export const DEPLOYED_API_BASE_URL = "https://54-116-185-226.sslip.io";
+const configuredApiBaseUrl = import.meta.env.VITE_KUROSTEP_API_BASE_URL as string | undefined;
 
 const isGitHubPages = window.location.hostname.endsWith("github.io");
 const isTauriApp =
@@ -8,6 +9,7 @@ const isTauriApp =
 
 export const API_BASE_URL =
   window.localStorage.getItem("kurostep.apiBaseUrl") ||
+  configuredApiBaseUrl ||
   (isGitHubPages || isTauriApp ? DEPLOYED_API_BASE_URL : "http://localhost:8080");
 
 export const API_TIMEOUT_MS = 12000;

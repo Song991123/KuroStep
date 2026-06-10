@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,7 @@ import org.springframework.stereotype.Service;
 public class YouTubePlaylistImportService {
 
     private static final int MAX_IMPORT_COUNT = 50;
+    private static final int PREVIEW_IMPORT_COUNT = 10;
     private static final Pattern VIDEO_ID_PATTERN = Pattern.compile("\\\\\"videoId\\\\\"\\s*:\\s*\\\\\"([A-Za-z0-9_-]{11})\\\\\"");
     private static final Pattern WATCH_URL_PATTERN = Pattern.compile("(?:watch\\?v=|/watch\\?v=)([A-Za-z0-9_-]{11})");
 
@@ -50,8 +52,11 @@ public class YouTubePlaylistImportService {
         }
 
         List<TrackCreateRequest> tracks = videoIds.stream()
-                .limit(MAX_IMPORT_COUNT)
-                .map(this::toTrackDraft)
+                .limit(PREVIEW_IMPORT_COUNT)
+                .map(videoId -> CompletableFuture.supplyAsync(() -> toTrackDraft(videoId)))
+                .toList()
+                .stream()
+                .map(CompletableFuture::join)
                 .toList();
 
         return new YouTubePlaylistImportResponse(playlistId, tracks.size(), tracks);
@@ -119,7 +124,7 @@ public class YouTubePlaylistImportService {
         String fallbackTitle = "YouTube 작업곡 " + videoId;
 
         try {
-            String body = fetchText("https://noembed.com/embed?url=" + encode(sourceUrl));
+            String body = fetchText("https://noembed.com/embed?url=" + encode(sourceUrl), Duration.ofSeconds(3));
             JsonNode root = objectMapper.readTree(body);
             String title = textOrDefault(root, "title", fallbackTitle);
             String artist = textOrDefault(root, "author_name", "YouTube");
@@ -131,8 +136,12 @@ public class YouTubePlaylistImportService {
     }
 
     private String fetchText(String url) {
+        return fetchText(url, Duration.ofSeconds(8));
+    }
+
+    private String fetchText(String url, Duration timeout) {
         HttpRequest request = HttpRequest.newBuilder(URI.create(url))
-                .timeout(Duration.ofSeconds(8))
+                .timeout(timeout)
                 .header("User-Agent", "Mozilla/5.0 KuroStep/1.0")
                 .GET()
                 .build();
