@@ -1,5 +1,11 @@
-const DEFAULT_API_BASE_URL = window.location.hostname.endsWith("github.io")
-  ? "https://54-116-185-226.sslip.io"
+const DEPLOYED_API_BASE_URL = "https://54-116-185-226.sslip.io";
+const isGitHubPages = window.location.hostname.endsWith("github.io");
+const isTauriApp =
+  Boolean(window.__TAURI__) ||
+  window.location.protocol === "tauri:" ||
+  window.location.hostname === "tauri.localhost";
+const DEFAULT_API_BASE_URL = isGitHubPages || isTauriApp
+  ? DEPLOYED_API_BASE_URL
   : "http://localhost:8080";
 const API_BASE_URL = window.localStorage.getItem("kurostep.apiBaseUrl") || DEFAULT_API_BASE_URL;
 const YOUTUBE_APP_ORIGIN = window.location.origin;
