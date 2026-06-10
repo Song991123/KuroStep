@@ -10,4 +10,6 @@ public interface CreatorTaskRepository extends JpaRepository<CreatorTask, Long> 
     List<CreatorTask> findByUserId(Long userId);
 
     List<CreatorTask> findByUserIdAndTaskDate(Long userId, LocalDate taskDate);
+
+    List<CreatorTask> findByCurrentPlaylistTrackId(Long playlistTrackId);
 }

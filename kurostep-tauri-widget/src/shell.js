@@ -6,6 +6,7 @@ const shellWindow = document.querySelector("#shell-window");
 const shellFrame = document.querySelector("#shell-frame");
 const shellActions = document.querySelector("#shell-actions");
 let authenticated = false;
+let trustedContentOrigin = DEPLOYED_ORIGIN;
 
 if (view === "paw") {
   shellWindow.classList.add("paw");
@@ -20,10 +21,12 @@ function iconSvg(name) {
 
 function contentUrl() {
   const baseUrl = params.get("content") || DEPLOYED_BASE_URL;
-  const url = new URL(view === "paw" ? "paw.html" : "", baseUrl);
+  const url = new URL("", baseUrl);
+  url.searchParams.set("view", view);
   url.searchParams.set("embedded", "1");
   url.searchParams.set("shell", "tauri");
-  url.searchParams.set("v", "20260610-23");
+  url.searchParams.set("v", "20260610-react-01");
+  trustedContentOrigin = url.origin;
   return url.toString();
 }
 
@@ -39,7 +42,7 @@ function renderActions() {
   `;
 
   document.querySelector("#shell-settings")?.addEventListener("click", () => {
-    shellFrame.contentWindow?.postMessage({ source: "kurostep-shell", action: "open_settings" }, DEPLOYED_ORIGIN);
+    shellFrame.contentWindow?.postMessage({ source: "kurostep-shell", action: "open_settings" }, trustedContentOrigin);
   });
 
   document.querySelector("#shell-exit")?.addEventListener("click", exitApp);
@@ -98,7 +101,7 @@ async function handleNativeMessage(message) {
         command: message.command,
         message: error?.message || String(error),
       },
-      DEPLOYED_ORIGIN,
+      trustedContentOrigin,
     );
   }
 }
@@ -112,7 +115,7 @@ document.querySelector("#shell-drag-region")?.addEventListener("pointerdown", (e
 });
 
 window.addEventListener("message", (event) => {
-  if (event.origin !== DEPLOYED_ORIGIN) {
+  if (event.origin !== trustedContentOrigin) {
     return;
   }
   handleNativeMessage(event.data);

@@ -6,6 +6,8 @@
 **/.idea/
 **/build/
 **/dist/
+**/dist-react/
+**/.codex-screens/
 **/.gradle/
 **/.terraform/
 **/.terraform.lock.hcl

@@ -5,6 +5,11 @@ on:
     branches: ["main", "master"]
     paths:
       - "kurostep-tauri-widget/src/**"
+      - "kurostep-tauri-widget/src-react/**"
+      - "kurostep-tauri-widget/package.json"
+      - "kurostep-tauri-widget/package-lock.json"
+      - "kurostep-tauri-widget/index.html"
+      - "kurostep-tauri-widget/vite.config.js"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -32,10 +37,25 @@ jobs:
         with:
           enablement: true
 
-      - name: Upload static widget
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: kurostep-tauri-widget/package-lock.json
+
+      - name: Install widget dependencies
+        working-directory: kurostep-tauri-widget
+        run: npm ci
+
+      - name: Build React widget
+        working-directory: kurostep-tauri-widget
+        run: npm run build:react
+
+      - name: Upload React widget
         uses: actions/upload-pages-artifact@v3
         with:
-          path: kurostep-tauri-widget/src
+          path: kurostep-tauri-widget/dist-react
 
       - name: Deploy to GitHub Pages
         id: deployment
