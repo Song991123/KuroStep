@@ -64,7 +64,7 @@ KuroStep은 이 문제를 다음처럼 정의했습니다.
 
 ## 릴리즈
 
-현재 데스크톱 릴리즈 후보 버전은 `v0.2.1`입니다.
+현재 데스크톱 릴리즈 후보 버전은 `v0.2.2`입니다.
 
 - GitHub Pages: React UI 자동 배포
 - Backend CI: Spring Boot 테스트 자동 실행
