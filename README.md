@@ -6,6 +6,14 @@ KuroStep은 재택으로 작업하는 웹툰 작가, 일러스트레이터, 프�
 
 단순 Todo 앱이나 음악 플레이어가 아니라, `오늘 할 작업 - 작업용 플레이리스트 - 현재 곡 - 가사 라인 - 번역 메모`를 하나의 흐름으로 다룹니다. 검은 고양이가 책상 옆에서 조용히 작업 발자국을 따라온다는 콘셉트로, 데스크톱 위젯 형태의 사용 경험을 목표로 했습니다.
 
+## 화면 미리보기
+
+| 로그인 | 작업 발자국 |
+|---|---|
+| ![KuroStep 로그인 화면](docs/images/kurostep-login.png) | ![KuroStep 작업 발자국 위젯](docs/images/kurostep-paw.png) |
+
+현재 데스크톱 앱은 Tauri shell이 창 제어를 맡고, 내부 화면은 GitHub Pages에 배포된 React UI를 불러오는 하이브리드 구조입니다. 로그인 후 메인 BGM 턴테이블, 작업 발자국, 가사 오버레이 창을 함께 관리하는 방향으로 구성했습니다.
+
 ## 문제 정의
 
 창작 작업 중에는 "무엇을 해야 하는지"와 "어떤 음악을 들으며 어떤 감정을 붙잡았는지"가 함께 남는 경우가 많습니다. 하지만 일반 Todo 앱은 작업만 관리하고, 음악 앱은 재생만 담당하며, 가사 번역이나 메모는 별도 문서에 흩어집니다.
@@ -53,6 +61,19 @@ KuroStep은 이 문제를 다음처럼 정의했습니다.
 | React / TypeScript | Vanilla JS에서 커진 상태 관리와 재렌더 문제를 줄이고, 컴포넌트 단위로 UI를 안정화하기 위함 |
 | Tauri | 작업 중 항상 띄워둘 수 있는 가벼운 데스크톱 위젯 경험을 만들기 위함 |
 | Docker / EC2 / Terraform | 로컬 구현에서 끝내지 않고, 컨테이너 실행과 코드 기반 인프라 구성을 검증하기 위함 |
+
+## 릴리즈
+
+현재 데스크톱 릴리즈 후보 버전은 `v0.2.0`입니다.
+
+- GitHub Pages: React UI 자동 배포
+- Backend CI: Spring Boot 테스트 자동 실행
+- EC2 Deploy: 수동 실행 기반 API 서버 배포
+- Desktop Release: GitHub Actions에서 macOS/Windows Tauri 번들 생성
+
+데스크톱 릴리즈는 `.github/workflows/tauri-release.yml`에서 수동 실행하거나 `v*` 태그를 push하면 draft release로 생성됩니다. macOS와 Windows 빌드 산출물은 GitHub Releases에 첨부되는 구조입니다.
+
+로컬 macOS 환경에서는 React production build와 Tauri `.app` 번들 생성을 확인했습니다. Windows 설치 파일은 GitHub Actions의 Windows runner에서 생성하는 방식으로 분리했습니다.
 
 ## 시스템 구조
 
@@ -193,6 +214,7 @@ cd KuroStep
 
 - GitHub Pages로 React UI 배포
 - GitHub Actions로 백엔드 테스트 자동화
+- GitHub Actions로 macOS/Windows Tauri 데스크톱 번들 생성
 - Docker Compose로 Spring Boot + MySQL 실행 환경 구성
 - Terraform으로 EC2, 보안그룹, Elastic IP 구성
 - EC2에서 Spring Boot API, MySQL, Caddy 컨테이너 실행 확인
