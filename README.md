@@ -64,14 +64,14 @@ KuroStep은 이 문제를 다음처럼 정의했습니다.
 
 ## 릴리즈
 
-현재 데스크톱 릴리즈 후보 버전은 `v0.2.2`입니다.
+현재 데스크톱 릴리즈 버전은 `v0.2.3`입니다.
 
 - GitHub Pages: React UI 자동 배포
 - Backend CI: Spring Boot 테스트 자동 실행
 - EC2 Deploy: 수동 실행 기반 API 서버 배포
 - Desktop Release: GitHub Actions에서 macOS/Windows Tauri 번들 생성
 
-데스크톱 릴리즈는 `.github/workflows/tauri-release.yml`에서 수동 실행하거나 `v*` 태그를 push하면 draft release로 생성됩니다. macOS와 Windows 빌드 산출물은 GitHub Releases에 첨부되는 구조입니다.
+데스크톱 릴리즈는 `.github/workflows/tauri-release.yml`에서 수동 실행하거나 `v*` 태그를 push하면 GitHub Releases에 공개 생성됩니다. macOS `.dmg`와 Windows 설치 파일은 Release assets에 첨부되는 구조입니다.
 
 로컬 macOS 환경에서는 React production build와 Tauri `.app` 번들 생성을 확인했습니다. Windows 설치 파일은 GitHub Actions의 Windows runner에서 생성하는 방식으로 분리했습니다.
 
