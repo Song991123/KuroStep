@@ -1475,6 +1475,11 @@ export default function App() {
         const nextAuth = { ...me, accessToken: auth.accessToken };
         setAuth(nextAuth);
         writeJson("kurostep.auth", nextAuth);
+        void invokeNative("set_paw_visible", {
+          visible: pawWidgetVisible,
+          reload: true,
+          authJson: JSON.stringify(nextAuth),
+        }).catch(() => {});
         return refreshWorkspace(nextAuth);
       })
       .catch(() => {
@@ -1507,6 +1512,11 @@ export default function App() {
       });
       writeJson("kurostep.auth", session);
       setAuth(session);
+      void invokeNative("set_paw_visible", {
+        visible: pawWidgetVisible,
+        reload: true,
+        authJson: JSON.stringify(session),
+      }).catch(() => {});
     } catch (error) {
       window.localStorage.removeItem("kurostep.auth");
       setNotice({ kind: "error", message: authErrorMessage(error, mode) });
