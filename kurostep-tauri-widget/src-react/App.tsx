@@ -1529,8 +1529,7 @@ export default function App() {
         return refreshWorkspace(nextAuth);
       })
       .catch(() => {
-        window.localStorage.removeItem("kurostep.auth");
-        setAuth(null);
+        setNotice({ kind: "error", message: "세션 확인이 잠깐 막혔다냥. 로그인 상태는 유지해둘게냥." });
         setLoading(false);
       });
   }, [auth?.accessToken, refreshWorkspace]);
