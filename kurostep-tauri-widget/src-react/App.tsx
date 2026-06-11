@@ -694,6 +694,8 @@ function MusicPlayerWidget({
   const playerRef = useRef<YouTubePlayer | null>(null);
   const videoIdRef = useRef("");
   const timerRef = useRef<number | null>(null);
+  const lastPlaybackTimeRef = useRef(0);
+  const stalledTickRef = useRef(0);
   const videoId = getYoutubeVideoId(track);
   const displayedDuration = duration || track?.durationSeconds || 0;
   const pageCount = getPlaylistPageCount(tracks.length);
@@ -704,6 +706,8 @@ function MusicPlayerWidget({
     let cancelled = false;
     setPlayerError("");
     setPlayerReady(false);
+    lastPlaybackTimeRef.current = 0;
+    stalledTickRef.current = 0;
     if (!videoId) {
       playerRef.current?.pauseVideo?.();
       videoIdRef.current = "";
@@ -755,6 +759,7 @@ function MusicPlayerWidget({
                 onDurationChange(nextDuration);
               }
               if (event.data === window.YT.PlayerState.PLAYING) {
+                stalledTickRef.current = 0;
                 onPlayingChange(true);
                 return;
               }
@@ -812,9 +817,25 @@ function MusicPlayerWidget({
       const player = playerRef.current;
       const current = player?.getCurrentTime?.() || position;
       const nextDuration = Math.floor(player?.getDuration?.() || displayedDuration || 0);
+      const playerState = player?.getPlayerState?.();
       onPositionChange(current);
       if (nextDuration > 0) {
         onDurationChange(nextDuration);
+      }
+
+      const isProgressStuck = Math.abs(current - lastPlaybackTimeRef.current) < 0.15;
+      const isActuallyPlaying = window.YT && playerState === window.YT.PlayerState.PLAYING;
+      if (isProgressStuck && !isActuallyPlaying) {
+        stalledTickRef.current += 1;
+      } else {
+        stalledTickRef.current = 0;
+      }
+      lastPlaybackTimeRef.current = current;
+
+      if (stalledTickRef.current >= 5) {
+        stalledTickRef.current = 0;
+        setPlayerError("YouTube 재생이 다른 탭이나 기기에서 멈춘 것 같다냥. 다른 재생을 멈추고 다시 눌러줘냥.");
+        onPlayingChange(false);
       }
     }, PLAYBACK_TICK_MS);
 
