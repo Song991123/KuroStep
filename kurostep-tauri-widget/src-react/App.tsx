@@ -288,6 +288,17 @@ function formatDuration(seconds?: number) {
   return `${minutes}:${String(rest).padStart(2, "0")}`;
 }
 
+function formatSourceType(sourceType?: Track["sourceType"] | null) {
+  const labels: Record<Track["sourceType"], string> = {
+    YOUTUBE: "YouTube",
+    SPOTIFY: "Spotify",
+    SOUNDCLOUD: "SoundCloud",
+    LOCAL_FILE: "Local",
+    EXTERNAL_URL: "External",
+  };
+  return sourceType ? labels[sourceType] || sourceType : "YouTube";
+}
+
 function formatTimestamp(ms?: number | null) {
   if (!Number.isFinite(Number(ms))) {
     return "--:--";
@@ -912,9 +923,7 @@ function MusicPlayerWidget({
             <h3 id="now-playing-title">{track?.title || "아직 담긴 곡이 없다냥"}</h3>
             <p>{track?.artist || "YouTube 링크를 넣어줘냥"} · 오늘의 작업 BGM</p>
             <div className="track-meta" aria-label="곡 상세">
-              <span>{track?.sourceType || "YOUTUBE"}</span>
-              <span>{track?.sourceId || "source id 없음"}</span>
-              <span>{formatDuration(duration)}</span>
+              <span>{formatSourceType(track?.sourceType)}</span>
             </div>
           </div>
         </div>

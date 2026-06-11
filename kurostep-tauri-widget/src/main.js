@@ -2428,8 +2428,6 @@ function playerWidget(track) {
           <p>${escapeHtml(track.artist || "Unknown")} · ${escapeHtml(track.playlistName || "No playlist")}</p>
           <div class="track-meta" aria-label="곡 상세">
             <span>${escapeHtml(sourceLabel)}</span>
-            <span>${escapeHtml(track.sourceId || "source id 없음")}</span>
-            <span>${escapeHtml(formatDuration(duration))}</span>
           </div>
         </div>
       </div>
