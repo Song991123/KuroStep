@@ -1233,6 +1233,9 @@ export default function App() {
 
   useEffect(() => {
     authRef.current = auth;
+    if (shellView !== "main") {
+      return;
+    }
     postShellMessage({
       type: "auth_state",
       authenticated: Boolean(auth),
@@ -1277,6 +1280,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (shellView !== "main") {
+      return;
+    }
     if (!auth) {
       void invokeNative("set_paw_visible", { visible: false, reload: false, clearAuth: true }).catch(() => {});
       void invokeNative("set_lyrics_visible", {
@@ -1288,12 +1294,15 @@ export default function App() {
     }
     void invokeNative("set_paw_visible", {
       visible: pawWidgetVisible,
-      reload: true,
+      reload: false,
       authJson: JSON.stringify(auth),
     }).catch(() => {});
   }, [auth, pawWidgetVisible]);
 
   useEffect(() => {
+    if (shellView !== "main") {
+      return;
+    }
     if (!auth) return;
     void invokeNative("set_lyrics_visible", {
       visible: lyricsOverlayVisible,
@@ -1521,11 +1530,13 @@ export default function App() {
         const nextAuth = { ...me, accessToken: auth.accessToken };
         setAuth(nextAuth);
         writeJson("kurostep.auth", nextAuth);
-        void invokeNative("set_paw_visible", {
-          visible: pawWidgetVisible,
-          reload: true,
-          authJson: JSON.stringify(nextAuth),
-        }).catch(() => {});
+        if (shellView === "main") {
+          void invokeNative("set_paw_visible", {
+            visible: pawWidgetVisible,
+            reload: false,
+            authJson: JSON.stringify(nextAuth),
+          }).catch(() => {});
+        }
         return refreshWorkspace(nextAuth);
       })
       .catch(() => {
@@ -1562,11 +1573,13 @@ export default function App() {
       setPawWidgetVisible(true);
       setLyricsOverlayVisible(true);
       setAuth(session);
-      void invokeNative("set_paw_visible", {
-        visible: true,
-        reload: true,
-        authJson: JSON.stringify(session),
-      }).catch(() => {});
+      if (shellView === "main") {
+        void invokeNative("set_paw_visible", {
+          visible: true,
+          reload: false,
+          authJson: JSON.stringify(session),
+        }).catch(() => {});
+      }
     } catch (error) {
       window.localStorage.removeItem("kurostep.auth");
       setNotice({ kind: "error", message: authErrorMessage(error, mode) });
