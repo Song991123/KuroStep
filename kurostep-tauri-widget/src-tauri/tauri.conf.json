@@ -27,7 +27,7 @@
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "center": true,
-        "shadow": true
+        "shadow": false
       },
       {
         "label": "lyrics",
@@ -61,7 +61,7 @@
         "skipTaskbar": true,
         "visible": false,
         "center": true,
-        "shadow": true
+        "shadow": false
       }
     ],
     "security": {

@@ -1216,7 +1216,7 @@ export default function App() {
 
   useEffect(() => {
     if (!auth) return;
-    void invokeNative("set_paw_visible", { visible: pawWidgetVisible }).catch(() => {});
+    void invokeNative("set_paw_visible", { visible: pawWidgetVisible, reload: true }).catch(() => {});
   }, [auth, pawWidgetVisible]);
 
   useEffect(() => {

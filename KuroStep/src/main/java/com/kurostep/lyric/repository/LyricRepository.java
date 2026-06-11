@@ -11,4 +11,10 @@ public interface LyricRepository extends JpaRepository<Lyric, Long> {
     List<Lyric> findByTrackId(Long trackId);
 
     Optional<Lyric> findByTrackIdAndProvider(Long trackId, LyricsProviderType provider);
+
+    List<Lyric> findByTrackIdAndProviderAndProviderLyricsId(
+            Long trackId,
+            LyricsProviderType provider,
+            String providerLyricsId
+    );
 }

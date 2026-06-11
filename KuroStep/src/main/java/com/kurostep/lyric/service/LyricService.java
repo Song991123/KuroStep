@@ -50,6 +50,11 @@ public class LyricService {
         Track track = trackRepository.findById(trackId)
                 .orElseThrow(() -> new NotFoundException("곡을 찾을 수 없습니다."));
 
+        Lyric existingLyric = findExistingLyric(trackId, LyricsProviderType.LRCLIB, request.providerLyricsId());
+        if (existingLyric != null) {
+            return toResponse(existingLyric);
+        }
+
         Lyric lyric = Lyric.create(
                 track,
                 LyricsProviderType.LRCLIB,
@@ -75,6 +80,16 @@ public class LyricService {
                 .orElseThrow(() -> new NotFoundException("곡을 찾을 수 없습니다."));
 
         LyricsProviderResult result = lyricsProviderClient.fetch(track);
+        Lyric existingLyric = findExistingLyric(trackId, LyricsProviderType.LRCLIB, result.providerLyricsId());
+        if (existingLyric != null) {
+            return new LyricFetchResponse(
+                    toResponse(existingLyric),
+                    "lrclib-" + trackId + "-" + result.providerLyricsId(),
+                    result.plainLyrics(),
+                    result.syncedLyrics()
+            );
+        }
+
         List<LyricLineRefCreateRequest> lineRefs = lyricLineRefParser.parse(result.sourceText());
         if (lineRefs.isEmpty()) {
             throw new NotFoundException("저장할 수 있는 가사 라인을 찾을 수 없습니다.");
@@ -116,5 +131,17 @@ public class LyricService {
                 .toList();
 
         return LyricResponse.of(lyric, lines);
+    }
+
+    private Lyric findExistingLyric(Long trackId, LyricsProviderType provider, String providerLyricsId) {
+        if (providerLyricsId != null && !providerLyricsId.isBlank()) {
+            return lyricRepository
+                    .findByTrackIdAndProviderAndProviderLyricsId(trackId, provider, providerLyricsId)
+                    .stream()
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        return lyricRepository.findByTrackIdAndProvider(trackId, provider).orElse(null);
     }
 }
