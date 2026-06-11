@@ -474,6 +474,21 @@ function AuthScreen({
   );
 }
 
+function PawWaitingScreen() {
+  return (
+    <section className="auth-screen paw-waiting" aria-labelledby="paw-waiting-title">
+      <div className="auth-brand">
+        <span className="auth-mark" aria-hidden="true">
+          <img src={pawNeutral} alt="" />
+        </span>
+        <p className="auth-eyebrow">작업 발자국</p>
+        <h1 id="paw-waiting-title">메인 작업실을 기다린다냥</h1>
+        <p>메인 창에서 로그인하면 오늘 할 일과 가사 메모가 여기로 조용히 열린다냥.</p>
+      </div>
+    </section>
+  );
+}
+
 function TaskList({
   tasks,
   selectedId,
@@ -1204,6 +1219,15 @@ export default function App() {
       authJson: auth ? JSON.stringify(auth) : null,
     });
   }, [auth, pawWidgetVisible]);
+
+  useEffect(() => {
+    function syncAuthFromStorage(event: StorageEvent) {
+      if (event.key !== "kurostep.auth") return;
+      setAuth(readJson<AuthSession | null>("kurostep.auth", null));
+    }
+    window.addEventListener("storage", syncAuthFromStorage);
+    return () => window.removeEventListener("storage", syncAuthFromStorage);
+  }, []);
 
   useEffect(() => {
     workspaceRef.current = workspace;
@@ -1995,6 +2019,14 @@ export default function App() {
   }
 
   const visibleNotice = loading ? { kind: "notice" as const, message: "작업실 불러오는 중이냥..." } : notice;
+
+  if (shellView === "paw" && !auth) {
+    return (
+      <WidgetShell title="작업 발자국" rightAction="none">
+        <PawWaitingScreen />
+      </WidgetShell>
+    );
+  }
 
   if (!auth) {
     const showAuthNotice = visibleNotice.kind === "error" || busy;

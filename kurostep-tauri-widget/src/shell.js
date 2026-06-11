@@ -7,6 +7,7 @@ const shellFrame = document.querySelector("#shell-frame");
 const shellActions = document.querySelector("#shell-actions");
 let authenticated = false;
 let trustedContentOrigin = DEPLOYED_ORIGIN;
+let pawPopup = null;
 
 if (view === "paw") {
   shellWindow.classList.add("paw");
@@ -25,7 +26,7 @@ function contentUrl() {
   url.searchParams.set("view", view);
   url.searchParams.set("embedded", "1");
   url.searchParams.set("shell", "tauri");
-  url.searchParams.set("v", "20260611-react-09");
+  url.searchParams.set("v", "20260611-react-10");
   trustedContentOrigin = url.origin;
   return url.toString();
 }
@@ -76,6 +77,28 @@ async function exitApp() {
   }
 }
 
+function openPawPopup() {
+  if (view !== "main") {
+    return;
+  }
+  if (pawPopup && !pawPopup.closed) {
+    pawPopup.focus?.();
+    return;
+  }
+  pawPopup = window.open(
+    "shell.html?view=paw",
+    "kurostep-paw",
+    "popup,width=380,height=520,resizable=no",
+  );
+}
+
+function closePawPopup() {
+  if (pawPopup && !pawPopup.closed) {
+    pawPopup.close();
+  }
+  pawPopup = null;
+}
+
 async function handleNativeMessage(message) {
   if (!message || message.source !== "kurostep-content") {
     return;
@@ -85,28 +108,23 @@ async function handleNativeMessage(message) {
     authenticated = Boolean(message.authenticated);
     renderActions();
     if (message.authenticated && message.pawVisible !== false && view === "main") {
-      try {
-        await invokeNative("set_paw_visible", {
-          visible: true,
-          reload: true,
-          authJson: message.authJson,
-        });
-      } catch (error) {
-        shellFrame.contentWindow?.postMessage(
-          {
-            source: "kurostep-shell",
-            type: "native_error",
-            command: "set_paw_visible",
-            message: error?.message || String(error),
-          },
-          trustedContentOrigin,
-        );
-      }
+      openPawPopup();
+    } else if (!message.authenticated && view === "main") {
+      closePawPopup();
     }
     return;
   }
 
   if (message.type !== "native_command") {
+    return;
+  }
+
+  if (message.command === "set_paw_visible") {
+    if (message.payload?.visible) {
+      openPawPopup();
+    } else if (authenticated || message.payload?.clearAuth) {
+      closePawPopup();
+    }
     return;
   }
 
