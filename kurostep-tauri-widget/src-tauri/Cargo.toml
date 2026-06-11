@@ -9,6 +9,10 @@ edition = "2021"
 name = "kurostep_tauri_widget_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[[bin]]
+name = "KuroStep"
+path = "src/main.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

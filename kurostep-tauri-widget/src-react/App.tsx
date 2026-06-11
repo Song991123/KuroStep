@@ -104,8 +104,12 @@ declare global {
 const emptyCounts: Record<TaskStatus, number> = { TODO: 0, DOING: 0, DONE: 0 };
 let youtubeApiPromise: Promise<YouTubeApi> | null = null;
 
+function isYoutubeApiReady(api?: YouTubeApi) {
+  return Boolean(api?.Player && api.PlayerState);
+}
+
 function loadYoutubeIframeApi() {
-  if (window.YT?.Player) {
+  if (isYoutubeApiReady(window.YT)) {
     return Promise.resolve(window.YT);
   }
 
@@ -114,24 +118,64 @@ function loadYoutubeIframeApi() {
   }
 
   youtubeApiPromise = new Promise((resolve, reject) => {
+    let settled = false;
+    let readyTimer: number | undefined;
+    let timeoutTimer: number | undefined;
+
+    const cleanup = () => {
+      settled = true;
+      window.clearInterval(readyTimer);
+      window.clearTimeout(timeoutTimer);
+    };
+
+    const resolveWhenReady = () => {
+      if (!isYoutubeApiReady(window.YT)) {
+        return false;
+      }
+      cleanup();
+      resolve(window.YT);
+      return true;
+    };
+
     const previousReady = window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady = () => {
       previousReady?.();
-      if (window.YT) {
-        resolve(window.YT);
-      }
+      resolveWhenReady();
     };
+
+    readyTimer = window.setInterval(() => {
+      resolveWhenReady();
+    }, 100);
+
+    timeoutTimer = window.setTimeout(() => {
+      if (settled || resolveWhenReady()) return;
+      cleanup();
+      youtubeApiPromise = null;
+      reject(new Error("YouTube 플레이어 API가 아직 준비되지 않았어냥."));
+    }, 10000);
+
+    if (resolveWhenReady()) {
+      return;
+    }
 
     const existing = document.querySelector<HTMLScriptElement>("script[src='https://www.youtube.com/iframe_api']");
     if (existing) {
-      existing.addEventListener("error", () => reject(new Error("YouTube 플레이어 API를 못 불러왔어냥.")), { once: true });
+      existing.addEventListener("error", () => {
+        cleanup();
+        youtubeApiPromise = null;
+        reject(new Error("YouTube 플레이어 API를 못 불러왔어냥."));
+      }, { once: true });
       return;
     }
 
     const script = document.createElement("script");
     script.src = "https://www.youtube.com/iframe_api";
     script.async = true;
-    script.onerror = () => reject(new Error("YouTube 플레이어 API를 못 불러왔어냥."));
+    script.onerror = () => {
+      cleanup();
+      youtubeApiPromise = null;
+      reject(new Error("YouTube 플레이어 API를 못 불러왔어냥."));
+    };
     document.head.appendChild(script);
   });
 
@@ -647,16 +691,18 @@ function MusicPlayerWidget({
     loadYoutubeIframeApi()
       .then((YT) => {
         if (cancelled) return;
-        if (playerRef.current) {
+        if (playerRef.current?.cueVideoById) {
           videoIdRef.current = videoId;
+          setPlayerReady(true);
           playerRef.current.cueVideoById({ videoId, startSeconds: 0 });
           onPositionChange(0);
           if (isPlaying) {
-            window.setTimeout(() => playerRef.current?.playVideo(), 150);
+            window.setTimeout(() => playerRef.current?.playVideo?.(), 150);
           }
           return;
         }
 
+        playerRef.current = null;
         videoIdRef.current = videoId;
         playerRef.current = new YT.Player("youtube-player", {
           videoId,
@@ -671,13 +717,13 @@ function MusicPlayerWidget({
             onReady: (event) => {
               if (cancelled) return;
               setPlayerReady(true);
-              event.target.setVolume(volume);
+              event.target.setVolume?.(volume);
               const nextDuration = Math.floor(event.target.getDuration?.() || 0);
               if (nextDuration > 0) {
                 onDurationChange(nextDuration);
               }
               if (isPlaying) {
-                event.target.playVideo();
+                event.target.playVideo?.();
               }
             },
             onStateChange: (event) => {
@@ -696,8 +742,8 @@ function MusicPlayerWidget({
               }
               if (event.data === window.YT.PlayerState.ENDED) {
                 if (repeatMode) {
-                  playerRef.current?.seekTo(0, true);
-                  playerRef.current?.playVideo();
+                  playerRef.current?.seekTo?.(0, true);
+                  playerRef.current?.playVideo?.();
                 } else {
                   onMoveTrack(1, true);
                 }
@@ -721,15 +767,15 @@ function MusicPlayerWidget({
 
   useEffect(() => {
     if (!playerRef.current || !videoId) return;
-    playerRef.current.setVolume(volume);
+    playerRef.current.setVolume?.(volume);
   }, [volume, videoId]);
 
   useEffect(() => {
     if (!playerRef.current || !videoId) return;
     if (isPlaying) {
-      playerRef.current.playVideo();
+      playerRef.current.playVideo?.();
     } else {
-      playerRef.current.pauseVideo();
+      playerRef.current.pauseVideo?.();
     }
   }, [isPlaying, videoId]);
 
@@ -762,14 +808,14 @@ function MusicPlayerWidget({
     const rect = event.currentTarget.getBoundingClientRect();
     const ratio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0;
     const seconds = displayedDuration * Math.min(Math.max(ratio, 0), 1);
-    playerRef.current?.seekTo(seconds, true);
+    playerRef.current?.seekTo?.(seconds, true);
     onSeek(seconds);
   }
 
   function skipBy(seconds: number) {
     const max = displayedDuration > 0 ? Math.max(displayedDuration - 1, 0) : 24 * 60 * 60;
     const nextSeconds = Math.min(Math.max(position + seconds, 0), max);
-    playerRef.current?.seekTo(nextSeconds, true);
+    playerRef.current?.seekTo?.(nextSeconds, true);
     onSkip(seconds);
   }
 
@@ -1560,7 +1606,7 @@ export default function App() {
 
   async function registerLink(url: string) {
     const currentWorkspace = workspaceRef.current;
-    const shouldAutoSelectAddedTrack = !workspace.currentTrack;
+    const shouldAutoSelectAddedTrack = !currentWorkspace.currentTrack;
     if (!auth?.userId || !currentWorkspace.playlist) {
       setNotice({ kind: "error", message: "BGM 바구니가 아직 준비 중이다냥. 잠깐 뒤 다시 눌러줘냥." });
       return false;
@@ -2038,23 +2084,6 @@ export default function App() {
           onSelectLine={setSelectedLine}
           onSavePiece={saveCurrentLyricPiece}
         />
-        {pawWidgetVisible && !isEmbeddedContent && (
-          <aside className="detached-widget paw-detached-widget" aria-label="작업 발자국 위젯">
-            <TaskPawWidget
-              workspace={workspace}
-              savedLyricPieces={savedLyricPieces}
-              selectedLine={selectedLine}
-              translation={translation}
-              onSelectTask={(task) => updateWorkspaceState((current) => ({ ...current, work: task }))}
-              onCreateTask={createTask}
-              onUpdateStatus={updateStatus}
-              onDeleteTask={deleteTask}
-              onSaveMemo={saveMemo}
-              onDeleteMemo={deleteMemo}
-              onDeletePiece={deleteSavedLyricPiece}
-            />
-          </aside>
-        )}
       </div>
     </WidgetShell>
   );
