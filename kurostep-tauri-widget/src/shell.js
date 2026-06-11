@@ -5,6 +5,7 @@ const view = params.get("view") || "main";
 const shellWindow = document.querySelector("#shell-window");
 const shellFrame = document.querySelector("#shell-frame");
 const shellActions = document.querySelector("#shell-actions");
+const shellTitleText = document.querySelector("#shell-title-text");
 let authenticated = false;
 let trustedContentOrigin = DEPLOYED_ORIGIN;
 let pawPopup = null;
@@ -12,6 +13,17 @@ let pawPopup = null;
 if (view === "paw") {
   shellWindow.classList.add("paw");
 }
+
+const shellTitles = {
+  main: "KuroStep",
+  paw: "작업 발자국",
+  lyrics: "가사",
+};
+
+if (shellTitleText) {
+  shellTitleText.textContent = shellTitles[view] || "KuroStep";
+}
+document.title = shellTitles[view] || "KuroStep";
 
 function iconSvg(name) {
   const icons = {
@@ -26,7 +38,7 @@ function contentUrl() {
   url.searchParams.set("view", view);
   url.searchParams.set("embedded", "1");
   url.searchParams.set("shell", "tauri");
-  url.searchParams.set("v", "20260611-react-16");
+  url.searchParams.set("v", "20260611-react-17");
   trustedContentOrigin = url.origin;
   return url.toString();
 }

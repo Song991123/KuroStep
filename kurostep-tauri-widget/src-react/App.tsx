@@ -2098,7 +2098,6 @@ export default function App() {
   if (shellView === "paw") {
     return (
       <WidgetShell title="작업 발자국" rightAction="none">
-        <p className={`app-status ${visibleNotice.kind === "error" ? "error" : ""}`} id="app-status">{visibleNotice.message}</p>
         <TaskPawWidget
           workspace={workspace}
           savedLyricPieces={savedLyricPieces}
