@@ -25,7 +25,7 @@ function contentUrl() {
   url.searchParams.set("view", view);
   url.searchParams.set("embedded", "1");
   url.searchParams.set("shell", "tauri");
-  url.searchParams.set("v", "20260611-react-05");
+  url.searchParams.set("v", "20260611-react-06");
   trustedContentOrigin = url.origin;
   return url.toString();
 }
@@ -61,9 +61,9 @@ async function startDrag() {
 }
 
 async function invokeNative(command, payload = {}) {
-  const invoke = window.__TAURI__?.core?.invoke;
+  const invoke = window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke;
   if (!invoke) {
-    return null;
+    throw new Error("Tauri invoke bridge is not available");
   }
   return invoke(command, payload);
 }
@@ -84,6 +84,25 @@ async function handleNativeMessage(message) {
   if (message.type === "auth_state") {
     authenticated = Boolean(message.authenticated);
     renderActions();
+    if (message.authenticated && message.pawVisible && view === "main") {
+      try {
+        await invokeNative("set_paw_visible", {
+          visible: true,
+          reload: true,
+          authJson: message.authJson,
+        });
+      } catch (error) {
+        shellFrame.contentWindow?.postMessage(
+          {
+            source: "kurostep-shell",
+            type: "native_error",
+            command: "set_paw_visible",
+            message: error?.message || String(error),
+          },
+          trustedContentOrigin,
+        );
+      }
+    }
     return;
   }
 

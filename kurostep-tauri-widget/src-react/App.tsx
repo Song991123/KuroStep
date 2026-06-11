@@ -1197,8 +1197,13 @@ export default function App() {
 
   useEffect(() => {
     authRef.current = auth;
-    postShellMessage({ type: "auth_state", authenticated: Boolean(auth) });
-  }, [auth]);
+    postShellMessage({
+      type: "auth_state",
+      authenticated: Boolean(auth),
+      pawVisible: pawWidgetVisible,
+      authJson: auth ? JSON.stringify(auth) : null,
+    });
+  }, [auth, pawWidgetVisible]);
 
   useEffect(() => {
     workspaceRef.current = workspace;
@@ -1212,9 +1217,14 @@ export default function App() {
 
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
-      const data = event.data as { source?: string; action?: string };
+      const data = event.data as { source?: string; action?: string; type?: string; command?: string; message?: string };
       if (data?.source === "kurostep-shell" && data.action === "open_settings") {
         setSettingsOpen(true);
+        return;
+      }
+      if (data?.source === "kurostep-shell" && data.type === "native_error") {
+        const commandLabel = data.command ? ` (${data.command})` : "";
+        setNotice({ kind: "error", message: `앱 창 명령을 못 보냈다냥${commandLabel}: ${data.message || "알 수 없는 오류"}` });
       }
     }
     window.addEventListener("message", handleShellMessage);
