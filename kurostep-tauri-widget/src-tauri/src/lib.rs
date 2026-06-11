@@ -34,12 +34,31 @@ fn set_lyrics_visible(
 }
 
 #[tauri::command]
-fn set_paw_visible(app: tauri::AppHandle, visible: bool, reload: Option<bool>) -> Result<(), String> {
+fn set_paw_visible(
+    app: tauri::AppHandle,
+    visible: bool,
+    reload: Option<bool>,
+    auth_json: Option<String>,
+    clear_auth: Option<bool>,
+) -> Result<(), String> {
     let paw = app
         .get_webview_window("paw")
         .ok_or_else(|| "paw window not found".to_string())?;
 
     let is_visible = paw.is_visible().map_err(|error| error.to_string())?;
+
+    if clear_auth.unwrap_or(false) {
+        paw.eval("window.localStorage.removeItem('kurostep.auth')")
+            .map_err(|error| error.to_string())?;
+    }
+
+    if let Some(auth_json) = auth_json {
+        let auth_literal = serde_json::to_string(&auth_json).map_err(|error| error.to_string())?;
+        paw.eval(&format!(
+            "window.localStorage.setItem('kurostep.auth', {auth_literal})"
+        ))
+        .map_err(|error| error.to_string())?;
+    }
 
     if visible && reload.unwrap_or(false) {
         paw.eval("window.location.reload()")

@@ -1215,8 +1215,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!auth) return;
-    void invokeNative("set_paw_visible", { visible: pawWidgetVisible, reload: true }).catch(() => {});
+    if (!auth) {
+      void invokeNative("set_paw_visible", { visible: false, reload: false, clear_auth: true }).catch(() => {});
+      return;
+    }
+    void invokeNative("set_paw_visible", {
+      visible: pawWidgetVisible,
+      reload: true,
+      auth_json: JSON.stringify(auth),
+    }).catch(() => {});
   }, [auth, pawWidgetVisible]);
 
   useEffect(() => {
@@ -1489,6 +1496,7 @@ export default function App() {
 
   function logout() {
     window.localStorage.removeItem("kurostep.auth");
+    void invokeNative("set_paw_visible", { visible: false, reload: false, clear_auth: true }).catch(() => {});
     setAuth(null);
     updateWorkspaceState({ tasks: [], work: null, counts: { ...emptyCounts }, playlist: null, playlistTracks: [], currentTrack: null });
     setIsPlaying(false);
