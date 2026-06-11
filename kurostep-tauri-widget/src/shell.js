@@ -25,7 +25,7 @@ function contentUrl() {
   url.searchParams.set("view", view);
   url.searchParams.set("embedded", "1");
   url.searchParams.set("shell", "tauri");
-  url.searchParams.set("v", "20260611-react-08");
+  url.searchParams.set("v", "20260611-react-09");
   trustedContentOrigin = url.origin;
   return url.toString();
 }
@@ -84,7 +84,7 @@ async function handleNativeMessage(message) {
   if (message.type === "auth_state") {
     authenticated = Boolean(message.authenticated);
     renderActions();
-    if (message.authenticated && message.pawVisible && view === "main") {
+    if (message.authenticated && message.pawVisible !== false && view === "main") {
       try {
         await invokeNative("set_paw_visible", {
           visible: true,
