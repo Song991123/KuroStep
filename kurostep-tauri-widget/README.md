@@ -29,7 +29,7 @@ npm run build:react
 npm run tauri:build
 ```
 
-현재 릴리즈 후보 버전은 `0.2.0`입니다. macOS/Windows 배포 번들은 루트의 `.github/workflows/tauri-release.yml`에서 GitHub Actions로 생성합니다.
+현재 릴리즈 후보 버전은 `0.2.1`입니다. macOS/Windows 배포 번들은 루트의 `.github/workflows/tauri-release.yml`에서 GitHub Actions로 생성합니다.
 
 ## Rust 설치
 

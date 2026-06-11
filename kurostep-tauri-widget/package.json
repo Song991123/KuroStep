@@ -1,11 +1,12 @@
 {
   "name": "kurostep-tauri-widget",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
+    "tauri": "tauri",
     "dev:react": "vite --host 127.0.0.1",
     "build:react": "vite build",
     "tauri:dev": "tauri dev",
