@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 #[derive(Clone, Serialize)]
 struct LyricPayload {
@@ -41,9 +41,7 @@ fn set_paw_visible(
     auth_json: Option<String>,
     clear_auth: Option<bool>,
 ) -> Result<(), String> {
-    let paw = app
-        .get_webview_window("paw")
-        .ok_or_else(|| "paw window not found".to_string())?;
+    let paw = get_or_create_paw_window(&app)?;
 
     let is_visible = paw.is_visible().map_err(|error| error.to_string())?;
 
@@ -72,6 +70,27 @@ fn set_paw_visible(
     }
 
     Ok(())
+}
+
+fn get_or_create_paw_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
+    if let Some(paw) = app.get_webview_window("paw") {
+        return Ok(paw);
+    }
+
+    WebviewWindowBuilder::new(app, "paw", WebviewUrl::App("shell.html?view=paw".into()))
+        .title("KuroStep Paw Notes")
+        .inner_size(380.0, 520.0)
+        .min_inner_size(360.0, 440.0)
+        .resizable(false)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .center()
+        .shadow(false)
+        .visible(false)
+        .build()
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]

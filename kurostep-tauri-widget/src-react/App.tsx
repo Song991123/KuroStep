@@ -197,7 +197,14 @@ function postShellMessage(message: Record<string, unknown>) {
 async function invokeNative(command: string, payload: Record<string, unknown> = {}) {
   const invoke = window.__TAURI__?.core?.invoke;
   if (invoke) {
-    return invoke(command, payload);
+    try {
+      return await invoke(command, payload);
+    } catch (error) {
+      if (!postShellMessage({ type: "native_command", command, payload })) {
+        throw error;
+      }
+      return null;
+    }
   }
   if (postShellMessage({ type: "native_command", command, payload })) {
     return null;
