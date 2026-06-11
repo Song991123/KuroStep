@@ -8,13 +8,12 @@ const isTauriApp =
   window.location.hostname === "tauri.localhost";
 
 const storedApiBaseUrl = window.localStorage.getItem("kurostep.apiBaseUrl") || "";
-const shouldIgnoreStoredApiBaseUrl =
-  (isGitHubPages || isTauriApp) &&
-  (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?/i.test(storedApiBaseUrl) ||
-    /^http:\/\/54-116-185-226\.sslip\.io/i.test(storedApiBaseUrl));
+const canUseStoredApiBaseUrl =
+  Boolean(storedApiBaseUrl) &&
+  (!(isGitHubPages || isTauriApp) || storedApiBaseUrl === DEPLOYED_API_BASE_URL);
 
 export const API_BASE_URL =
-  (shouldIgnoreStoredApiBaseUrl ? "" : storedApiBaseUrl) ||
+  (canUseStoredApiBaseUrl ? storedApiBaseUrl : "") ||
   configuredApiBaseUrl ||
   (isGitHubPages || isTauriApp ? DEPLOYED_API_BASE_URL : "http://localhost:8080");
 
