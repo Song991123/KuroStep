@@ -195,6 +195,10 @@ function postShellMessage(message: Record<string, unknown>) {
 }
 
 async function invokeNative(command: string, payload: Record<string, unknown> = {}) {
+  if (isEmbeddedContent && postShellMessage({ type: "native_command", command, payload })) {
+    return null;
+  }
+
   const invoke = window.__TAURI__?.core?.invoke;
   if (invoke) {
     try {
