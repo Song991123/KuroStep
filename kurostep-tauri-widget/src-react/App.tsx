@@ -1556,6 +1556,7 @@ export default function App() {
         method: "POST",
         body: JSON.stringify(mode === "signup" ? data : { email: data.email, password: data.password }),
       });
+      window.localStorage.removeItem("kurostep.apiBaseUrl");
       writeJson("kurostep.auth", session);
       writeJson("kurostep.pawWidgetVisible", true);
       writeJson("kurostep.lyricsOverlayVisible", true);
