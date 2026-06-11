@@ -26,7 +26,7 @@ function contentUrl() {
   url.searchParams.set("view", view);
   url.searchParams.set("embedded", "1");
   url.searchParams.set("shell", "tauri");
-  url.searchParams.set("v", "20260611-react-11");
+  url.searchParams.set("v", "20260611-react-12");
   trustedContentOrigin = url.origin;
   return url.toString();
 }
@@ -69,6 +69,15 @@ async function invokeNative(command, payload = {}) {
   return invoke(command, payload);
 }
 
+async function setNativePawVisible(visible, payload = {}) {
+  try {
+    await invokeNative("set_paw_visible", { ...payload, visible });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function exitApp() {
   try {
     await invokeNative("exit_app");
@@ -107,10 +116,19 @@ async function handleNativeMessage(message) {
   if (message.type === "auth_state") {
     authenticated = Boolean(message.authenticated);
     renderActions();
-    if (message.authenticated && message.pawVisible !== false && view === "main") {
-      openPawPopup();
-    } else if (!message.authenticated && view === "main") {
-      closePawPopup();
+    if (view === "main") {
+      const didUseNative = await setNativePawVisible(Boolean(message.authenticated && message.pawVisible !== false), {
+        reload: false,
+        authJson: message.authJson || null,
+        clearAuth: !message.authenticated,
+      });
+      if (!didUseNative) {
+        if (message.authenticated && message.pawVisible !== false) {
+          openPawPopup();
+        } else {
+          closePawPopup();
+        }
+      }
     }
     return;
   }
@@ -120,10 +138,14 @@ async function handleNativeMessage(message) {
   }
 
   if (message.command === "set_paw_visible") {
-    if (message.payload?.visible) {
-      openPawPopup();
-    } else if (authenticated || message.payload?.clearAuth) {
-      closePawPopup();
+    const visible = Boolean(message.payload?.visible);
+    const didUseNative = await setNativePawVisible(visible, message.payload || {});
+    if (!didUseNative) {
+      if (visible) {
+        openPawPopup();
+      } else if (authenticated || message.payload?.clearAuth) {
+        closePawPopup();
+      }
     }
     return;
   }

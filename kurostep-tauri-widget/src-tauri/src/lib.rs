@@ -69,6 +69,10 @@ fn set_paw_visible(
         paw.hide().map_err(|error| error.to_string())?;
     }
 
+    if visible {
+        paw.set_focus().map_err(|error| error.to_string())?;
+    }
+
     Ok(())
 }
 

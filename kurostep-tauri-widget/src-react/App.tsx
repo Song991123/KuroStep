@@ -1217,7 +1217,7 @@ export default function App() {
   const [trackDuration, setTrackDuration] = useState(0);
   const [youtubeVisible, setYoutubeVisible] = useState(false);
   const [pawWidgetVisible, setPawWidgetVisible] = useState(() => readJson<boolean>("kurostep.pawWidgetVisible", true));
-  const [lyricsOverlayVisible, setLyricsOverlayVisible] = useState(false);
+  const [lyricsOverlayVisible, setLyricsOverlayVisible] = useState(() => readJson<boolean>("kurostep.lyricsOverlayVisible", true));
   const [volume, setVolume] = useState(() => Number(window.localStorage.getItem("kurostep.volume") || 80));
   const [pendingPlaylistImport, setPendingPlaylistImport] = useState<PendingPlaylistImport | null>(null);
   const [lyric, setLyric] = useState<Lyric | null>(null);
@@ -1279,6 +1279,11 @@ export default function App() {
   useEffect(() => {
     if (!auth) {
       void invokeNative("set_paw_visible", { visible: false, reload: false, clearAuth: true }).catch(() => {});
+      void invokeNative("set_lyrics_visible", {
+        visible: false,
+        line: "",
+        translation: "",
+      }).catch(() => {});
       return;
     }
     void invokeNative("set_paw_visible", {
@@ -1552,9 +1557,13 @@ export default function App() {
         body: JSON.stringify(mode === "signup" ? data : { email: data.email, password: data.password }),
       });
       writeJson("kurostep.auth", session);
+      writeJson("kurostep.pawWidgetVisible", true);
+      writeJson("kurostep.lyricsOverlayVisible", true);
+      setPawWidgetVisible(true);
+      setLyricsOverlayVisible(true);
       setAuth(session);
       void invokeNative("set_paw_visible", {
-        visible: pawWidgetVisible,
+        visible: true,
         reload: true,
         authJson: JSON.stringify(session),
       }).catch(() => {});
@@ -1569,6 +1578,7 @@ export default function App() {
   function logout() {
     window.localStorage.removeItem("kurostep.auth");
     void invokeNative("set_paw_visible", { visible: false, reload: false, clearAuth: true }).catch(() => {});
+    void invokeNative("set_lyrics_visible", { visible: false, line: "", translation: "" }).catch(() => {});
     setAuth(null);
     updateWorkspaceState({ tasks: [], work: null, counts: { ...emptyCounts }, playlist: null, playlistTracks: [], currentTrack: null });
     setIsPlaying(false);
@@ -2112,6 +2122,7 @@ export default function App() {
           onClick={() => {
             setLyricsOverlayVisible((value) => {
               const next = !value;
+              writeJson("kurostep.lyricsOverlayVisible", next);
               setNotice({ kind: "notice", message: next ? "가사 창 띄웠다냥." : "가사 창 접었다냥." });
               return next;
             });
