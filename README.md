@@ -6,6 +6,20 @@ KuroStep은 재택으로 작업하는 웹툰 작가, 일러스트레이터, 프�
 
 단순 Todo 앱이나 음악 플레이어가 아니라, `오늘 할 작업 - 작업용 플레이리스트 - 현재 곡 - 가사 라인 - 번역 메모`를 하나의 흐름으로 다룹니다. 검은 고양이가 책상 옆에서 조용히 작업 발자국을 따라온다는 콘셉트로, 데스크톱 위젯 형태의 사용 경험을 목표로 했습니다.
 
+## 프로젝트 정보
+
+| 항목 | 내용 |
+|---|---|
+| 프로젝트 주제 | 창작자용 작업 카드 + BGM + 가사/번역 메모 관리 서비스 |
+| 제작 기간 | 2026.06 |
+| 참여 인원 | 1인 개발 |
+| Backend | Spring Boot, Spring MVC, Spring Data JPA, Spring Security, JWT, BCrypt |
+| Frontend/Desktop | React, TypeScript, Tauri |
+| Database | H2, MySQL |
+| DevOps | Docker Compose, Terraform, AWS EC2, GitHub Actions, GitHub Pages |
+| 배포 UI | https://song991123.github.io/KuroStep/ |
+| 데스크톱 릴리즈 | https://github.com/Song991123/KuroStep/releases/tag/v0.1.0 |
+
 ## 화면 미리보기
 
 | 로그인 | 작업 발자국 |
@@ -62,7 +76,7 @@ KuroStep은 이 문제를 다음처럼 정의했습니다.
 | Tauri | 작업 중 항상 띄워둘 수 있는 가벼운 데스크톱 위젯 경험을 만들기 위함 |
 | Docker / EC2 / Terraform | 로컬 구현에서 끝내지 않고, 컨테이너 실행과 코드 기반 인프라 구성을 검증하기 위함 |
 
-## 릴리즈
+## 데모와 릴리즈
 
 현재 데스크톱 릴리즈 버전은 `v0.1.0`입니다.
 
@@ -74,6 +88,13 @@ KuroStep은 이 문제를 다음처럼 정의했습니다.
 데스크톱 릴리즈는 `.github/workflows/tauri-release.yml`에서 수동 실행하거나 `v*` 태그를 push하면 GitHub Releases에 공개 생성됩니다. macOS `.dmg`와 Windows 설치 파일은 Release assets에 첨부되는 구조입니다. macOS 빌드는 개인 포트폴리오 배포용 ad-hoc 서명 상태이며, Apple Developer ID 공증은 향후 정식 배포 단계에서 적용할 예정입니다.
 
 로컬 macOS 환경에서는 React production build와 Tauri `.app` 번들 생성을 확인했습니다. Windows 설치 파일은 GitHub Actions의 Windows runner에서 생성하는 방식으로 분리했습니다.
+
+다운로드:
+
+- macOS: `KuroStep_0.1.0_aarch64.dmg`
+- Windows: `KuroStep_0.1.0_x64-setup.exe`
+
+macOS 빌드는 개인 포트폴리오 배포용 ad-hoc 서명 상태입니다. Apple Developer ID 공증을 하지 않았기 때문에 처음 실행 시 Gatekeeper 경고가 발생할 수 있습니다.
 
 ## 시스템 구조
 
@@ -161,7 +182,22 @@ KuroStep은 가사 전문을 서버 DB에 계속 수집하는 구조를 피하�
 └── docs/                     # 공개 보고 문서
 ```
 
-## 실행 방법
+## 설치와 실행 방법
+
+### Desktop App
+
+GitHub Releases에서 운영체제에 맞는 설치 파일을 내려받아 실행합니다.
+
+- macOS: `.dmg` 파일을 열고 `KuroStep.app`을 실행합니다.
+- Windows: `x64-setup.exe` 또는 `.msi` 설치 파일을 실행합니다.
+
+개발 환경에서는 아래 명령으로 Tauri 앱을 실행할 수 있습니다.
+
+```bash
+cd kurostep-tauri-widget
+npm install
+npm run tauri:dev
+```
 
 ### Backend
 
@@ -222,6 +258,18 @@ cd KuroStep
 
 운영 환경의 DB 비밀번호, JWT secret, SSH key, Terraform state는 Git에 커밋하지 않고 환경변수 또는 GitHub Secrets로 관리합니다.
 
+## 핵심 코드 포인트
+
+| 코드 영역 | 설명 |
+|---|---|
+| `KuroStep/src/main/java/com/kurostep/security` | Spring Security, JWT 인증 필터, 인증 사용자 처리 |
+| `KuroStep/src/main/java/com/kurostep/auth` | 회원가입, 로그인, BCrypt 비밀번호 암호화 |
+| `KuroStep/src/main/java/com/kurostep/task` | 작업 카드 CRUD, 상태 변경, 플레이리스트 연결 |
+| `KuroStep/src/main/java/com/kurostep/playlist` | 플레이리스트 생성, 트랙 추가/삭제/순서 관리 |
+| `KuroStep/src/main/java/com/kurostep/lyrics` | LRCLIB 가사 조회, 라인 참조, 번역 메모 흐름 |
+| `kurostep-tauri-widget/src` | React/TypeScript 기반 데스크톱 위젯 UI |
+| `kurostep-tauri-widget/src-tauri` | Tauri shell, 창 제어, 앱 번들 설정 |
+
 ## 트러블슈팅
 
 | 문제 | 원인 | 대응 |
@@ -242,8 +290,28 @@ cd KuroStep
 - 가사 로컬 캐시를 Tauri 앱 데이터 디렉터리 기반으로 더 명확히 분리
 - 플레이리스트와 가사 처리 흐름에 대한 추가 테스트 보강
 
+## FAQ
+
+### 왜 단순 Todo 앱이 아니라 BGM과 가사를 연결했나요?
+
+창작 작업에서는 작업 내용뿐 아니라 그때 들은 음악과 가사에서 얻은 감정도 작업 맥락이 됩니다. KuroStep은 이 흐름을 작업 카드 기준으로 묶는 데 집중했습니다.
+
+### 왜 YouTube 음원을 직접 추출하지 않나요?
+
+다운로드, 스트림 추출, 광고 우회는 정책 리스크가 큽니다. 그래서 공식 플레이어 기반 재생과 사용자가 직접 등록한 작업 맥락 관리에 초점을 맞췄습니다.
+
+### 왜 가사 전문을 서버 DB에 대량 저장하지 않나요?
+
+가사는 저작권과 외부 Provider 정책을 고려해야 하는 데이터입니다. 서버는 라인 참조, 캐시 키, 사용자 번역 메모 중심으로 저장하고, 클라이언트 로컬 캐시를 함께 사용하는 방향으로 설계했습니다.
+
+### macOS에서 경고가 뜨는 이유는 무엇인가요?
+
+현재 릴리즈는 포트폴리오용 ad-hoc 서명 빌드입니다. Apple Developer ID 공증을 적용하지 않았기 때문에 macOS Gatekeeper 경고가 발생할 수 있으며, 정식 배포 단계에서는 개발자 인증서와 notarization을 적용할 예정입니다.
+
+## 라이선스
+
+현재 저장소는 포트폴리오 공개 목적의 개인 프로젝트입니다. 외부 배포나 재사용 라이선스는 별도로 지정하지 않았습니다.
+
 ## 문서
 
 - [최종 보고서](docs/report/final-report.md)
-
-학습 메모, WBS, 러프 기획 문서는 `_local-notes/`로 분리해 공개 포트폴리오 트리에서 제외했습니다.
