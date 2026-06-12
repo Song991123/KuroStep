@@ -31,6 +31,9 @@ const isEmbeddedContent = query.get("embedded") === "1";
 const shellView = query.get("view") || "main";
 const PLAYBACK_TICK_MS = 250;
 const LYRIC_SYNC_LOOKAHEAD_MS = 350;
+const REPEAT_MODES = ["off", "all", "one"] as const;
+const MAX_YOUTUBE_RECOVERY_ATTEMPTS = 2;
+const LONG_FORM_TRACK_SECONDS = 12 * 60;
 
 if (isEmbeddedContent) {
   document.documentElement.classList.add("embedded-mode");
@@ -51,6 +54,8 @@ type Notice = {
   kind: NoticeKind;
   message: string;
 };
+
+type RepeatMode = typeof REPEAT_MODES[number];
 
 type PendingPlaylistImport = YouTubePlaylistPreview & {
   count: number;
@@ -286,6 +291,63 @@ function formatDuration(seconds?: number) {
   const minutes = Math.floor(value / 60);
   const rest = value % 60;
   return `${minutes}:${String(rest).padStart(2, "0")}`;
+}
+
+function normalizeRepeatMode(mode: string | null | undefined): RepeatMode {
+  return REPEAT_MODES.includes(mode as RepeatMode) ? mode as RepeatMode : "off";
+}
+
+function nextRepeatMode(mode: RepeatMode): RepeatMode {
+  const currentIndex = REPEAT_MODES.indexOf(mode);
+  return REPEAT_MODES[(currentIndex + 1) % REPEAT_MODES.length];
+}
+
+function repeatModeLabel(mode: RepeatMode) {
+  if (mode === "all") return "전체 반복";
+  if (mode === "one") return "한 곡 반복";
+  return "반복 꺼짐";
+}
+
+function repeatModeNotice(mode: RepeatMode) {
+  if (mode === "all") return "플레이리스트를 빙글빙글 반복한다냥.";
+  if (mode === "one") return "이 곡만 계속 따라 걷는다냥.";
+  return "반복 산책을 잠깐 접었다냥.";
+}
+
+function isLongFormOrNonSongTrack(track: Track | null) {
+  const title = String(track?.title || "");
+  const duration = Number(track?.durationSeconds);
+  const longByDuration = Number.isFinite(duration) && duration > LONG_FORM_TRACK_SECONDS;
+  const looksLikeCollection = /(playlist|mix|remix|loop|1\s*hour|hour|extended|compilation|모음|플레이리스트|연속재생|리믹스|루프)/i.test(title);
+  return longByDuration || looksLikeCollection;
+}
+
+function friendlyLyricMessage(error: unknown, track: Track | null) {
+  if (isLongFormOrNonSongTrack(track)) {
+    return "이 영상은 길거나 편곡/모음집처럼 보여서 싱크 가사를 붙이기 어렵다냥. 공식 MV나 Topic 음원으로 넣어줘냥.";
+  }
+
+  const message = String((error as Error)?.message || error || "");
+  const lower = message.toLowerCase();
+  if (lower.includes("failed to fetch") || lower.includes("network") || lower.includes("timeout")) {
+    return "가사 서버랑 잠깐 연결이 삐끗했다냥. 뒤에서 다시 찾아볼게냥.";
+  }
+  if (message.includes("404") || message.includes("찾을 수") || lower.includes("not found") || lower.includes("no lyric")) {
+    return "맞는 싱크 가사를 아직 못 찾았다냥. 공식 MV/Topic 영상이면 제목과 아티스트 기준으로 다시 찾아볼게냥.";
+  }
+  if (message.includes("401") || message.includes("403")) {
+    return "가사 제공처가 지금 응답을 막았다냥. 잠깐 뒤 다시 시도해볼게냥.";
+  }
+
+  return "가사를 바로 못 찾았다냥. 곡 정보가 맞으면 뒤에서 다시 발자국을 구워볼게냥.";
+}
+
+function friendlyPlaybackMessage(error: unknown) {
+  const message = String((error as Error)?.message || error || "");
+  if (message.includes("YouTube") || message.includes("영상") || message.includes("player")) {
+    return "영상 재생이 꼬였다냥. 앱이 플레이어를 다시 깨우고 있으니, 계속 안 되면 공식 영상을 다시 넣어줘냥.";
+  }
+  return `재생을 시작하지 못했다냥: ${message}`;
 }
 
 function formatSourceType(sourceType?: Track["sourceType"] | null) {
@@ -671,7 +733,7 @@ function MusicPlayerWidget({
   playlist: Playlist | null;
   page: number;
   isPlaying: boolean;
-  repeatMode: boolean;
+  repeatMode: RepeatMode;
   position: number;
   duration: number;
   volume: number;
@@ -684,7 +746,7 @@ function MusicPlayerWidget({
   onDurationChange: (seconds: number) => void;
   onVolumeChange: (volume: number) => void;
   onToggleYoutube: () => void;
-  onMoveTrack: (offset: number, autoplay?: boolean) => void;
+  onMoveTrack: (offset: number, autoplay?: boolean, wrap?: boolean) => void;
   onSkip: (seconds: number) => void;
   onSeek: (seconds: number) => void;
   onToggleRepeat: () => void;
@@ -707,6 +769,8 @@ function MusicPlayerWidget({
   const timerRef = useRef<number | null>(null);
   const lastPlaybackTimeRef = useRef(0);
   const stalledTickRef = useRef(0);
+  const recoveryAttemptsRef = useRef(0);
+  const repeatModeRef = useRef<RepeatMode>(repeatMode);
   const videoId = getYoutubeVideoId(track);
   const displayedDuration = duration || track?.durationSeconds || 0;
   const pageCount = getPlaylistPageCount(tracks.length);
@@ -714,11 +778,42 @@ function MusicPlayerWidget({
   const progressRatio = displayedDuration > 0 ? Math.min(position / displayedDuration, 1) : 0;
 
   useEffect(() => {
+    repeatModeRef.current = repeatMode;
+  }, [repeatMode]);
+
+  async function recoverYoutubePlayback(reason = "unknown") {
+    const player = playerRef.current;
+    if (!player || !videoId) return false;
+    if (recoveryAttemptsRef.current >= MAX_YOUTUBE_RECOVERY_ATTEMPTS) {
+      setPlayerError("영상 재생이 계속 꼬인다냥. 영상 펼치기로 YouTube 상태를 확인하거나 다른 공식 영상을 넣어줘냥.");
+      onPlayingChange(false);
+      return false;
+    }
+
+    recoveryAttemptsRef.current += 1;
+    setPlayerError("");
+    player.cueVideoById?.({ videoId, startSeconds: position || 0 });
+    await new Promise((resolve) => window.setTimeout(resolve, reason === "stalled" ? 300 : 600));
+    player.playVideo?.();
+    await new Promise((resolve) => window.setTimeout(resolve, 1100));
+
+    const playerState = player.getPlayerState?.();
+    if (window.YT && (playerState === window.YT.PlayerState.PLAYING || playerState === window.YT.PlayerState.BUFFERING)) {
+      recoveryAttemptsRef.current = 0;
+      onPlayingChange(true);
+      return true;
+    }
+
+    return false;
+  }
+
+  useEffect(() => {
     let cancelled = false;
     setPlayerError("");
     setPlayerReady(false);
     lastPlaybackTimeRef.current = 0;
     stalledTickRef.current = 0;
+    recoveryAttemptsRef.current = 0;
     if (!videoId) {
       playerRef.current?.pauseVideo?.();
       videoIdRef.current = "";
@@ -771,6 +866,7 @@ function MusicPlayerWidget({
               }
               if (event.data === window.YT.PlayerState.PLAYING) {
                 stalledTickRef.current = 0;
+                recoveryAttemptsRef.current = 0;
                 onPlayingChange(true);
                 return;
               }
@@ -779,23 +875,22 @@ function MusicPlayerWidget({
                 return;
               }
               if (event.data === window.YT.PlayerState.ENDED) {
-                if (repeatMode) {
+                if (repeatModeRef.current === "one") {
                   playerRef.current?.seekTo?.(0, true);
                   playerRef.current?.playVideo?.();
                 } else {
-                  onMoveTrack(1, true);
+                  onMoveTrack(1, true, repeatModeRef.current === "all");
                 }
               }
             },
             onError: () => {
-              setPlayerError("YouTube 플레이어를 깨우지 못했어냥. 영상 펼치기를 열어 재생 상태를 확인해줘냥.");
-              onPlayingChange(false);
+              void recoverYoutubePlayback("player-error");
             },
           },
         });
       })
       .catch((error) => {
-        setPlayerError((error as Error).message);
+        setPlayerError(friendlyPlaybackMessage(error));
       });
 
     return () => {
@@ -845,8 +940,11 @@ function MusicPlayerWidget({
 
       if (stalledTickRef.current >= 5) {
         stalledTickRef.current = 0;
-        setPlayerError("YouTube 재생이 다른 탭이나 기기에서 멈춘 것 같다냥. 다른 재생을 멈추고 다시 눌러줘냥.");
-        onPlayingChange(false);
+        void recoverYoutubePlayback("stalled").then((recovered) => {
+          if (!recovered) {
+            setPlayerError("YouTube 재생이 잠깐 멈췄다냥. 다른 탭 재생을 멈추거나 영상 펼치기로 상태를 확인해줘냥.");
+          }
+        });
       }
     }, PLAYBACK_TICK_MS);
 
@@ -933,7 +1031,16 @@ function MusicPlayerWidget({
           <button className="icon-button main" type="button" disabled={!track} onClick={onTogglePlay}><Icon name={isPlaying ? "pause" : "play"} /></button>
           <button className="icon-button" type="button" disabled={!track} onClick={() => skipBy(10)}><Icon name="forward" /></button>
           <button className="icon-button" type="button" disabled={!tracks.length} onClick={() => onMoveTrack(1, isPlaying)}><Icon name="next" /></button>
-          <button className={`icon-button repeat${repeatMode ? " active" : ""}`} type="button" onClick={onToggleRepeat}><Icon name="repeat" /></button>
+          <button
+            className={`icon-button repeat${repeatMode !== "off" ? " active" : ""}${repeatMode === "one" ? " repeat-one" : ""}`}
+            type="button"
+            title={repeatModeLabel(repeatMode)}
+            aria-label={repeatModeLabel(repeatMode)}
+            onClick={onToggleRepeat}
+          >
+            <Icon name="repeat" />
+            {repeatMode === "one" && <span className="repeat-badge">1</span>}
+          </button>
         </div>
         <div className="progress-row" aria-label="재생 위치">
           <span>{formatDuration(position)}</span>
@@ -1221,7 +1328,7 @@ export default function App() {
   });
   const [playlistPage, setPlaylistPage] = useState(1);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [repeatMode, setRepeatMode] = useState(false);
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>(() => normalizeRepeatMode(window.localStorage.getItem("kurostep.repeatMode")));
   const [playbackPosition, setPlaybackPosition] = useState(0);
   const [trackDuration, setTrackDuration] = useState(0);
   const [youtubeVisible, setYoutubeVisible] = useState(false);
@@ -1356,6 +1463,15 @@ export default function App() {
       return;
     }
 
+    if (isLongFormOrNonSongTrack(track)) {
+      setLyric(null);
+      setLyricSource(null);
+      setSelectedLine(null);
+      setTranslation(null);
+      setNotice({ kind: "notice", message: friendlyLyricMessage(null, track) });
+      return;
+    }
+
     const cacheKey = `kurostep.lyrics.${track.id}`;
     const cached = readJson<LyricSource | null>(cacheKey, null);
     if (cached?.lines?.length && cached?.lyric) {
@@ -1375,7 +1491,7 @@ export default function App() {
       setLyricSource(null);
       setSelectedLine(null);
       setTranslation(null);
-      setNotice({ kind: "error", message: `싱크 가사를 아직 못 찾았다냥: ${(error as Error).message}` });
+      setNotice({ kind: "notice", message: friendlyLyricMessage(error, track) });
     }
   }, [warmTrackLyricCache]);
 
@@ -1431,7 +1547,7 @@ export default function App() {
       .catch((error) => {
         if (!cancelled) {
           setTranslation(null);
-          setNotice({ kind: "error", message: `번역 메모는 잠깐 놓쳤다냥: ${(error as Error).message}` });
+          setNotice({ kind: "notice", message: "번역 메모는 잠깐 놓쳤다냥. 다음 줄에서 다시 이어볼게냥." });
         }
       });
 
@@ -1447,6 +1563,15 @@ export default function App() {
     const startIndex = Math.max(currentIndex, 0);
     const upcoming = workspace.playlistTracks.slice(startIndex, startIndex + 3);
     upcoming.forEach((playlistTrack, index) => {
+      if (isLongFormOrNonSongTrack({
+        id: playlistTrack.trackId,
+        title: playlistTrack.title || "",
+        artist: playlistTrack.artist,
+        durationSeconds: playlistTrack.durationSeconds,
+        sourceType: "YOUTUBE",
+      })) {
+        return;
+      }
       window.setTimeout(() => {
         void warmTrackLyricCache(playlistTrack.trackId, auth).catch(() => {});
       }, 900 * index);
@@ -2030,7 +2155,7 @@ export default function App() {
     setNotice({ kind: "notice", message: "저장한 가사 조각을 지웠다냥." });
   }
 
-  async function moveTrack(offset: number, autoplay = isPlaying) {
+  async function moveTrack(offset: number, autoplay = isPlaying, wrap = repeatMode === "all") {
     if (!workspace.playlistTracks.length || !workspace.currentTrack) return;
     const currentIndex = Math.max(
       workspace.playlistTracks.findIndex((track) => track.playlistTrackId === workspace.currentTrack?.playlistTrackId),
@@ -2038,13 +2163,18 @@ export default function App() {
     );
     let nextIndex = currentIndex + offset;
     if (nextIndex < 0) {
-      nextIndex = repeatMode ? workspace.playlistTracks.length - 1 : 0;
+      nextIndex = wrap ? workspace.playlistTracks.length - 1 : 0;
     }
     if (nextIndex >= workspace.playlistTracks.length) {
-      nextIndex = repeatMode ? 0 : workspace.playlistTracks.length - 1;
+      nextIndex = wrap ? 0 : workspace.playlistTracks.length - 1;
     }
     const nextTrack = workspace.playlistTracks[nextIndex];
-    if (!nextTrack || nextTrack.playlistTrackId === workspace.currentTrack.playlistTrackId) return;
+    if (!nextTrack || nextTrack.playlistTrackId === workspace.currentTrack.playlistTrackId) {
+      if (!wrap) {
+        setIsPlaying(false);
+      }
+      return;
+    }
     await selectTrack(nextTrack);
     setIsPlaying(Boolean(autoplay));
   }
@@ -2180,8 +2310,12 @@ export default function App() {
           onSkip={skipPlayback}
           onSeek={seekPlayback}
           onToggleRepeat={() => {
-            setRepeatMode((value) => !value);
-            setNotice({ kind: "notice", message: repeatMode ? "반복 산책 OFF" : "반복 산책 ON" });
+            setRepeatMode((value) => {
+              const next = nextRepeatMode(value);
+              window.localStorage.setItem("kurostep.repeatMode", next);
+              setNotice({ kind: "notice", message: repeatModeNotice(next) });
+              return next;
+            });
           }}
           onSelectTrack={selectTrack}
           onRegisterLink={registerLink}
