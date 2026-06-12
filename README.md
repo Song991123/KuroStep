@@ -114,6 +114,19 @@ KuroStep은 이 문제를 다음처럼 정의했습니다.
 
 macOS 빌드는 개인 포트폴리오 배포용 ad-hoc 서명 상태입니다. Apple Developer ID 공증을 하지 않았기 때문에 처음 실행 시 Gatekeeper 경고가 발생할 수 있습니다.
 
+macOS에서 `KuroStep.app을(를) 열지 않음` 또는 `손상되었기 때문에 열 수 없음` 메시지가 뜨는 경우:
+
+1. DMG에서 `KuroStep.app`을 `응용 프로그램(Applications)` 폴더로 이동합니다.
+2. 터미널에서 아래 명령을 실행합니다.
+
+```bash
+xattr -rd com.apple.quarantine "/Applications/KuroStep.app"
+```
+
+3. `KuroStep.app`을 다시 실행합니다.
+
+이 조치는 GitHub/브라우저/메신저를 통해 받은 미공증 앱에 macOS가 붙이는 quarantine 속성을 테스트 목적으로 해제하는 방법입니다. 일반 사용자 대상 정식 배포 단계에서는 Apple Developer ID 서명과 notarization 공증을 적용할 예정입니다.
+
 ## 시스템 구조
 
 ```mermaid
@@ -324,7 +337,15 @@ cd KuroStep
 
 ### macOS에서 경고가 뜨는 이유는 무엇인가요?
 
-현재 릴리즈는 포트폴리오용 ad-hoc 서명 빌드입니다. Apple Developer ID 공증을 적용하지 않았기 때문에 macOS Gatekeeper 경고가 발생할 수 있으며, 정식 배포 단계에서는 개발자 인증서와 notarization을 적용할 예정입니다.
+현재 릴리즈는 포트폴리오용 ad-hoc 서명 빌드입니다. Apple Developer ID 공증을 적용하지 않았기 때문에 macOS Gatekeeper 경고가 발생할 수 있습니다. 앱 자체가 깨진 것이 아니라, macOS가 미공증 앱의 실행을 기본 차단하는 상황입니다.
+
+테스트 실행이 필요한 경우 `KuroStep.app`을 `응용 프로그램(Applications)` 폴더로 옮긴 뒤 아래 명령을 실행합니다.
+
+```bash
+xattr -rd com.apple.quarantine "/Applications/KuroStep.app"
+```
+
+정식 배포 단계에서는 Apple Developer Program 가입 후 Developer ID 서명과 notarization 공증을 적용할 예정입니다.
 
 ## 라이선스
 
