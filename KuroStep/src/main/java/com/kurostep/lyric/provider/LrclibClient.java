@@ -70,9 +70,19 @@ public class LrclibClient implements LyricsProviderClient {
         Set<SearchCandidate> candidates = new LinkedHashSet<>();
         String title = normalizeTitle(track.getTitle());
         String artist = normalizeArtist(track.getArtist());
+        TitleArtist parsed = parseTitleArtist(title);
+        TitleArtist rawParsed = parseTitleArtist(track.getTitle());
         String titleWithoutArtist = removeArtistPrefix(title, artist);
         String rawTitleWithoutArtist = removeArtistPrefix(track.getTitle(), artist);
 
+        if (parsed != null) {
+            candidates.add(new SearchCandidate(parsed.title(), parsed.artist()));
+            candidates.add(new SearchCandidate(parsed.title(), artist));
+            candidates.add(new SearchCandidate(parsed.title(), null));
+        }
+        if (rawParsed != null) {
+            candidates.add(new SearchCandidate(normalizeTitle(rawParsed.title()), normalizeArtist(rawParsed.artist())));
+        }
         candidates.add(new SearchCandidate(titleWithoutArtist, artist));
         candidates.add(new SearchCandidate(title, artist));
         candidates.add(new SearchCandidate(rawTitleWithoutArtist, artist));
@@ -115,8 +125,11 @@ public class LrclibClient implements LyricsProviderClient {
         }
         return value
                 .replaceAll("\\s*\\[[^]]*]\\s*", " ")
-                .replaceAll("\\s*\\([^)]*(official|audio|video|mv|lyrics|lyric|live)[^)]*\\)\\s*", " ")
+                .replaceAll("(?i)\\s*\\([^)]*(official|audio|video|mv|m/v|music video|lyrics|lyric|live|4k|hd)[^)]*\\)\\s*", " ")
+                .replaceAll("(?i)\\b(official\\s*)?(music\\s*)?(video|mv|m/v)\\b", " ")
+                .replaceAll("(?i)\\b(audio|lyrics?|4k|hd)\\b", " ")
                 .replaceAll("\\s+", " ")
+                .replaceAll("[-–—|:]\\s*$", "")
                 .trim();
     }
 
@@ -147,6 +160,25 @@ public class LrclibClient implements LyricsProviderClient {
         }
 
         return normalizedTitle;
+    }
+
+    private TitleArtist parseTitleArtist(String title) {
+        if (!hasText(title)) {
+            return null;
+        }
+
+        String[] parts = title.split("\\s[-–—]\\s", 2);
+        if (parts.length != 2) {
+            return null;
+        }
+
+        String artist = normalizeArtist(parts[0]);
+        String trackName = normalizeTitle(parts[1]);
+        if (!hasText(artist) || !hasText(trackName)) {
+            return null;
+        }
+
+        return new TitleArtist(trackName, artist);
     }
 
     private Optional<LrclibRecord> fetchFirst(String uri) {
@@ -248,6 +280,12 @@ public class LrclibClient implements LyricsProviderClient {
     private record SearchCandidate(
             String trackName,
             String artistName
+    ) {
+    }
+
+    private record TitleArtist(
+            String title,
+            String artist
     ) {
     }
 
