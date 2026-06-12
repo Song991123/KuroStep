@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release tag, for example v0.2.3"
+        description: "Release tag, for example v0.1.0"
         required: true
-        default: "v0.2.3"
+        default: "v0.1.0"
   push:
     tags:
       - "v*"
@@ -70,5 +70,7 @@ jobs:
             - Windows: `.msi` or `.exe`
 
             GitHub also shows automatic "Source code" archives, but those are repository snapshots for developers. For normal app install, use the installer assets above.
+
+            Note for macOS: this build is ad-hoc signed for a personal portfolio release. If macOS Gatekeeper blocks it because it is not notarized with an Apple Developer ID, open it from Finder with Control-click > Open, or remove quarantine locally for testing.
           releaseDraft: false
           prerelease: false
