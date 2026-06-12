@@ -2,6 +2,26 @@
 
 > 창작자의 오늘 작업, 작업용 BGM, 가사 라인, 번역 메모를 하나의 작업 맥락으로 묶는 데스크톱 작업 보조 서비스
 
+작업 카드에 오늘의 플레이리스트와 가사 해석 메모를 연결해, 창작자가 작업 중 붙잡은 감정과 할 일을 한 곳에서 이어갈 수 있게 만든 개인 작업 위젯입니다.
+
+![Java](https://img.shields.io/badge/Java-21-007396?style=flat-square)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4-6DB33F?style=flat-square)
+![Spring Security](https://img.shields.io/badge/Spring%20Security-JWT-6DB33F?style=flat-square)
+![JPA](https://img.shields.io/badge/Spring%20Data%20JPA-Hibernate-59666C?style=flat-square)
+![MySQL](https://img.shields.io/badge/MySQL-8-4479A1?style=flat-square)
+![React](https://img.shields.io/badge/React-TypeScript-61DAFB?style=flat-square)
+![Tauri](https://img.shields.io/badge/Tauri-Desktop-FFC131?style=flat-square)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square)
+![AWS](https://img.shields.io/badge/AWS-EC2-FF9900?style=flat-square)
+![Terraform](https://img.shields.io/badge/Terraform-IaC-844FBA?style=flat-square)
+
+| 구분 | 링크 |
+|---|---|
+| 배포 UI | https://song991123.github.io/KuroStep/ |
+| 데스크톱 릴리즈 | https://github.com/Song991123/KuroStep/releases/tag/v0.1.0 |
+| 최종 보고서 | [docs/report/final-report.md](docs/report/final-report.md) |
+| GitHub Repository | https://github.com/Song991123/KuroStep |
+
 KuroStep은 재택으로 작업하는 웹툰 작가, 일러스트레이터, 프리랜서 창작자를 위한 개인 작업 보조 서비스입니다. 창작자는 작업 중 Todo, 자주 듣는 BGM, 가사 해석, 떠오른 메모를 각각 다른 곳에 흩어두기 쉽습니다. KuroStep은 이 흩어진 정보를 `작업 카드` 중심으로 다시 연결하는 데 집중했습니다.
 
 단순 Todo 앱이나 음악 플레이어가 아니라, `오늘 할 작업 - 작업용 플레이리스트 - 현재 곡 - 가사 라인 - 번역 메모`를 하나의 흐름으로 다룹니다. 검은 고양이가 책상 옆에서 조용히 작업 발자국을 따라온다는 콘셉트로, 데스크톱 위젯 형태의 사용 경험을 목표로 했습니다.
@@ -17,8 +37,6 @@ KuroStep은 재택으로 작업하는 웹툰 작가, 일러스트레이터, 프�
 | Frontend/Desktop | React, TypeScript, Tauri |
 | Database | H2, MySQL |
 | DevOps | Docker Compose, Terraform, AWS EC2, GitHub Actions, GitHub Pages |
-| 배포 UI | https://song991123.github.io/KuroStep/ |
-| 데스크톱 릴리즈 | https://github.com/Song991123/KuroStep/releases/tag/v0.1.0 |
 
 ## 화면 미리보기
 
