@@ -1,6 +1,6 @@
-# Architecture
+# 시스템 아키텍처
 
-## 시스템 구성
+## 🏗️ 시스템 구성
 
 ```mermaid
 flowchart LR
@@ -19,7 +19,7 @@ flowchart LR
     EC2 --> Docker["Docker Compose"]
 ```
 
-## 요청 흐름
+## 🔄 요청 흐름
 
 ```mermaid
 sequenceDiagram
@@ -44,7 +44,7 @@ sequenceDiagram
     API->>DB: 사용자별 번역 메모 저장
 ```
 
-## 주요 패키지 구조
+## 📂 주요 패키지 구조
 
 ```text
 KuroStep/src/main/java/com/kurostep
@@ -67,7 +67,7 @@ kurostep-tauri-widget
 └── docs          # UI migration notes
 ```
 
-## ERD
+## 🗄️ ERD
 
 ```mermaid
 erDiagram
@@ -85,7 +85,7 @@ erDiagram
     USERS ||--o{ LYRIC_TRANSLATIONS : writes
 ```
 
-## 데이터 설계 포인트
+## 🎯 데이터 설계 포인트
 
 | 설계 | 이유 |
 |---|---|
@@ -95,7 +95,7 @@ erDiagram
 | `LyricTranslation` | 사용자별 번역 메모를 같은 가사 라인에 별도로 저장 |
 | `UserLyricCache` | 사용자 로컬 캐시 상태를 추적하기 위한 구조 |
 
-## 보안 흐름
+## 🔐 보안 흐름
 
 ```text
 로그인 성공

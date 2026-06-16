@@ -1,6 +1,6 @@
-# Release
+# 릴리즈 안내
 
-## 배포 구성
+## 🚀 배포 구성
 
 | 영역 | 방식 |
 |---|---|
@@ -26,7 +26,7 @@ npm run build:react
 .github/workflows/pages.yml
 ```
 
-## Backend
+## Backend API
 
 로컬 실행:
 
@@ -48,7 +48,7 @@ cd KuroStep
 .github/workflows/deploy-ec2.yml
 ```
 
-## Desktop Release
+## 데스크톱 릴리즈
 
 Tauri 앱은 GitHub Actions에서 macOS와 Windows 번들을 생성합니다.
 

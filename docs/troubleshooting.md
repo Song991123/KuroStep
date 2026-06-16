@@ -1,4 +1,4 @@
-# Troubleshooting
+# 트러블슈팅
 
 ## 1. YouTube 재생 오류 메시지가 재생 전에도 표시됨
 
