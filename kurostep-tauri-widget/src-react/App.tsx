@@ -596,7 +596,6 @@ function TaskList({
 function TodayWorkWidget({
   tasks,
   work,
-  counts,
   onSelectTask,
   onCreateTask,
   onUpdateStatus,
@@ -604,7 +603,6 @@ function TodayWorkWidget({
 }: {
   tasks: CreatorTask[];
   work: CreatorTask | null;
-  counts: Record<TaskStatus, number>;
   onSelectTask: (task: CreatorTask) => void;
   onCreateTask: (title: string) => void;
   onUpdateStatus: (status: TaskStatus) => void;
@@ -612,6 +610,7 @@ function TodayWorkWidget({
 }) {
   const [creating, setCreating] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
+  const liveCounts = countTaskStatuses(tasks);
 
   function submitTask() {
     const title = draftTitle.trim();
@@ -685,7 +684,7 @@ function TodayWorkWidget({
           <div className="status-badges" aria-label="작업 상태">
             {(["TODO", "DOING", "DONE"] as TaskStatus[]).map((status) => (
               <button key={status} className={`badge${status === work.status ? " active" : ""}`} type="button" onClick={() => onUpdateStatus(status)}>
-                {statusLabel(status)} <span>{counts[status] || 0}</span>
+                {statusLabel(status)} <span>{liveCounts[status] || 0}</span>
               </button>
             ))}
           </div>
@@ -1182,7 +1181,7 @@ function TaskPawWidget({
           <p>오늘 할 일과 번역 메모를 한 발자국씩 만진다냥</p>
         </div>
       </div>
-      <TodayWorkWidget tasks={workspace.tasks} work={workspace.work} counts={workspace.counts} onSelectTask={onSelectTask} onCreateTask={onCreateTask} onUpdateStatus={onUpdateStatus} onDeleteTask={onDeleteTask} />
+      <TodayWorkWidget tasks={workspace.tasks} work={workspace.work} onSelectTask={onSelectTask} onCreateTask={onCreateTask} onUpdateStatus={onUpdateStatus} onDeleteTask={onDeleteTask} />
       <LyricMemoWidget selectedLine={selectedLine} translation={translation} onSaveMemo={onSaveMemo} onDeleteMemo={onDeleteMemo} />
       <section className="widget-section saved-lyrics-widget" aria-labelledby="saved-lyrics-title">
         <SectionHeader title="저장한 가사 조각" />
@@ -2074,27 +2073,40 @@ export default function App() {
     }
   }
 
-  async function saveMemo(translatedText: string, memoText: string) {
-    if (!auth?.userId || !selectedLine?.id) {
+  async function saveMemoForLine(line: SelectedLine, translatedText: string, memoText: string, options: { showNotice?: boolean } = {}) {
+    const showNotice = options.showNotice ?? true;
+    if (!auth?.userId || !line.id) {
       setNotice({ kind: "notice", message: "아직 저장할 가사 줄이 없다냥." });
-      return;
+      return null;
     }
     try {
-      const saved = await api<Translation>(`/api/lyric-line-refs/${selectedLine.id}/translations?userId=${auth.userId}`, {
+      const saved = await api<Translation>(`/api/lyric-line-refs/${line.id}/translations?userId=${auth.userId}`, {
         method: "POST",
         body: JSON.stringify({
           languageCode: "ko",
-          translatedText: translatedText || selectedLine.text,
+          translatedText: translatedText || line.text,
           memoText,
         }),
       }, auth);
       setTranslation(saved);
-      setTranslationCache((current) => ({ ...current, [String(selectedLine.id)]: saved }));
+      setTranslationCache((current) => ({ ...current, [String(line.id)]: saved }));
       window.localStorage.setItem("kurostep.translationMemo", memoText);
-      setNotice({ kind: "notice", message: "번역 메모를 서버에 콕 저장했다냥." });
+      if (showNotice) {
+        setNotice({ kind: "notice", message: "번역 메모를 서버에 콕 저장했다냥." });
+      }
+      return saved;
     } catch (error) {
       setNotice({ kind: "error", message: (error as Error).message });
+      return null;
     }
+  }
+
+  async function saveMemo(translatedText: string, memoText: string) {
+    if (!selectedLine) {
+      setNotice({ kind: "notice", message: "아직 저장할 가사 줄이 없다냥." });
+      return;
+    }
+    await saveMemoForLine(selectedLine, translatedText, memoText);
   }
 
   async function deleteMemo() {
@@ -2122,14 +2134,25 @@ export default function App() {
       return;
     }
 
+    const memoFallback = translation?.memoText || window.localStorage.getItem("kurostep.translationMemo") || "저장한 가사 조각";
+    const translatedDraft = translation?.translatedText || "";
+    const serverTranslatedText = translatedDraft || selectedLine.text;
+    const savedTranslation = selectedLine.id && auth?.userId
+      ? await saveMemoForLine(selectedLine, serverTranslatedText, memoFallback, { showNotice: false })
+      : null;
+    if (selectedLine.id && auth?.userId && !savedTranslation) {
+      return;
+    }
+    const translationForPiece = savedTranslation || translation;
+
     const piece: SavedLyricPiece = {
       id: `${selectedLine.id || selectedLine.lineIndex || Date.now()}-${Date.now()}`,
       lineRefId: selectedLine.id || null,
       trackId: workspace.currentTrack?.id || null,
       trackTitle: workspace.currentTrack?.title || "작업곡",
       lineText: selectedLine.text,
-      translatedText: translation?.translatedText || "",
-      memoText: translation?.memoText || "",
+      translatedText: translationForPiece?.translatedText || translatedDraft,
+      memoText: translationForPiece?.memoText || memoFallback,
       savedAt: new Date().toISOString(),
     };
 
@@ -2138,12 +2161,8 @@ export default function App() {
       writeJson("kurostep.savedLyricPieces", next);
       return next;
     });
-    window.localStorage.setItem("kurostep.translationMemo", piece.memoText || "저장한 가사 조각");
+    window.localStorage.setItem("kurostep.translationMemo", piece.memoText || memoFallback);
     setNotice({ kind: "notice", message: "현재 가사 조각을 저장했다냥." });
-
-    if (selectedLine.id && auth?.userId) {
-      await saveMemo(piece.translatedText || selectedLine.text, piece.memoText || "저장한 가사 조각");
-    }
   }
 
   function deleteSavedLyricPiece(pieceId: string) {
