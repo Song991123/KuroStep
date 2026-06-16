@@ -29,7 +29,7 @@ import { extractYoutubeId, extractYoutubePlaylistId, fetchYoutubeMetadata } from
 const query = new URLSearchParams(window.location.search);
 const isEmbeddedContent = query.get("embedded") === "1";
 const shellView = query.get("view") || "main";
-const PLAYBACK_TICK_MS = 250;
+const PLAYBACK_TICK_MS = 500;
 const LYRIC_SYNC_LOOKAHEAD_MS = 350;
 const REPEAT_MODES = ["off", "all", "one"] as const;
 const MAX_YOUTUBE_RECOVERY_ATTEMPTS = 2;
@@ -770,8 +770,11 @@ function MusicPlayerWidget({
   const stalledTickRef = useRef(0);
   const recoveryAttemptsRef = useRef(0);
   const repeatModeRef = useRef<RepeatMode>(repeatMode);
+  const isPlayingRef = useRef(isPlaying);
   const videoId = getYoutubeVideoId(track);
   const displayedDuration = duration || track?.durationSeconds || 0;
+  const playbackPositionRef = useRef(position);
+  const displayedDurationRef = useRef(displayedDuration);
   const pageCount = getPlaylistPageCount(tracks.length);
   const visibleTracks = tracks.slice((page - 1) * PLAYLIST_PAGE_SIZE, page * PLAYLIST_PAGE_SIZE);
   const progressRatio = displayedDuration > 0 ? Math.min(position / displayedDuration, 1) : 0;
@@ -779,6 +782,18 @@ function MusicPlayerWidget({
   useEffect(() => {
     repeatModeRef.current = repeatMode;
   }, [repeatMode]);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  useEffect(() => {
+    playbackPositionRef.current = position;
+  }, [position]);
+
+  useEffect(() => {
+    displayedDurationRef.current = displayedDuration;
+  }, [displayedDuration]);
 
   async function recoverYoutubePlayback(reason = "unknown") {
     const player = playerRef.current;
@@ -791,7 +806,7 @@ function MusicPlayerWidget({
 
     recoveryAttemptsRef.current += 1;
     setPlayerError("");
-    player.cueVideoById?.({ videoId, startSeconds: position || 0 });
+    player.cueVideoById?.({ videoId, startSeconds: playbackPositionRef.current || 0 });
     await new Promise((resolve) => window.setTimeout(resolve, reason === "stalled" ? 300 : 600));
     player.playVideo?.();
     await new Promise((resolve) => window.setTimeout(resolve, 1100));
@@ -883,7 +898,11 @@ function MusicPlayerWidget({
               }
             },
             onError: () => {
-              void recoverYoutubePlayback("player-error");
+              if (isPlayingRef.current) {
+                void recoverYoutubePlayback("player-error");
+              } else {
+                setPlayerError("");
+              }
             },
           },
         });
@@ -920,11 +939,15 @@ function MusicPlayerWidget({
 
     timerRef.current = window.setInterval(() => {
       const player = playerRef.current;
-      const current = player?.getCurrentTime?.() || position;
-      const nextDuration = Math.floor(player?.getDuration?.() || displayedDuration || 0);
+      const rawCurrent = player?.getCurrentTime?.();
+      const current = Number.isFinite(rawCurrent) ? Number(rawCurrent) : playbackPositionRef.current;
+      const rawDuration = player?.getDuration?.();
+      const nextDuration = Math.floor(Number.isFinite(rawDuration) && Number(rawDuration) > 0 ? Number(rawDuration) : displayedDurationRef.current || 0);
       const playerState = player?.getPlayerState?.();
+      playbackPositionRef.current = current;
       onPositionChange(current);
       if (nextDuration > 0) {
+        displayedDurationRef.current = nextDuration;
         onDurationChange(nextDuration);
       }
 
@@ -952,7 +975,7 @@ function MusicPlayerWidget({
         window.clearInterval(timerRef.current);
       }
     };
-  }, [isPlaying, displayedDuration]);
+  }, [isPlaying, videoId]);
 
   function seekByPointer(event: PointerEvent<HTMLDivElement>) {
     if (!displayedDuration) return;
@@ -1344,6 +1367,9 @@ export default function App() {
   const [savedLyricPieces, setSavedLyricPieces] = useState(() => readJson<SavedLyricPiece[]>("kurostep.savedLyricPieces", []));
   const authRef = useRef<AuthSession | null>(auth);
   const workspaceRef = useRef<Workspace>(workspace);
+  const translationCacheRef = useRef<Record<string, Translation>>(translationCache);
+  const pendingTranslationRef = useRef(new Set<string>());
+  const lyricLoadRequestRef = useRef(0);
   const lyricWarmupRef = useRef(new Map<number, Promise<LyricSource>>());
 
   useEffect(() => {
@@ -1371,6 +1397,10 @@ export default function App() {
   useEffect(() => {
     workspaceRef.current = workspace;
   }, [workspace]);
+
+  useEffect(() => {
+    translationCacheRef.current = translationCache;
+  }, [translationCache]);
 
   function updateWorkspaceState(updater: Workspace | ((current: Workspace) => Workspace)) {
     const next = typeof updater === "function" ? updater(workspaceRef.current) : updater;
@@ -1454,6 +1484,8 @@ export default function App() {
   }, []);
 
   const loadTrackLyrics = useCallback(async (track: Track | null, session = authRef.current) => {
+    const requestId = ++lyricLoadRequestRef.current;
+
     if (!track?.id) {
       setLyric(null);
       setLyricSource(null);
@@ -1474,6 +1506,7 @@ export default function App() {
     const cacheKey = `kurostep.lyrics.${track.id}`;
     const cached = readJson<LyricSource | null>(cacheKey, null);
     if (cached?.lines?.length && cached?.lyric) {
+      if (requestId !== lyricLoadRequestRef.current) return;
       setLyric(cached.lyric || null);
       setLyricSource(cached);
       return;
@@ -1482,16 +1515,34 @@ export default function App() {
     setNotice({ kind: "notice", message: "처음 듣는 곡이면 가사 발자국을 굽는 중이다냥." });
     try {
       const source = await warmTrackLyricCache(track.id, session);
+      if (requestId !== lyricLoadRequestRef.current) return;
       setLyric(source.lyric || null);
       setLyricSource(source);
       setNotice({ kind: "notice", message: "가사 발자국 준비 완료냥." });
     } catch (error) {
+      if (requestId !== lyricLoadRequestRef.current) return;
       setLyric(null);
       setLyricSource(null);
       setSelectedLine(null);
       setTranslation(null);
       setNotice({ kind: "notice", message: friendlyLyricMessage(error, track) });
     }
+  }, [warmTrackLyricCache]);
+
+  const queueLyricWarmup = useCallback((track: Pick<Track, "id" | "title" | "artist" | "durationSeconds"> | null, delayMs = 0, session = authRef.current) => {
+    if (!track?.id || !session) return;
+    if (isLongFormOrNonSongTrack({
+      id: track.id,
+      title: track.title || "",
+      artist: track.artist,
+      durationSeconds: track.durationSeconds,
+      sourceType: "YOUTUBE",
+    })) {
+      return;
+    }
+    window.setTimeout(() => {
+      void warmTrackLyricCache(track.id, session).catch(() => {});
+    }, delayMs);
   }, [warmTrackLyricCache]);
 
   useEffect(() => {
@@ -1515,10 +1566,15 @@ export default function App() {
   useEffect(() => {
     if (!auth?.userId || !selectedLine?.id || !selectedLine.text) return;
     const key = String(selectedLine.id);
-    if (translationCache[key]) {
-      setTranslation(translationCache[key]);
+    const cachedTranslation = translationCacheRef.current[key];
+    if (cachedTranslation) {
+      setTranslation(cachedTranslation);
       return;
     }
+    if (pendingTranslationRef.current.has(key)) {
+      return;
+    }
+    pendingTranslationRef.current.add(key);
 
     let cancelled = false;
     api<Translation[]>(`/api/lyric-line-refs/${selectedLine.id}/translations?userId=${auth.userId}`, {}, auth)
@@ -1548,12 +1604,15 @@ export default function App() {
           setTranslation(null);
           setNotice({ kind: "notice", message: "번역 메모는 잠깐 놓쳤다냥. 다음 줄에서 다시 이어볼게냥." });
         }
+      })
+      .finally(() => {
+        pendingTranslationRef.current.delete(key);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [auth?.userId, selectedLine?.id, selectedLine?.text, translationCache]);
+  }, [auth?.userId, selectedLine?.id, selectedLine?.text]);
 
   useEffect(() => {
     if (!auth || !workspace.playlistTracks.length) return;
@@ -1571,11 +1630,14 @@ export default function App() {
       })) {
         return;
       }
-      window.setTimeout(() => {
-        void warmTrackLyricCache(playlistTrack.trackId, auth).catch(() => {});
-      }, 900 * index);
+      queueLyricWarmup({
+        id: playlistTrack.trackId,
+        title: playlistTrack.title || "",
+        artist: playlistTrack.artist,
+        durationSeconds: playlistTrack.durationSeconds,
+      }, 900 * index, auth);
     });
-  }, [auth, workspace.currentTrack?.playlistTrackId, workspace.playlistTracks, warmTrackLyricCache]);
+  }, [auth, workspace.currentTrack?.playlistTrackId, workspace.playlistTracks, queueLyricWarmup]);
 
   const refreshWorkspace = useCallback(async (session = authRef.current) => {
     if (!session?.userId) {
@@ -1761,7 +1823,22 @@ export default function App() {
     const playlist = workspaceRef.current.playlist;
     if (!session?.userId || !playlist) return [];
     const playlistTracks = await api<PlaylistTrack[]>(`/api/playlists/${playlist.id}/tracks?userId=${session.userId}`, {}, session);
-    updateWorkspaceState((current) => ({ ...current, playlistTracks }));
+    updateWorkspaceState((current) => {
+      const refreshedCurrentPlaylistTrack = playlistTracks.find(
+        (item) => item.playlistTrackId === current.currentTrack?.playlistTrackId,
+      );
+      return {
+        ...current,
+        playlistTracks,
+        currentTrack: current.currentTrack && refreshedCurrentPlaylistTrack
+          ? {
+              ...current.currentTrack,
+              playlistTrackId: refreshedCurrentPlaylistTrack.playlistTrackId,
+              playlistName: current.playlist?.name,
+            }
+          : current.currentTrack,
+      };
+    });
     setPlaylistPage((current) => Math.min(current, getPlaylistPageCount(playlistTracks.length)));
 
     if (options.selectFirstWhenEmpty && !workspaceRef.current.currentTrack && playlistTracks[0]) {
@@ -1877,6 +1954,7 @@ export default function App() {
         await api<void>(`/api/playlists/${currentWorkspace.playlist.id}/tracks/${track.id}?userId=${auth.userId}`, { method: "POST" }, auth).catch((error) => {
           if (!String((error as Error).message).includes("이미")) throw error;
         });
+        queueLyricWarmup(track, 200, auth);
         const playlistTracks = await reloadPlaylistTracks(auth, { selectFirstWhenEmpty: shouldAutoSelectAddedTrack });
         const addedPlaylistTrack = playlistTracks.find((item) => item.trackId === track.id) || null;
         if (shouldAutoSelectAddedTrack && addedPlaylistTrack) {
@@ -1909,13 +1987,18 @@ export default function App() {
       const shouldAutoSelectAddedTrack = !workspaceRef.current.currentTrack;
       const drafts = current.tracks.slice(0, current.count);
       let firstAddedTrackId: number | null = null;
+      const warmupTracks: Track[] = [];
       for (const draft of drafts) {
         const track = await findOrCreateTrackDraft(draft);
         firstAddedTrackId ??= track.id;
+        if (warmupTracks.length < 3) {
+          warmupTracks.push(track);
+        }
         await api<void>(`/api/playlists/${currentWorkspace.playlist.id}/tracks/${track.id}?userId=${auth.userId}`, { method: "POST" }, auth).catch((error) => {
           if (!String((error as Error).message).includes("이미")) throw error;
         });
       }
+      warmupTracks.forEach((track, index) => queueLyricWarmup(track, 700 * index, auth));
       const playlistTracks = await reloadPlaylistTracks(auth);
       if (shouldAutoSelectAddedTrack && firstAddedTrackId && !workspaceRef.current.currentTrack) {
         const firstAddedPlaylistTrack = playlistTracks.find((item) => item.trackId === firstAddedTrackId) || playlistTracks[0];
@@ -2175,20 +2258,21 @@ export default function App() {
   }
 
   async function moveTrack(offset: number, autoplay = isPlaying, wrap = repeatMode === "all") {
-    if (!workspace.playlistTracks.length || !workspace.currentTrack) return;
+    const currentWorkspace = workspaceRef.current;
+    if (!currentWorkspace.playlistTracks.length || !currentWorkspace.currentTrack) return;
     const currentIndex = Math.max(
-      workspace.playlistTracks.findIndex((track) => track.playlistTrackId === workspace.currentTrack?.playlistTrackId),
+      currentWorkspace.playlistTracks.findIndex((track) => track.playlistTrackId === currentWorkspace.currentTrack?.playlistTrackId),
       0,
     );
     let nextIndex = currentIndex + offset;
     if (nextIndex < 0) {
-      nextIndex = wrap ? workspace.playlistTracks.length - 1 : 0;
+      nextIndex = wrap ? currentWorkspace.playlistTracks.length - 1 : 0;
     }
-    if (nextIndex >= workspace.playlistTracks.length) {
-      nextIndex = wrap ? 0 : workspace.playlistTracks.length - 1;
+    if (nextIndex >= currentWorkspace.playlistTracks.length) {
+      nextIndex = wrap ? 0 : currentWorkspace.playlistTracks.length - 1;
     }
-    const nextTrack = workspace.playlistTracks[nextIndex];
-    if (!nextTrack || nextTrack.playlistTrackId === workspace.currentTrack.playlistTrackId) {
+    const nextTrack = currentWorkspace.playlistTracks[nextIndex];
+    if (!nextTrack || nextTrack.playlistTrackId === currentWorkspace.currentTrack.playlistTrackId) {
       if (!wrap) {
         setIsPlaying(false);
       }
