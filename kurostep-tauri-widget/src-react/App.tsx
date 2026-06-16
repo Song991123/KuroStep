@@ -1740,7 +1740,7 @@ export default function App() {
       })
       .catch(() => {
         setNotice({ kind: "error", message: "세션 확인이 잠깐 막혔다냥. 로그인 상태는 유지해둘게냥." });
-        setLoading(false);
+        void refreshWorkspace(auth);
       });
   }, [auth?.accessToken, refreshWorkspace]);
 
@@ -1921,13 +1921,42 @@ export default function App() {
     return findOrCreateTrackDraft(draft);
   }
 
+  async function ensureWorkspaceReady(session = authRef.current) {
+    if (!session?.userId) {
+      setNotice({ kind: "error", message: "로그인이 먼저 필요하다냥." });
+      return false;
+    }
+    if (workspaceRef.current.playlist) {
+      return true;
+    }
+
+    setNotice({ kind: "notice", message: "BGM 바구니를 다시 준비하는 중이냥..." });
+    await refreshWorkspace(session);
+    if (workspaceRef.current.playlist) {
+      return true;
+    }
+
+    setNotice({ kind: "error", message: "BGM 바구니를 아직 못 만들었다냥. 잠깐 뒤 다시 눌러줘냥." });
+    return false;
+  }
+
   async function registerLink(url: string) {
+    const session = authRef.current;
+    if (!session?.userId) {
+      setNotice({ kind: "error", message: "로그인이 먼저 필요하다냥." });
+      return false;
+    }
+    if (!await ensureWorkspaceReady(session)) {
+      return false;
+    }
+
     const currentWorkspace = workspaceRef.current;
-    const shouldAutoSelectAddedTrack = !currentWorkspace.currentTrack;
-    if (!auth?.userId || !currentWorkspace.playlist) {
+    const playlist = currentWorkspace.playlist;
+    if (!playlist) {
       setNotice({ kind: "error", message: "BGM 바구니가 아직 준비 중이다냥. 잠깐 뒤 다시 눌러줘냥." });
       return false;
     }
+    const shouldAutoSelectAddedTrack = !currentWorkspace.currentTrack;
     const sourceUrl = url.trim();
     const sourceId = extractYoutubeId(sourceUrl);
     const playlistId = extractYoutubePlaylistId(sourceUrl);
@@ -1942,7 +1971,7 @@ export default function App() {
         const preview = await api<YouTubePlaylistPreview>("/api/tracks/youtube-playlist/preview", {
           method: "POST",
           body: JSON.stringify({ playlistUrl: sourceUrl }),
-        }, auth);
+        }, session);
         const previewCount = preview.tracks.length;
         if (!previewCount) {
           setNotice({ kind: "error", message: "담을 수 있는 공개 영상을 찾지 못했다냥." });
@@ -1955,11 +1984,11 @@ export default function App() {
         setNotice({ kind: "notice", message: `플레이리스트 ${preview.trackCount}곡을 찾았다냥. 담을 곡 수를 확인해줘냥.` });
       } else {
         const track = await findOrCreateTrack(sourceUrl, sourceId);
-        await api<void>(`/api/playlists/${currentWorkspace.playlist.id}/tracks/${track.id}?userId=${auth.userId}`, { method: "POST" }, auth).catch((error) => {
+        await api<void>(`/api/playlists/${playlist.id}/tracks/${track.id}?userId=${session.userId}`, { method: "POST" }, session).catch((error) => {
           if (!String((error as Error).message).includes("이미")) throw error;
         });
-        queueLyricWarmup(track, 200, auth);
-        const playlistTracks = await reloadPlaylistTracks(auth, { selectFirstWhenEmpty: shouldAutoSelectAddedTrack });
+        queueLyricWarmup(track, 200, session);
+        const playlistTracks = await reloadPlaylistTracks(session, { selectFirstWhenEmpty: shouldAutoSelectAddedTrack });
         const addedPlaylistTrack = playlistTracks.find((item) => item.trackId === track.id) || null;
         if (shouldAutoSelectAddedTrack && addedPlaylistTrack) {
           await selectTrack(addedPlaylistTrack);
@@ -2401,7 +2430,7 @@ export default function App() {
           duration={trackDuration}
           volume={volume}
           youtubeVisible={youtubeVisible}
-          canRegisterLinks={Boolean(workspace.playlist) && !loading}
+          canRegisterLinks={Boolean(auth?.userId) && !loading}
           pendingPlaylistImport={pendingPlaylistImport}
           onTogglePlay={() => {
             if (!workspace.currentTrack) return;
