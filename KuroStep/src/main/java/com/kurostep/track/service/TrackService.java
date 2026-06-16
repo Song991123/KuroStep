@@ -23,7 +23,16 @@ public class TrackService {
     public TrackResponse create(TrackCreateRequest request) {
         if (request.sourceId() != null && !request.sourceId().isBlank()) {
             return trackRepository.findBySourceTypeAndSourceId(request.sourceType(), request.sourceId())
-                    .map(TrackResponse::from)
+                    .map(track -> {
+                        track.updateMetadata(
+                                request.title(),
+                                request.artist(),
+                                request.album(),
+                                request.sourceUrl(),
+                                request.durationSeconds()
+                        );
+                        return TrackResponse.from(track);
+                    })
                     .orElseGet(() -> saveTrack(request));
         }
 

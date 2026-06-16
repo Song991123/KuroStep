@@ -32,24 +32,46 @@ function cleanYoutubeTitlePart(value: string) {
     .trim();
 }
 
+function normalizeArtistName(value: string) {
+  const artist = String(value || "")
+    .replace(/\s*-\s*Topic$/i, "")
+    .replace(/\([^)]*[\u3131-\uD79D][^)]*\)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const parenthesizedLatin = String(value || "").match(/\(([^)]*[A-Za-z][^)]*)\)/);
+  if (/^[\u3131-\uD79D]/.test(artist) && parenthesizedLatin?.[1]) {
+    return parenthesizedLatin[1].trim();
+  }
+  const leadingLatin = artist.match(/^([A-Za-z0-9&.+' -]+)(?=\s*[\u3131-\uD79D(]|$)/);
+  return leadingLatin?.[1].trim() || artist;
+}
+
 function normalizeYoutubeMetadata(metadata: { title: string; artist: string }, sourceId: string) {
   const fallback = {
     title: `YouTube track ${sourceId}`,
     artist: "YouTube",
   };
   let title = cleanYoutubeTitlePart(metadata.title) || fallback.title;
-  let artist = String(metadata.artist || fallback.artist).replace(/\s*-\s*Topic$/i, "").trim() || fallback.artist;
+  let artist = normalizeArtistName(metadata.artist || fallback.artist) || fallback.artist;
 
   const dashMatch = title.match(/^(.+?)\s[-–—]\s(.+)$/);
   const channelLooksLikeDistributor = /records?|music|entertainment|official|vevo|youtube|topic/i.test(artist);
   if (dashMatch) {
-    const parsedArtist = cleanYoutubeTitlePart(dashMatch[1]);
+    const parsedArtist = normalizeArtistName(cleanYoutubeTitlePart(dashMatch[1]));
     const parsedTitle = cleanYoutubeTitlePart(dashMatch[2]);
     if (parsedArtist && parsedTitle) {
       title = parsedTitle;
-      if (channelLooksLikeDistributor || artist === fallback.artist) {
-        artist = parsedArtist;
-      }
+      artist = parsedArtist;
+    }
+  }
+
+  const quotedTitleMatch = title.match(/^(.+?)\s+['"‘’“”「](.+?)['"‘’“”」]/);
+  if (quotedTitleMatch) {
+    const parsedArtist = normalizeArtistName(cleanYoutubeTitlePart(quotedTitleMatch[1]));
+    const parsedTitle = cleanYoutubeTitlePart(quotedTitleMatch[2]);
+    if (parsedArtist && parsedTitle) {
+      title = parsedTitle;
+      artist = parsedArtist;
     }
   }
 

@@ -53,4 +53,26 @@ public class Track extends BaseTimeEntity {
     public static Track create(String title, String artist, String album, TrackSourceType sourceType, String sourceUrl, String sourceId, Integer durationSeconds) {
         return new Track(title, artist, album, sourceType, sourceUrl, sourceId, durationSeconds);
     }
+
+    public void updateMetadata(String title, String artist, String album, String sourceUrl, Integer durationSeconds) {
+        if (hasText(title)) {
+            this.title = title;
+        }
+        if (hasText(artist)) {
+            this.artist = artist;
+        }
+        if (hasText(album)) {
+            this.album = album;
+        }
+        if (hasText(sourceUrl)) {
+            this.sourceUrl = sourceUrl;
+        }
+        if (durationSeconds != null) {
+            this.durationSeconds = durationSeconds;
+        }
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
 }

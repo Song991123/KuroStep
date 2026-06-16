@@ -65,6 +65,37 @@ class TrackServiceTest {
     }
 
     @Test
+    @DisplayName("같은 sourceType, sourceId로 다시 등록하면 최신 메타데이터로 갱신한다")
+    void updateDuplicateSourceMetadata() {
+        TrackCreateRequest firstRequest = new TrackCreateRequest(
+                "aespa 에스파 'LEMONADE'",
+                "SMTOWN",
+                null,
+                TrackSourceType.YOUTUBE,
+                "https://www.youtube.com/watch?v=83C3TZ4Zm_o",
+                "83C3TZ4Zm_o",
+                192
+        );
+        TrackCreateRequest correctedRequest = new TrackCreateRequest(
+                "LEMONADE",
+                "aespa",
+                null,
+                TrackSourceType.YOUTUBE,
+                "https://www.youtube.com/watch?v=83C3TZ4Zm_o",
+                "83C3TZ4Zm_o",
+                192
+        );
+
+        TrackResponse first = trackService.create(firstRequest);
+        TrackResponse corrected = trackService.create(correctedRequest);
+
+        assertThat(corrected.id()).isEqualTo(first.id());
+        assertThat(corrected.title()).isEqualTo("LEMONADE");
+        assertThat(corrected.artist()).isEqualTo("aespa");
+        assertThat(trackRepository.count()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("곡 제목 또는 아티스트명으로 검색할 수 있다")
     void search() {
         trackService.create(new TrackCreateRequest(
