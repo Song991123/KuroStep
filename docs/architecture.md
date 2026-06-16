@@ -89,11 +89,11 @@ erDiagram
 
 | 설계 | 이유 |
 |---|---|
-| `PlaylistTrack` 중간 테이블 | 플레이리스트별 곡 순서와 중복 제어를 관리하기 위해 분리 |
-| `CreatorTask.currentPlaylistTrack` | 오늘 작업에서 현재 듣는 곡을 명시적으로 저장 |
-| `LyricLineRef` | 가사 원문 전체보다 라인 인덱스/시작 시간/해시 기반 참조 중심으로 관리 |
-| `LyricTranslation` | 사용자별 번역 메모를 같은 가사 라인에 별도로 저장 |
-| `UserLyricCache` | 사용자 로컬 캐시 상태를 추적하기 위한 구조 |
+| `PlaylistTrack` 중간 테이블 | 플레이리스트마다 곡 순서와 중복 여부를 따로 관리하기 위해 분리 |
+| `CreatorTask.currentPlaylistTrack` | 오늘 작업에서 지금 듣는 곡을 작업 카드에 명확히 남기기 위해 추가 |
+| `LyricLineRef` | 가사 전문을 그대로 쌓기보다 줄 번호, 시작 시간, 해시 중심으로 참조 |
+| `LyricTranslation` | 같은 가사 줄에도 사용자마다 다른 번역 메모를 남길 수 있도록 분리 |
+| `UserLyricCache` | 사용자의 로컬 가사 캐시 상태를 추적하기 위한 구조 |
 
 ## 🔐 보안 흐름
 
@@ -103,5 +103,5 @@ erDiagram
 -> React/Tauri 클라이언트 localStorage에 세션 저장
 -> API 요청 시 Authorization 헤더 포함
 -> JwtAuthenticationFilter에서 토큰 검증
--> Service 계층에서 userId 기반 소유권 확인
+-> Service 계층에서 userId 기준 소유권 확인
 ```

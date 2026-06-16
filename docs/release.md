@@ -12,7 +12,7 @@
 
 ## GitHub Pages
 
-React UI는 `kurostep-tauri-widget/dist-react`로 빌드되어 GitHub Pages에 배포됩니다.
+React UI는 `kurostep-tauri-widget/dist-react`로 빌드한 뒤 GitHub Pages에 배포합니다.
 
 ```bash
 cd kurostep-tauri-widget
@@ -50,22 +50,22 @@ cd KuroStep
 
 ## 데스크톱 릴리즈
 
-Tauri 앱은 GitHub Actions에서 macOS와 Windows 번들을 생성합니다.
+Tauri 앱은 GitHub Actions에서 macOS와 Windows 번들을 만듭니다.
 
 ```text
 .github/workflows/tauri-release.yml
 ```
 
-Release assets에서 내려받을 파일:
+Release assets에서 받을 파일:
 
 - macOS: `.dmg`
 - Windows: `.msi` 또는 `.exe`
 
-GitHub가 자동으로 표시하는 `Source code(zip/tar.gz)`는 개발자용 저장소 스냅샷이며, 일반 실행 파일이 아닙니다.
+GitHub가 자동으로 표시하는 `Source code(zip/tar.gz)`는 저장소 스냅샷입니다. 일반 사용자가 실행하는 설치 파일이 아닙니다.
 
 ## macOS Gatekeeper
 
-현재 macOS 앱은 포트폴리오 테스트용 ad-hoc signing 상태입니다. Apple Developer ID notarization을 거치지 않았기 때문에 일부 환경에서 아래 경고가 발생할 수 있습니다.
+현재 macOS 앱은 포트폴리오 테스트용 ad-hoc signing 상태입니다. Apple Developer ID notarization을 거치지 않았기 때문에 일부 환경에서는 아래 경고가 뜰 수 있습니다.
 
 ```text
 Apple은 KuroStep.app에 악성 코드가 없음을 확인할 수 없습니다.
@@ -85,7 +85,7 @@ xattr -rd com.apple.quarantine "/Applications/KuroStep.app"
 
 ## 로컬 개발 서버 관리
 
-개발 중 Vite, Spring Boot, Tauri dev 서버가 동시에 켜지면 MacBook 부하가 커질 수 있습니다. 작업 종료 전 아래 포트를 확인합니다.
+개발 중 Vite, Spring Boot, Tauri dev 서버가 동시에 켜지면 MacBook 부하가 커질 수 있습니다. 작업을 마치기 전에는 아래 포트를 확인합니다.
 
 ```bash
 lsof -nP -iTCP:5173 -iTCP:5174 -iTCP:5175 -iTCP:5177 -iTCP:8080 -sTCP:LISTEN
