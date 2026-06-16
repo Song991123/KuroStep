@@ -29,6 +29,10 @@ import { extractYoutubeId, extractYoutubePlaylistId, fetchYoutubeMetadata } from
 const query = new URLSearchParams(window.location.search);
 const isEmbeddedContent = query.get("embedded") === "1";
 const shellView = query.get("view") || "main";
+const isTauriApp =
+  Boolean((window as Window & { __TAURI__?: unknown }).__TAURI__) ||
+  window.location.protocol === "tauri:" ||
+  window.location.hostname === "tauri.localhost";
 const PLAYBACK_TICK_MS = 500;
 const LYRIC_SYNC_LOOKAHEAD_MS = 350;
 const REPEAT_MODES = ["off", "all", "one"] as const;
@@ -1048,11 +1052,11 @@ function MusicPlayerWidget({
           </div>
         </div>
         <div className="player-controls" aria-label="작업용 플레이어 컨트롤">
-          <button className="icon-button" type="button" disabled={!tracks.length} onClick={() => onMoveTrack(-1, isPlaying)}><Icon name="previous" /></button>
-          <button className="icon-button" type="button" disabled={!track} onClick={() => skipBy(-10)}><Icon name="rewind" /></button>
-          <button className="icon-button main" type="button" disabled={!track} onClick={onTogglePlay}><Icon name={isPlaying ? "pause" : "play"} /></button>
-          <button className="icon-button" type="button" disabled={!track} onClick={() => skipBy(10)}><Icon name="forward" /></button>
-          <button className="icon-button" type="button" disabled={!tracks.length} onClick={() => onMoveTrack(1, isPlaying)}><Icon name="next" /></button>
+          <button className="icon-button" type="button" title="이전 곡" aria-label="이전 곡" disabled={!tracks.length} onClick={() => onMoveTrack(-1, isPlaying)}><Icon name="previous" /></button>
+          <button className="icon-button" type="button" title="10초 뒤로" aria-label="10초 뒤로" disabled={!track} onClick={() => skipBy(-10)}><Icon name="rewind" /></button>
+          <button className="icon-button main" type="button" title={isPlaying ? "일시정지" : "재생"} aria-label={isPlaying ? "일시정지" : "재생"} disabled={!track} onClick={onTogglePlay}><Icon name={isPlaying ? "pause" : "play"} /></button>
+          <button className="icon-button" type="button" title="10초 앞으로" aria-label="10초 앞으로" disabled={!track} onClick={() => skipBy(10)}><Icon name="forward" /></button>
+          <button className="icon-button" type="button" title="다음 곡" aria-label="다음 곡" disabled={!tracks.length} onClick={() => onMoveTrack(1, isPlaying)}><Icon name="next" /></button>
           <button
             className={`icon-button repeat${repeatMode !== "off" ? " active" : ""}${repeatMode === "one" ? " repeat-one" : ""}`}
             type="button"
@@ -2442,6 +2446,23 @@ export default function App() {
           onSavePiece={saveCurrentLyricPiece}
         />
       </div>
+      {!isTauriApp && !isEmbeddedContent && pawWidgetVisible && (
+        <aside className="detached-widget paw-detached-widget" aria-label="작업 발자국 위젯">
+          <TaskPawWidget
+            workspace={workspace}
+            savedLyricPieces={savedLyricPieces}
+            selectedLine={selectedLine}
+            translation={translation}
+            onSelectTask={(task) => updateWorkspaceState((current) => ({ ...current, work: task }))}
+            onCreateTask={createTask}
+            onUpdateStatus={updateStatus}
+            onDeleteTask={deleteTask}
+            onSaveMemo={saveMemo}
+            onDeleteMemo={deleteMemo}
+            onDeletePiece={deleteSavedLyricPiece}
+          />
+        </aside>
+      )}
     </WidgetShell>
   );
 }
