@@ -29,8 +29,15 @@ import { extractYoutubeId, extractYoutubePlaylistId, fetchYoutubeMetadata } from
 const query = new URLSearchParams(window.location.search);
 const isEmbeddedContent = query.get("embedded") === "1";
 const shellView = query.get("view") || "main";
-const PLAYBACK_TICK_MS = 250;
+const isTauriApp =
+  Boolean((window as Window & { __TAURI__?: unknown }).__TAURI__) ||
+  window.location.protocol === "tauri:" ||
+  window.location.hostname === "tauri.localhost";
+const PLAYBACK_TICK_MS = 500;
 const LYRIC_SYNC_LOOKAHEAD_MS = 350;
+const REPEAT_MODES = ["off", "all", "one"] as const;
+const MAX_YOUTUBE_RECOVERY_ATTEMPTS = 2;
+const LONG_FORM_TRACK_SECONDS = 12 * 60;
 
 if (isEmbeddedContent) {
   document.documentElement.classList.add("embedded-mode");
@@ -51,6 +58,8 @@ type Notice = {
   kind: NoticeKind;
   message: string;
 };
+
+type RepeatMode = typeof REPEAT_MODES[number];
 
 type PendingPlaylistImport = YouTubePlaylistPreview & {
   count: number;
@@ -286,6 +295,63 @@ function formatDuration(seconds?: number) {
   const minutes = Math.floor(value / 60);
   const rest = value % 60;
   return `${minutes}:${String(rest).padStart(2, "0")}`;
+}
+
+function normalizeRepeatMode(mode: string | null | undefined): RepeatMode {
+  return REPEAT_MODES.includes(mode as RepeatMode) ? mode as RepeatMode : "off";
+}
+
+function nextRepeatMode(mode: RepeatMode): RepeatMode {
+  const currentIndex = REPEAT_MODES.indexOf(mode);
+  return REPEAT_MODES[(currentIndex + 1) % REPEAT_MODES.length];
+}
+
+function repeatModeLabel(mode: RepeatMode) {
+  if (mode === "all") return "전체 반복";
+  if (mode === "one") return "한 곡 반복";
+  return "반복 꺼짐";
+}
+
+function repeatModeNotice(mode: RepeatMode) {
+  if (mode === "all") return "플레이리스트를 빙글빙글 반복한다냥.";
+  if (mode === "one") return "이 곡만 계속 따라 걷는다냥.";
+  return "반복 산책을 잠깐 접었다냥.";
+}
+
+function isLongFormOrNonSongTrack(track: Track | null) {
+  const title = String(track?.title || "");
+  const duration = Number(track?.durationSeconds);
+  const longByDuration = Number.isFinite(duration) && duration > LONG_FORM_TRACK_SECONDS;
+  const looksLikeCollection = /(playlist|mix|remix|loop|1\s*hour|hour|extended|compilation|모음|플레이리스트|연속재생|리믹스|루프)/i.test(title);
+  return longByDuration || looksLikeCollection;
+}
+
+function friendlyLyricMessage(error: unknown, track: Track | null) {
+  if (isLongFormOrNonSongTrack(track)) {
+    return "이 영상은 길거나 편곡/모음집처럼 보여서 싱크 가사를 붙이기 어렵다냥. 공식 MV나 Topic 음원으로 넣어줘냥.";
+  }
+
+  const message = String((error as Error)?.message || error || "");
+  const lower = message.toLowerCase();
+  if (lower.includes("failed to fetch") || lower.includes("network") || lower.includes("timeout")) {
+    return "가사 서버랑 잠깐 연결이 삐끗했다냥. 뒤에서 다시 찾아볼게냥.";
+  }
+  if (message.includes("404") || message.includes("찾을 수") || lower.includes("not found") || lower.includes("no lyric")) {
+    return "맞는 싱크 가사를 아직 못 찾았다냥. 공식 MV/Topic 영상이면 제목과 아티스트 기준으로 다시 찾아볼게냥.";
+  }
+  if (message.includes("401") || message.includes("403")) {
+    return "가사 제공처가 지금 응답을 막았다냥. 잠깐 뒤 다시 시도해볼게냥.";
+  }
+
+  return "가사를 바로 못 찾았다냥. 곡 정보가 맞으면 뒤에서 다시 발자국을 구워볼게냥.";
+}
+
+function friendlyPlaybackMessage(error: unknown) {
+  const message = String((error as Error)?.message || error || "");
+  if (message.includes("YouTube") || message.includes("영상") || message.includes("player")) {
+    return "영상 재생이 꼬였다냥. 앱이 플레이어를 다시 깨우고 있으니, 계속 안 되면 공식 영상을 다시 넣어줘냥.";
+  }
+  return `재생을 시작하지 못했다냥: ${message}`;
 }
 
 function formatSourceType(sourceType?: Track["sourceType"] | null) {
@@ -534,7 +600,6 @@ function TaskList({
 function TodayWorkWidget({
   tasks,
   work,
-  counts,
   onSelectTask,
   onCreateTask,
   onUpdateStatus,
@@ -542,7 +607,6 @@ function TodayWorkWidget({
 }: {
   tasks: CreatorTask[];
   work: CreatorTask | null;
-  counts: Record<TaskStatus, number>;
   onSelectTask: (task: CreatorTask) => void;
   onCreateTask: (title: string) => void;
   onUpdateStatus: (status: TaskStatus) => void;
@@ -550,6 +614,7 @@ function TodayWorkWidget({
 }) {
   const [creating, setCreating] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
+  const liveCounts = countTaskStatuses(tasks);
 
   function submitTask() {
     const title = draftTitle.trim();
@@ -623,7 +688,7 @@ function TodayWorkWidget({
           <div className="status-badges" aria-label="작업 상태">
             {(["TODO", "DOING", "DONE"] as TaskStatus[]).map((status) => (
               <button key={status} className={`badge${status === work.status ? " active" : ""}`} type="button" onClick={() => onUpdateStatus(status)}>
-                {statusLabel(status)} <span>{counts[status] || 0}</span>
+                {statusLabel(status)} <span>{liveCounts[status] || 0}</span>
               </button>
             ))}
           </div>
@@ -671,7 +736,7 @@ function MusicPlayerWidget({
   playlist: Playlist | null;
   page: number;
   isPlaying: boolean;
-  repeatMode: boolean;
+  repeatMode: RepeatMode;
   position: number;
   duration: number;
   volume: number;
@@ -684,7 +749,7 @@ function MusicPlayerWidget({
   onDurationChange: (seconds: number) => void;
   onVolumeChange: (volume: number) => void;
   onToggleYoutube: () => void;
-  onMoveTrack: (offset: number, autoplay?: boolean) => void;
+  onMoveTrack: (offset: number, autoplay?: boolean, wrap?: boolean) => void;
   onSkip: (seconds: number) => void;
   onSeek: (seconds: number) => void;
   onToggleRepeat: () => void;
@@ -707,11 +772,58 @@ function MusicPlayerWidget({
   const timerRef = useRef<number | null>(null);
   const lastPlaybackTimeRef = useRef(0);
   const stalledTickRef = useRef(0);
+  const recoveryAttemptsRef = useRef(0);
+  const repeatModeRef = useRef<RepeatMode>(repeatMode);
+  const isPlayingRef = useRef(isPlaying);
   const videoId = getYoutubeVideoId(track);
   const displayedDuration = duration || track?.durationSeconds || 0;
+  const playbackPositionRef = useRef(position);
+  const displayedDurationRef = useRef(displayedDuration);
   const pageCount = getPlaylistPageCount(tracks.length);
   const visibleTracks = tracks.slice((page - 1) * PLAYLIST_PAGE_SIZE, page * PLAYLIST_PAGE_SIZE);
   const progressRatio = displayedDuration > 0 ? Math.min(position / displayedDuration, 1) : 0;
+
+  useEffect(() => {
+    repeatModeRef.current = repeatMode;
+  }, [repeatMode]);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  useEffect(() => {
+    playbackPositionRef.current = position;
+  }, [position]);
+
+  useEffect(() => {
+    displayedDurationRef.current = displayedDuration;
+  }, [displayedDuration]);
+
+  async function recoverYoutubePlayback(reason = "unknown") {
+    const player = playerRef.current;
+    if (!player || !videoId) return false;
+    if (recoveryAttemptsRef.current >= MAX_YOUTUBE_RECOVERY_ATTEMPTS) {
+      setPlayerError("영상 재생이 계속 꼬인다냥. 영상 펼치기로 YouTube 상태를 확인하거나 다른 공식 영상을 넣어줘냥.");
+      onPlayingChange(false);
+      return false;
+    }
+
+    recoveryAttemptsRef.current += 1;
+    setPlayerError("");
+    player.cueVideoById?.({ videoId, startSeconds: playbackPositionRef.current || 0 });
+    await new Promise((resolve) => window.setTimeout(resolve, reason === "stalled" ? 300 : 600));
+    player.playVideo?.();
+    await new Promise((resolve) => window.setTimeout(resolve, 1100));
+
+    const playerState = player.getPlayerState?.();
+    if (window.YT && (playerState === window.YT.PlayerState.PLAYING || playerState === window.YT.PlayerState.BUFFERING)) {
+      recoveryAttemptsRef.current = 0;
+      onPlayingChange(true);
+      return true;
+    }
+
+    return false;
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -719,6 +831,7 @@ function MusicPlayerWidget({
     setPlayerReady(false);
     lastPlaybackTimeRef.current = 0;
     stalledTickRef.current = 0;
+    recoveryAttemptsRef.current = 0;
     if (!videoId) {
       playerRef.current?.pauseVideo?.();
       videoIdRef.current = "";
@@ -771,6 +884,7 @@ function MusicPlayerWidget({
               }
               if (event.data === window.YT.PlayerState.PLAYING) {
                 stalledTickRef.current = 0;
+                recoveryAttemptsRef.current = 0;
                 onPlayingChange(true);
                 return;
               }
@@ -779,23 +893,26 @@ function MusicPlayerWidget({
                 return;
               }
               if (event.data === window.YT.PlayerState.ENDED) {
-                if (repeatMode) {
+                if (repeatModeRef.current === "one") {
                   playerRef.current?.seekTo?.(0, true);
                   playerRef.current?.playVideo?.();
                 } else {
-                  onMoveTrack(1, true);
+                  onMoveTrack(1, true, repeatModeRef.current === "all");
                 }
               }
             },
             onError: () => {
-              setPlayerError("YouTube 플레이어를 깨우지 못했어냥. 영상 펼치기를 열어 재생 상태를 확인해줘냥.");
-              onPlayingChange(false);
+              if (isPlayingRef.current) {
+                void recoverYoutubePlayback("player-error");
+              } else {
+                setPlayerError("");
+              }
             },
           },
         });
       })
       .catch((error) => {
-        setPlayerError((error as Error).message);
+        setPlayerError(friendlyPlaybackMessage(error));
       });
 
     return () => {
@@ -826,11 +943,15 @@ function MusicPlayerWidget({
 
     timerRef.current = window.setInterval(() => {
       const player = playerRef.current;
-      const current = player?.getCurrentTime?.() || position;
-      const nextDuration = Math.floor(player?.getDuration?.() || displayedDuration || 0);
+      const rawCurrent = player?.getCurrentTime?.();
+      const current = Number.isFinite(rawCurrent) ? Number(rawCurrent) : playbackPositionRef.current;
+      const rawDuration = player?.getDuration?.();
+      const nextDuration = Math.floor(Number.isFinite(rawDuration) && Number(rawDuration) > 0 ? Number(rawDuration) : displayedDurationRef.current || 0);
       const playerState = player?.getPlayerState?.();
+      playbackPositionRef.current = current;
       onPositionChange(current);
       if (nextDuration > 0) {
+        displayedDurationRef.current = nextDuration;
         onDurationChange(nextDuration);
       }
 
@@ -845,8 +966,11 @@ function MusicPlayerWidget({
 
       if (stalledTickRef.current >= 5) {
         stalledTickRef.current = 0;
-        setPlayerError("YouTube 재생이 다른 탭이나 기기에서 멈춘 것 같다냥. 다른 재생을 멈추고 다시 눌러줘냥.");
-        onPlayingChange(false);
+        void recoverYoutubePlayback("stalled").then((recovered) => {
+          if (!recovered) {
+            setPlayerError("YouTube 재생이 잠깐 멈췄다냥. 다른 탭 재생을 멈추거나 영상 펼치기로 상태를 확인해줘냥.");
+          }
+        });
       }
     }, PLAYBACK_TICK_MS);
 
@@ -855,7 +979,7 @@ function MusicPlayerWidget({
         window.clearInterval(timerRef.current);
       }
     };
-  }, [isPlaying, displayedDuration]);
+  }, [isPlaying, videoId]);
 
   function seekByPointer(event: PointerEvent<HTMLDivElement>) {
     if (!displayedDuration) return;
@@ -928,12 +1052,21 @@ function MusicPlayerWidget({
           </div>
         </div>
         <div className="player-controls" aria-label="작업용 플레이어 컨트롤">
-          <button className="icon-button" type="button" disabled={!tracks.length} onClick={() => onMoveTrack(-1, isPlaying)}><Icon name="previous" /></button>
-          <button className="icon-button" type="button" disabled={!track} onClick={() => skipBy(-10)}><Icon name="rewind" /></button>
-          <button className="icon-button main" type="button" disabled={!track} onClick={onTogglePlay}><Icon name={isPlaying ? "pause" : "play"} /></button>
-          <button className="icon-button" type="button" disabled={!track} onClick={() => skipBy(10)}><Icon name="forward" /></button>
-          <button className="icon-button" type="button" disabled={!tracks.length} onClick={() => onMoveTrack(1, isPlaying)}><Icon name="next" /></button>
-          <button className={`icon-button repeat${repeatMode ? " active" : ""}`} type="button" onClick={onToggleRepeat}><Icon name="repeat" /></button>
+          <button className="icon-button" type="button" title="이전 곡" aria-label="이전 곡" disabled={!tracks.length} onClick={() => onMoveTrack(-1, isPlaying)}><Icon name="previous" /></button>
+          <button className="icon-button" type="button" title="10초 뒤로" aria-label="10초 뒤로" disabled={!track} onClick={() => skipBy(-10)}><Icon name="rewind" /></button>
+          <button className="icon-button main" type="button" title={isPlaying ? "일시정지" : "재생"} aria-label={isPlaying ? "일시정지" : "재생"} disabled={!track} onClick={onTogglePlay}><Icon name={isPlaying ? "pause" : "play"} /></button>
+          <button className="icon-button" type="button" title="10초 앞으로" aria-label="10초 앞으로" disabled={!track} onClick={() => skipBy(10)}><Icon name="forward" /></button>
+          <button className="icon-button" type="button" title="다음 곡" aria-label="다음 곡" disabled={!tracks.length} onClick={() => onMoveTrack(1, isPlaying)}><Icon name="next" /></button>
+          <button
+            className={`icon-button repeat${repeatMode !== "off" ? " active" : ""}${repeatMode === "one" ? " repeat-one" : ""}`}
+            type="button"
+            title={repeatModeLabel(repeatMode)}
+            aria-label={repeatModeLabel(repeatMode)}
+            onClick={onToggleRepeat}
+          >
+            <Icon name="repeat" />
+            {repeatMode === "one" && <span className="repeat-badge">1</span>}
+          </button>
         </div>
         <div className="progress-row" aria-label="재생 위치">
           <span>{formatDuration(position)}</span>
@@ -1075,7 +1208,7 @@ function TaskPawWidget({
           <p>오늘 할 일과 번역 메모를 한 발자국씩 만진다냥</p>
         </div>
       </div>
-      <TodayWorkWidget tasks={workspace.tasks} work={workspace.work} counts={workspace.counts} onSelectTask={onSelectTask} onCreateTask={onCreateTask} onUpdateStatus={onUpdateStatus} onDeleteTask={onDeleteTask} />
+      <TodayWorkWidget tasks={workspace.tasks} work={workspace.work} onSelectTask={onSelectTask} onCreateTask={onCreateTask} onUpdateStatus={onUpdateStatus} onDeleteTask={onDeleteTask} />
       <LyricMemoWidget selectedLine={selectedLine} translation={translation} onSaveMemo={onSaveMemo} onDeleteMemo={onDeleteMemo} />
       <section className="widget-section saved-lyrics-widget" aria-labelledby="saved-lyrics-title">
         <SectionHeader title="저장한 가사 조각" />
@@ -1221,7 +1354,7 @@ export default function App() {
   });
   const [playlistPage, setPlaylistPage] = useState(1);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [repeatMode, setRepeatMode] = useState(false);
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>(() => normalizeRepeatMode(window.localStorage.getItem("kurostep.repeatMode")));
   const [playbackPosition, setPlaybackPosition] = useState(0);
   const [trackDuration, setTrackDuration] = useState(0);
   const [youtubeVisible, setYoutubeVisible] = useState(false);
@@ -1238,6 +1371,9 @@ export default function App() {
   const [savedLyricPieces, setSavedLyricPieces] = useState(() => readJson<SavedLyricPiece[]>("kurostep.savedLyricPieces", []));
   const authRef = useRef<AuthSession | null>(auth);
   const workspaceRef = useRef<Workspace>(workspace);
+  const translationCacheRef = useRef<Record<string, Translation>>(translationCache);
+  const pendingTranslationRef = useRef(new Set<string>());
+  const lyricLoadRequestRef = useRef(0);
   const lyricWarmupRef = useRef(new Map<number, Promise<LyricSource>>());
 
   useEffect(() => {
@@ -1265,6 +1401,10 @@ export default function App() {
   useEffect(() => {
     workspaceRef.current = workspace;
   }, [workspace]);
+
+  useEffect(() => {
+    translationCacheRef.current = translationCache;
+  }, [translationCache]);
 
   function updateWorkspaceState(updater: Workspace | ((current: Workspace) => Workspace)) {
     const next = typeof updater === "function" ? updater(workspaceRef.current) : updater;
@@ -1348,6 +1488,8 @@ export default function App() {
   }, []);
 
   const loadTrackLyrics = useCallback(async (track: Track | null, session = authRef.current) => {
+    const requestId = ++lyricLoadRequestRef.current;
+
     if (!track?.id) {
       setLyric(null);
       setLyricSource(null);
@@ -1356,9 +1498,19 @@ export default function App() {
       return;
     }
 
+    if (isLongFormOrNonSongTrack(track)) {
+      setLyric(null);
+      setLyricSource(null);
+      setSelectedLine(null);
+      setTranslation(null);
+      setNotice({ kind: "notice", message: friendlyLyricMessage(null, track) });
+      return;
+    }
+
     const cacheKey = `kurostep.lyrics.${track.id}`;
     const cached = readJson<LyricSource | null>(cacheKey, null);
     if (cached?.lines?.length && cached?.lyric) {
+      if (requestId !== lyricLoadRequestRef.current) return;
       setLyric(cached.lyric || null);
       setLyricSource(cached);
       return;
@@ -1367,16 +1519,34 @@ export default function App() {
     setNotice({ kind: "notice", message: "처음 듣는 곡이면 가사 발자국을 굽는 중이다냥." });
     try {
       const source = await warmTrackLyricCache(track.id, session);
+      if (requestId !== lyricLoadRequestRef.current) return;
       setLyric(source.lyric || null);
       setLyricSource(source);
       setNotice({ kind: "notice", message: "가사 발자국 준비 완료냥." });
     } catch (error) {
+      if (requestId !== lyricLoadRequestRef.current) return;
       setLyric(null);
       setLyricSource(null);
       setSelectedLine(null);
       setTranslation(null);
-      setNotice({ kind: "error", message: `싱크 가사를 아직 못 찾았다냥: ${(error as Error).message}` });
+      setNotice({ kind: "notice", message: friendlyLyricMessage(error, track) });
     }
+  }, [warmTrackLyricCache]);
+
+  const queueLyricWarmup = useCallback((track: Pick<Track, "id" | "title" | "artist" | "durationSeconds"> | null, delayMs = 0, session = authRef.current) => {
+    if (!track?.id || !session) return;
+    if (isLongFormOrNonSongTrack({
+      id: track.id,
+      title: track.title || "",
+      artist: track.artist,
+      durationSeconds: track.durationSeconds,
+      sourceType: "YOUTUBE",
+    })) {
+      return;
+    }
+    window.setTimeout(() => {
+      void warmTrackLyricCache(track.id, session).catch(() => {});
+    }, delayMs);
   }, [warmTrackLyricCache]);
 
   useEffect(() => {
@@ -1400,10 +1570,15 @@ export default function App() {
   useEffect(() => {
     if (!auth?.userId || !selectedLine?.id || !selectedLine.text) return;
     const key = String(selectedLine.id);
-    if (translationCache[key]) {
-      setTranslation(translationCache[key]);
+    const cachedTranslation = translationCacheRef.current[key];
+    if (cachedTranslation) {
+      setTranslation(cachedTranslation);
       return;
     }
+    if (pendingTranslationRef.current.has(key)) {
+      return;
+    }
+    pendingTranslationRef.current.add(key);
 
     let cancelled = false;
     api<Translation[]>(`/api/lyric-line-refs/${selectedLine.id}/translations?userId=${auth.userId}`, {}, auth)
@@ -1431,14 +1606,17 @@ export default function App() {
       .catch((error) => {
         if (!cancelled) {
           setTranslation(null);
-          setNotice({ kind: "error", message: `번역 메모는 잠깐 놓쳤다냥: ${(error as Error).message}` });
+          setNotice({ kind: "notice", message: "번역 메모는 잠깐 놓쳤다냥. 다음 줄에서 다시 이어볼게냥." });
         }
+      })
+      .finally(() => {
+        pendingTranslationRef.current.delete(key);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [auth?.userId, selectedLine?.id, selectedLine?.text, translationCache]);
+  }, [auth?.userId, selectedLine?.id, selectedLine?.text]);
 
   useEffect(() => {
     if (!auth || !workspace.playlistTracks.length) return;
@@ -1447,11 +1625,23 @@ export default function App() {
     const startIndex = Math.max(currentIndex, 0);
     const upcoming = workspace.playlistTracks.slice(startIndex, startIndex + 3);
     upcoming.forEach((playlistTrack, index) => {
-      window.setTimeout(() => {
-        void warmTrackLyricCache(playlistTrack.trackId, auth).catch(() => {});
-      }, 900 * index);
+      if (isLongFormOrNonSongTrack({
+        id: playlistTrack.trackId,
+        title: playlistTrack.title || "",
+        artist: playlistTrack.artist,
+        durationSeconds: playlistTrack.durationSeconds,
+        sourceType: "YOUTUBE",
+      })) {
+        return;
+      }
+      queueLyricWarmup({
+        id: playlistTrack.trackId,
+        title: playlistTrack.title || "",
+        artist: playlistTrack.artist,
+        durationSeconds: playlistTrack.durationSeconds,
+      }, 900 * index, auth);
     });
-  }, [auth, workspace.currentTrack?.playlistTrackId, workspace.playlistTracks, warmTrackLyricCache]);
+  }, [auth, workspace.currentTrack?.playlistTrackId, workspace.playlistTracks, queueLyricWarmup]);
 
   const refreshWorkspace = useCallback(async (session = authRef.current) => {
     if (!session?.userId) {
@@ -1550,7 +1740,7 @@ export default function App() {
       })
       .catch(() => {
         setNotice({ kind: "error", message: "세션 확인이 잠깐 막혔다냥. 로그인 상태는 유지해둘게냥." });
-        setLoading(false);
+        void refreshWorkspace(auth);
       });
   }, [auth?.accessToken, refreshWorkspace]);
 
@@ -1637,7 +1827,22 @@ export default function App() {
     const playlist = workspaceRef.current.playlist;
     if (!session?.userId || !playlist) return [];
     const playlistTracks = await api<PlaylistTrack[]>(`/api/playlists/${playlist.id}/tracks?userId=${session.userId}`, {}, session);
-    updateWorkspaceState((current) => ({ ...current, playlistTracks }));
+    updateWorkspaceState((current) => {
+      const refreshedCurrentPlaylistTrack = playlistTracks.find(
+        (item) => item.playlistTrackId === current.currentTrack?.playlistTrackId,
+      );
+      return {
+        ...current,
+        playlistTracks,
+        currentTrack: current.currentTrack && refreshedCurrentPlaylistTrack
+          ? {
+              ...current.currentTrack,
+              playlistTrackId: refreshedCurrentPlaylistTrack.playlistTrackId,
+              playlistName: current.playlist?.name,
+            }
+          : current.currentTrack,
+      };
+    });
     setPlaylistPage((current) => Math.min(current, getPlaylistPageCount(playlistTracks.length)));
 
     if (options.selectFirstWhenEmpty && !workspaceRef.current.currentTrack && playlistTracks[0]) {
@@ -1716,13 +1921,42 @@ export default function App() {
     return findOrCreateTrackDraft(draft);
   }
 
+  async function ensureWorkspaceReady(session = authRef.current) {
+    if (!session?.userId) {
+      setNotice({ kind: "error", message: "로그인이 먼저 필요하다냥." });
+      return false;
+    }
+    if (workspaceRef.current.playlist) {
+      return true;
+    }
+
+    setNotice({ kind: "notice", message: "BGM 바구니를 다시 준비하는 중이냥..." });
+    await refreshWorkspace(session);
+    if (workspaceRef.current.playlist) {
+      return true;
+    }
+
+    setNotice({ kind: "error", message: "BGM 바구니를 아직 못 만들었다냥. 잠깐 뒤 다시 눌러줘냥." });
+    return false;
+  }
+
   async function registerLink(url: string) {
+    const session = authRef.current;
+    if (!session?.userId) {
+      setNotice({ kind: "error", message: "로그인이 먼저 필요하다냥." });
+      return false;
+    }
+    if (!await ensureWorkspaceReady(session)) {
+      return false;
+    }
+
     const currentWorkspace = workspaceRef.current;
-    const shouldAutoSelectAddedTrack = !currentWorkspace.currentTrack;
-    if (!auth?.userId || !currentWorkspace.playlist) {
+    const playlist = currentWorkspace.playlist;
+    if (!playlist) {
       setNotice({ kind: "error", message: "BGM 바구니가 아직 준비 중이다냥. 잠깐 뒤 다시 눌러줘냥." });
       return false;
     }
+    const shouldAutoSelectAddedTrack = !currentWorkspace.currentTrack;
     const sourceUrl = url.trim();
     const sourceId = extractYoutubeId(sourceUrl);
     const playlistId = extractYoutubePlaylistId(sourceUrl);
@@ -1737,7 +1971,7 @@ export default function App() {
         const preview = await api<YouTubePlaylistPreview>("/api/tracks/youtube-playlist/preview", {
           method: "POST",
           body: JSON.stringify({ playlistUrl: sourceUrl }),
-        }, auth);
+        }, session);
         const previewCount = preview.tracks.length;
         if (!previewCount) {
           setNotice({ kind: "error", message: "담을 수 있는 공개 영상을 찾지 못했다냥." });
@@ -1750,10 +1984,11 @@ export default function App() {
         setNotice({ kind: "notice", message: `플레이리스트 ${preview.trackCount}곡을 찾았다냥. 담을 곡 수를 확인해줘냥.` });
       } else {
         const track = await findOrCreateTrack(sourceUrl, sourceId);
-        await api<void>(`/api/playlists/${currentWorkspace.playlist.id}/tracks/${track.id}?userId=${auth.userId}`, { method: "POST" }, auth).catch((error) => {
+        await api<void>(`/api/playlists/${playlist.id}/tracks/${track.id}?userId=${session.userId}`, { method: "POST" }, session).catch((error) => {
           if (!String((error as Error).message).includes("이미")) throw error;
         });
-        const playlistTracks = await reloadPlaylistTracks(auth, { selectFirstWhenEmpty: shouldAutoSelectAddedTrack });
+        queueLyricWarmup(track, 200, session);
+        const playlistTracks = await reloadPlaylistTracks(session, { selectFirstWhenEmpty: shouldAutoSelectAddedTrack });
         const addedPlaylistTrack = playlistTracks.find((item) => item.trackId === track.id) || null;
         if (shouldAutoSelectAddedTrack && addedPlaylistTrack) {
           await selectTrack(addedPlaylistTrack);
@@ -1785,13 +2020,18 @@ export default function App() {
       const shouldAutoSelectAddedTrack = !workspaceRef.current.currentTrack;
       const drafts = current.tracks.slice(0, current.count);
       let firstAddedTrackId: number | null = null;
+      const warmupTracks: Track[] = [];
       for (const draft of drafts) {
         const track = await findOrCreateTrackDraft(draft);
         firstAddedTrackId ??= track.id;
+        if (warmupTracks.length < 3) {
+          warmupTracks.push(track);
+        }
         await api<void>(`/api/playlists/${currentWorkspace.playlist.id}/tracks/${track.id}?userId=${auth.userId}`, { method: "POST" }, auth).catch((error) => {
           if (!String((error as Error).message).includes("이미")) throw error;
         });
       }
+      warmupTracks.forEach((track, index) => queueLyricWarmup(track, 700 * index, auth));
       const playlistTracks = await reloadPlaylistTracks(auth);
       if (shouldAutoSelectAddedTrack && firstAddedTrackId && !workspaceRef.current.currentTrack) {
         const firstAddedPlaylistTrack = playlistTracks.find((item) => item.trackId === firstAddedTrackId) || playlistTracks[0];
@@ -1949,27 +2189,40 @@ export default function App() {
     }
   }
 
-  async function saveMemo(translatedText: string, memoText: string) {
-    if (!auth?.userId || !selectedLine?.id) {
+  async function saveMemoForLine(line: SelectedLine, translatedText: string, memoText: string, options: { showNotice?: boolean } = {}) {
+    const showNotice = options.showNotice ?? true;
+    if (!auth?.userId || !line.id) {
       setNotice({ kind: "notice", message: "아직 저장할 가사 줄이 없다냥." });
-      return;
+      return null;
     }
     try {
-      const saved = await api<Translation>(`/api/lyric-line-refs/${selectedLine.id}/translations?userId=${auth.userId}`, {
+      const saved = await api<Translation>(`/api/lyric-line-refs/${line.id}/translations?userId=${auth.userId}`, {
         method: "POST",
         body: JSON.stringify({
           languageCode: "ko",
-          translatedText: translatedText || selectedLine.text,
+          translatedText: translatedText || line.text,
           memoText,
         }),
       }, auth);
       setTranslation(saved);
-      setTranslationCache((current) => ({ ...current, [String(selectedLine.id)]: saved }));
+      setTranslationCache((current) => ({ ...current, [String(line.id)]: saved }));
       window.localStorage.setItem("kurostep.translationMemo", memoText);
-      setNotice({ kind: "notice", message: "번역 메모를 서버에 콕 저장했다냥." });
+      if (showNotice) {
+        setNotice({ kind: "notice", message: "번역 메모를 서버에 콕 저장했다냥." });
+      }
+      return saved;
     } catch (error) {
       setNotice({ kind: "error", message: (error as Error).message });
+      return null;
     }
+  }
+
+  async function saveMemo(translatedText: string, memoText: string) {
+    if (!selectedLine) {
+      setNotice({ kind: "notice", message: "아직 저장할 가사 줄이 없다냥." });
+      return;
+    }
+    await saveMemoForLine(selectedLine, translatedText, memoText);
   }
 
   async function deleteMemo() {
@@ -1997,14 +2250,25 @@ export default function App() {
       return;
     }
 
+    const memoFallback = translation?.memoText || window.localStorage.getItem("kurostep.translationMemo") || "저장한 가사 조각";
+    const translatedDraft = translation?.translatedText || "";
+    const serverTranslatedText = translatedDraft || selectedLine.text;
+    const savedTranslation = selectedLine.id && auth?.userId
+      ? await saveMemoForLine(selectedLine, serverTranslatedText, memoFallback, { showNotice: false })
+      : null;
+    if (selectedLine.id && auth?.userId && !savedTranslation) {
+      return;
+    }
+    const translationForPiece = savedTranslation || translation;
+
     const piece: SavedLyricPiece = {
       id: `${selectedLine.id || selectedLine.lineIndex || Date.now()}-${Date.now()}`,
       lineRefId: selectedLine.id || null,
       trackId: workspace.currentTrack?.id || null,
       trackTitle: workspace.currentTrack?.title || "작업곡",
       lineText: selectedLine.text,
-      translatedText: translation?.translatedText || "",
-      memoText: translation?.memoText || "",
+      translatedText: translationForPiece?.translatedText || translatedDraft,
+      memoText: translationForPiece?.memoText || memoFallback,
       savedAt: new Date().toISOString(),
     };
 
@@ -2013,12 +2277,8 @@ export default function App() {
       writeJson("kurostep.savedLyricPieces", next);
       return next;
     });
-    window.localStorage.setItem("kurostep.translationMemo", piece.memoText || "저장한 가사 조각");
+    window.localStorage.setItem("kurostep.translationMemo", piece.memoText || memoFallback);
     setNotice({ kind: "notice", message: "현재 가사 조각을 저장했다냥." });
-
-    if (selectedLine.id && auth?.userId) {
-      await saveMemo(piece.translatedText || selectedLine.text, piece.memoText || "저장한 가사 조각");
-    }
   }
 
   function deleteSavedLyricPiece(pieceId: string) {
@@ -2030,21 +2290,27 @@ export default function App() {
     setNotice({ kind: "notice", message: "저장한 가사 조각을 지웠다냥." });
   }
 
-  async function moveTrack(offset: number, autoplay = isPlaying) {
-    if (!workspace.playlistTracks.length || !workspace.currentTrack) return;
+  async function moveTrack(offset: number, autoplay = isPlaying, wrap = repeatMode === "all") {
+    const currentWorkspace = workspaceRef.current;
+    if (!currentWorkspace.playlistTracks.length || !currentWorkspace.currentTrack) return;
     const currentIndex = Math.max(
-      workspace.playlistTracks.findIndex((track) => track.playlistTrackId === workspace.currentTrack?.playlistTrackId),
+      currentWorkspace.playlistTracks.findIndex((track) => track.playlistTrackId === currentWorkspace.currentTrack?.playlistTrackId),
       0,
     );
     let nextIndex = currentIndex + offset;
     if (nextIndex < 0) {
-      nextIndex = repeatMode ? workspace.playlistTracks.length - 1 : 0;
+      nextIndex = wrap ? currentWorkspace.playlistTracks.length - 1 : 0;
     }
-    if (nextIndex >= workspace.playlistTracks.length) {
-      nextIndex = repeatMode ? 0 : workspace.playlistTracks.length - 1;
+    if (nextIndex >= currentWorkspace.playlistTracks.length) {
+      nextIndex = wrap ? 0 : currentWorkspace.playlistTracks.length - 1;
     }
-    const nextTrack = workspace.playlistTracks[nextIndex];
-    if (!nextTrack || nextTrack.playlistTrackId === workspace.currentTrack.playlistTrackId) return;
+    const nextTrack = currentWorkspace.playlistTracks[nextIndex];
+    if (!nextTrack || nextTrack.playlistTrackId === currentWorkspace.currentTrack.playlistTrackId) {
+      if (!wrap) {
+        setIsPlaying(false);
+      }
+      return;
+    }
     await selectTrack(nextTrack);
     setIsPlaying(Boolean(autoplay));
   }
@@ -2164,7 +2430,7 @@ export default function App() {
           duration={trackDuration}
           volume={volume}
           youtubeVisible={youtubeVisible}
-          canRegisterLinks={Boolean(workspace.playlist) && !loading}
+          canRegisterLinks={Boolean(auth?.userId) && !loading}
           pendingPlaylistImport={pendingPlaylistImport}
           onTogglePlay={() => {
             if (!workspace.currentTrack) return;
@@ -2180,8 +2446,12 @@ export default function App() {
           onSkip={skipPlayback}
           onSeek={seekPlayback}
           onToggleRepeat={() => {
-            setRepeatMode((value) => !value);
-            setNotice({ kind: "notice", message: repeatMode ? "반복 산책 OFF" : "반복 산책 ON" });
+            setRepeatMode((value) => {
+              const next = nextRepeatMode(value);
+              window.localStorage.setItem("kurostep.repeatMode", next);
+              setNotice({ kind: "notice", message: repeatModeNotice(next) });
+              return next;
+            });
           }}
           onSelectTrack={selectTrack}
           onRegisterLink={registerLink}
@@ -2205,6 +2475,23 @@ export default function App() {
           onSavePiece={saveCurrentLyricPiece}
         />
       </div>
+      {!isTauriApp && !isEmbeddedContent && pawWidgetVisible && (
+        <aside className="detached-widget paw-detached-widget" aria-label="작업 발자국 위젯">
+          <TaskPawWidget
+            workspace={workspace}
+            savedLyricPieces={savedLyricPieces}
+            selectedLine={selectedLine}
+            translation={translation}
+            onSelectTask={(task) => updateWorkspaceState((current) => ({ ...current, work: task }))}
+            onCreateTask={createTask}
+            onUpdateStatus={updateStatus}
+            onDeleteTask={deleteTask}
+            onSaveMemo={saveMemo}
+            onDeleteMemo={deleteMemo}
+            onDeletePiece={deleteSavedLyricPiece}
+          />
+        </aside>
+      )}
     </WidgetShell>
   );
 }
