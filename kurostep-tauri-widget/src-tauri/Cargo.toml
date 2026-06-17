@@ -1,6 +1,6 @@
 [package]
 name = "kurostep-tauri-widget"
-version = "0.1.0"
+version = "0.1.1"
 description = "Small macOS Tauri widget for KuroStep"
 authors = ["maren"]
 edition = "2021"
