@@ -63,6 +63,18 @@ Release assets에서 받을 파일:
 
 GitHub가 자동으로 표시하는 `Source code(zip/tar.gz)`는 저장소 스냅샷입니다. 일반 사용자가 실행하는 설치 파일이 아닙니다.
 
+## 0.1 핫픽스 검증
+
+0.1 핫픽스는 GitHub Pages React UI가 먼저 배포된 뒤 데스크톱 앱에서 같은 화면을 불러오는지 확인합니다. Tauri 앱은 로컬 `shell.html`을 열고, 실제 제품 UI는 GitHub Pages React 화면을 iframe으로 로드합니다.
+
+배포 후 확인할 항목:
+
+- GitHub Pages에서 로그인 후 YouTube 링크 버튼이 `준비 중`에 고정되지 않고 `링크 불러오기`로 활성화되는지 확인합니다.
+- aespa `LEMONADE` 공식 MV를 넣었을 때 곡명이 `LEMONADE`, 아티스트가 `aespa`로 정리되고 가사가 표시되는지 확인합니다.
+- Tauri 앱에서 메인 플레이어 창, 작업 발자국 창, 가사 오버레이 창이 각각 분리되어 보이는지 확인합니다.
+- 작업 발자국 ON/OFF, 가사 오버레이 ON/OFF, 설정 뒤로가기, 앱 종료 흐름을 실제 데스크톱 앱에서 확인합니다.
+- README의 데스크톱 릴리즈 링크가 사용자가 받을 설치 파일이 있는 릴리즈를 가리키는지 확인합니다.
+
 ## macOS Gatekeeper
 
 현재 macOS 앱은 포트폴리오 테스트용 ad-hoc signing 상태입니다. Apple Developer ID notarization을 거치지 않았기 때문에 일부 환경에서는 아래 경고가 뜰 수 있습니다.
