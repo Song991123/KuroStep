@@ -56,6 +56,27 @@ Tauri 앱은 GitHub Actions에서 macOS와 Windows 번들을 만듭니다.
 .github/workflows/tauri-release.yml
 ```
 
+0.1 핫픽스 릴리즈는 기존 `v0.1.0`을 삭제해서 같은 태그를 재사용하지 않고, `v0.1.1` 새 태그로 빌드합니다. `v0.1.0`은 2026-06-12에 `844955b` 기준으로 만들어진 이전 산출물이므로, 핫픽스가 반영된 데스크톱 설치 파일은 `23cb4ea` 이후 main에서 새로 만든 `v0.1.1`을 기준으로 안내합니다.
+
+릴리즈 빌드 전 확인할 항목:
+
+- `kurostep-tauri-widget/package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` 버전이 모두 `0.1.1`인지 확인합니다.
+- GitHub Pages가 최신 React 번들을 배포했는지 확인합니다. 0.1.1 기준 확인된 번들은 `assets/index-BT_EH9Vi.js`입니다.
+- EC2 API 배포 workflow가 main 최신 커밋에서 성공했는지 확인합니다. 0.1.1 기준 확인된 API 배포 run은 `Deploy KuroStep API to EC2 #5`입니다.
+- 배포 API에서 같은 YouTube `sourceId`를 다시 저장했을 때 `LEMONADE / aespa`로 메타데이터가 갱신되는지 확인합니다.
+- Tauri 앱은 로컬 `shell.html`을 열지만 실제 제품 UI는 GitHub Pages React iframe을 로드하므로, 데스크톱 릴리즈 전에 Pages와 EC2를 먼저 맞춥니다.
+- GitHub Release의 자동 `Source code` 파일은 설치 파일이 아닙니다. README와 포트폴리오 문서에는 사용자가 받아야 할 `.dmg`, `.msi`, `.exe` asset 기준으로 안내합니다.
+- macOS 빌드는 ad-hoc signing 상태라 Gatekeeper 경고가 날 수 있습니다. 포트폴리오 문서에는 Finder에서 Control-click > Open으로 여는 테스트 방법을 함께 둡니다.
+- 빌드 후에는 메인 플레이어 창, 작업 발자국 창, 가사 오버레이 창이 분리되는지 실제 앱에서 다시 확인합니다.
+
+0.1.1 릴리즈 빌드:
+
+```text
+Actions > Build KuroStep Desktop Release > Run workflow
+version: v0.1.1
+branch: main
+```
+
 Release assets에서 받을 파일:
 
 - macOS: `.dmg`
