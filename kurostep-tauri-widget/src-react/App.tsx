@@ -1902,7 +1902,17 @@ export default function App() {
           track.sourceType === draft.sourceType &&
           ((draft.sourceId && track.sourceId === draft.sourceId) || track.sourceUrl === draft.sourceUrl),
       );
-      if (existing) return existing;
+      if (existing) {
+        const currentTitle = (existing.title || "").trim();
+        const currentArtist = (existing.artist || "").trim();
+        const nextTitle = (draft.title || "").trim();
+        const nextArtist = (draft.artist || "").trim();
+
+        if (draft.sourceId && (currentTitle !== nextTitle || currentArtist !== nextArtist)) {
+          return api<Track>("/api/tracks", { method: "POST", body: JSON.stringify(draft) }, auth);
+        }
+        return existing;
+      }
     } catch {
       // Creation is still safe for duplicate-safe demo flow.
     }
