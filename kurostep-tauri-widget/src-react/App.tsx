@@ -1265,12 +1265,12 @@ function LyricMemoWidget({
       {selectedLine?.text ? (
         <>
           <p className="memo-context" id="memo-context"><span>{formatTimestamp(selectedLine.startTimeMs)}</span> "{selectedLine.text}"</p>
-          <label className="memo-field">번역문<textarea id="translated-text" value={translatedText} onChange={(event) => setTranslatedText(event.target.value)} placeholder="이 줄의 한국어 번역을 적어줘냥" /></label>
-          <label className="memo-field">작업 메모<textarea id="translation-memo" value={memoText} onChange={(event) => setMemoText(event.target.value)} placeholder="이 가사를 작업에 어떻게 붙일지 적어줘냥" /></label>
+          <label className="memo-field"><span>번역문</span><textarea className="memo-input" id="translated-text" value={translatedText} onChange={(event) => setTranslatedText(event.target.value)} placeholder="이 줄의 한국어 번역을 적어줘냥" /></label>
+          <label className="memo-field"><span>작업 메모</span><textarea className="memo-input" id="translation-memo" value={memoText} onChange={(event) => setMemoText(event.target.value)} placeholder="이 가사를 작업에 어떻게 붙일지 적어줘냥" /></label>
           <div className="memo-actions">
             <button className="action-button primary compact" id="save-memo" type="button" onClick={() => onSaveMemo(translatedText, memoText)}>메모 저장</button>
             <button className="action-button compact danger" id="delete-memo" type="button" onClick={onDeleteMemo}>메모 삭제</button>
-            <span id="memo-save-state">{translation?.status || ""}</span>
+            <span className="memo-save-state" id="memo-save-state">{translation?.status || ""}</span>
           </div>
         </>
       ) : <p className="state-message">곡을 재생하면 현재 가사와 한국어 메모를 만질 수 있다냥.</p>}
@@ -1517,6 +1517,32 @@ export default function App() {
     });
   }, [auth, lyricsOverlayVisible, selectedLine?.text, translation?.translatedText]);
 
+  function requestPawWidgetVisible(visible: boolean) {
+    writeJson("kurostep.pawWidgetVisible", visible);
+    setPawWidgetVisible(visible);
+    if (shellView !== "main" || !authRef.current) return;
+    void invokeNative("set_paw_visible", {
+      visible,
+      reload: false,
+      authJson: JSON.stringify(authRef.current),
+    }).catch((error) => {
+      setNotice({ kind: "error", message: `작업 발자국 창을 못 열었다냥: ${(error as Error).message || error}` });
+    });
+  }
+
+  function requestLyricsOverlayVisible(visible: boolean) {
+    writeJson("kurostep.lyricsOverlayVisible", visible);
+    setLyricsOverlayVisible(visible);
+    if (shellView !== "main" || !authRef.current) return;
+    void invokeNative("set_lyrics_visible", {
+      visible,
+      line: selectedLine?.text || "",
+      translation: translation?.translatedText || "",
+    }).catch((error) => {
+      setNotice({ kind: "error", message: `가사 오버레이 창을 못 열었다냥: ${(error as Error).message || error}` });
+    });
+  }
+
   const warmTrackLyricCache = useCallback(async (trackId: number, session = authRef.current) => {
     const cacheKey = `kurostep.lyrics.${trackId}`;
     const cached = readJson<LyricSource | null>(cacheKey, null);
@@ -1611,6 +1637,11 @@ export default function App() {
     setTranslation(null);
     void loadTrackLyrics(workspace.currentTrack, authRef.current);
   }, [workspace.currentTrack?.id, loadTrackLyrics]);
+
+  useEffect(() => {
+    if (!auth?.accessToken || !workspace.currentTrack?.id || lyricSource?.lines?.length) return;
+    void loadTrackLyrics(workspace.currentTrack, auth);
+  }, [auth?.accessToken, workspace.currentTrack?.id, lyricSource?.lines?.length, isPlaying, loadTrackLyrics]);
 
   useEffect(() => {
     const nextLine = chooseLineByPlaybackTime(lyric, lyricSource, playbackPosition);
@@ -1869,6 +1900,11 @@ export default function App() {
           visible: true,
           reload: false,
           authJson: JSON.stringify(session),
+        }).catch(() => {});
+        void invokeNative("set_lyrics_visible", {
+          visible: true,
+          line: "",
+          translation: "",
         }).catch(() => {});
       }
     } catch (error) {
@@ -2503,12 +2539,9 @@ export default function App() {
           type="button"
           aria-pressed={pawWidgetVisible}
           onClick={() => {
-            setPawWidgetVisible((value) => {
-              const next = !value;
-              writeJson("kurostep.pawWidgetVisible", next);
-              setNotice({ kind: "notice", message: next ? "작업 발자국 창을 펼쳤다냥." : "작업 발자국 창을 접었다냥." });
-              return next;
-            });
+            const next = !pawWidgetVisible;
+            requestPawWidgetVisible(next);
+            setNotice({ kind: "notice", message: next ? "작업 발자국 창을 펼쳤다냥." : "작업 발자국 창을 접었다냥." });
           }}
         >
           작업 발자국 {pawWidgetVisible ? "ON" : "OFF"}
@@ -2519,12 +2552,9 @@ export default function App() {
           type="button"
           aria-pressed={lyricsOverlayVisible}
           onClick={() => {
-            setLyricsOverlayVisible((value) => {
-              const next = !value;
-              writeJson("kurostep.lyricsOverlayVisible", next);
-              setNotice({ kind: "notice", message: next ? "가사 창 띄웠다냥." : "가사 창 접었다냥." });
-              return next;
-            });
+            const next = !lyricsOverlayVisible;
+            requestLyricsOverlayVisible(next);
+            setNotice({ kind: "notice", message: next ? "가사 창 띄웠다냥." : "가사 창 접었다냥." });
           }}
         >
           가사 오버레이 {lyricsOverlayVisible ? "ON" : "OFF"}
