@@ -1578,14 +1578,19 @@ export default function App() {
       translation: activeTranslation || null,
       at: Date.now(),
     };
+    const contextJson = JSON.stringify(context);
     writeJson("kurostep.currentLyricContext", context);
     if ("BroadcastChannel" in window) {
       const channel = new BroadcastChannel("kurostep.currentLyricContext");
       channel.postMessage(context);
       channel.close();
     }
+    postShellMessage({
+      type: "current_lyric_context",
+      contextJson,
+    });
     void invokeNative("sync_paw_lyric_context", {
-      contextJson: JSON.stringify(context),
+      contextJson,
     }).catch(() => {});
     broadcastWorkspaceSync("current-lyric-context");
   }, [workspace.currentTrack?.id, selectedLine, activeTranslation]);

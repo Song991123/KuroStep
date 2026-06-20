@@ -1,6 +1,6 @@
 const DEPLOYED_BASE_URL = "https://song991123.github.io/KuroStep/";
 const DEPLOYED_ORIGIN = new URL(DEPLOYED_BASE_URL).origin;
-const CONTENT_CACHE_VERSION = "20260621-v020";
+const CONTENT_CACHE_VERSION = "20260621-v021";
 const params = new URLSearchParams(window.location.search);
 const view = params.get("view") || "main";
 const shellWindow = document.querySelector("#shell-window");
@@ -123,6 +123,15 @@ async function refreshLyricContextFromNative() {
   }
 }
 
+async function syncLyricContextFromContent(contextJson) {
+  latestLyricContextJson = contextJson || "{}";
+  try {
+    await invokeNative("sync_paw_lyric_context", { contextJson: latestLyricContextJson });
+  } catch {
+    // The content iframe still keeps local fallbacks when native sync is unavailable.
+  }
+}
+
 const tauriListen = window.__TAURI__?.event?.listen;
 if (tauriListen) {
   tauriListen("paw:lyric-context", (event) => {
@@ -206,6 +215,11 @@ async function handleNativeMessage(message) {
         }
       }
     }
+    return;
+  }
+
+  if (message.type === "current_lyric_context") {
+    await syncLyricContextFromContent(message.contextJson);
     return;
   }
 
