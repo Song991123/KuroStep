@@ -123,6 +123,9 @@ fn save_current_window_position(app: tauri::AppHandle, label: String) -> Result<
     let window = app
         .get_webview_window(&label)
         .ok_or_else(|| format!("{label} window not found"))?;
+    if label != "main" && !window.is_visible().map_err(|error| error.to_string())? {
+        return Ok(());
+    }
     let position = window.outer_position().map_err(|error| error.to_string())?;
     let mut positions = read_window_positions(&app);
     positions.insert(
@@ -291,7 +294,7 @@ fn clamp_position(
 fn window_positions_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let directory = app.path().app_config_dir().map_err(|error| error.to_string())?;
     fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-    Ok(directory.join("window-positions-v4.json"))
+    Ok(directory.join("window-positions-v5.json"))
 }
 
 fn read_window_positions(app: &tauri::AppHandle) -> HashMap<String, WindowPoint> {
