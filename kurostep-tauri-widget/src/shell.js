@@ -1,6 +1,6 @@
 const DEPLOYED_BASE_URL = "https://song991123.github.io/KuroStep/";
 const DEPLOYED_ORIGIN = new URL(DEPLOYED_BASE_URL).origin;
-const CONTENT_CACHE_VERSION = "20260621-v018";
+const CONTENT_CACHE_VERSION = "20260621-v020";
 const params = new URLSearchParams(window.location.search);
 const view = params.get("view") || "main";
 const shellWindow = document.querySelector("#shell-window");
@@ -11,6 +11,7 @@ let authenticated = false;
 let trustedContentOrigin = DEPLOYED_ORIGIN;
 let pawPopup = null;
 let positionSaveTimer = null;
+let latestLyricContextJson = "{}";
 
 if (view === "paw") {
   shellWindow.classList.add("paw");
@@ -97,6 +98,7 @@ function forwardLyricContextToContent(contextJson) {
   if (view !== "paw") {
     return;
   }
+  latestLyricContextJson = contextJson || "{}";
   shellFrame.contentWindow?.postMessage(
     {
       source: "kurostep-shell",
@@ -107,11 +109,33 @@ function forwardLyricContextToContent(contextJson) {
   );
 }
 
+async function refreshLyricContextFromNative() {
+  if (view !== "paw") {
+    return;
+  }
+  try {
+    const contextJson = await invokeNative("get_current_lyric_context");
+    if (contextJson) {
+      forwardLyricContextToContent(contextJson);
+    }
+  } catch {
+    // The iframe still has storage/BroadcastChannel fallbacks when native polling is unavailable.
+  }
+}
+
 const tauriListen = window.__TAURI__?.event?.listen;
 if (tauriListen) {
   tauriListen("paw:lyric-context", (event) => {
     forwardLyricContextToContent(event.payload);
   }).catch?.(() => {});
+}
+
+if (view === "paw") {
+  shellFrame.addEventListener("load", () => {
+    forwardLyricContextToContent(latestLyricContextJson);
+    void refreshLyricContextFromNative();
+  });
+  window.setInterval(refreshLyricContextFromNative, 500);
 }
 
 function scheduleWindowPositionSave() {

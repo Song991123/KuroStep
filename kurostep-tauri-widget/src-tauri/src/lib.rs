@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{collections::HashMap, fs, path::PathBuf, sync::Mutex};
 use tauri::{
     Emitter, LogicalSize, Manager, PhysicalPosition, Position, Size, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder,
@@ -15,6 +15,11 @@ struct LyricPayload {
 struct WindowPoint {
     x: i32,
     y: i32,
+}
+
+#[derive(Default)]
+struct LyricContextState {
+    current: Mutex<String>,
 }
 
 #[tauri::command]
@@ -117,13 +122,28 @@ fn set_paw_visible(
 }
 
 #[tauri::command]
-fn sync_paw_lyric_context(app: tauri::AppHandle, context_json: String) -> Result<(), String> {
+fn sync_paw_lyric_context(
+    app: tauri::AppHandle,
+    state: tauri::State<LyricContextState>,
+    context_json: String,
+) -> Result<(), String> {
+    *state.current.lock().map_err(|error| error.to_string())? = context_json.clone();
+
     if let Some(paw) = app.get_webview_window("paw") {
         paw.emit("paw:lyric-context", context_json)
             .map_err(|error| error.to_string())?;
     }
 
     Ok(())
+}
+
+#[tauri::command]
+fn get_current_lyric_context(state: tauri::State<LyricContextState>) -> Result<String, String> {
+    state
+        .current
+        .lock()
+        .map(|context| context.clone())
+        .map_err(|error| error.to_string())
 }
 
 fn get_or_create_paw_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
@@ -353,6 +373,7 @@ fn exit_app(app: tauri::AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(LyricContextState::default())
         .setup(|app| {
             if let Some(main) = app.get_webview_window("main") {
                 restore_window_position(app.handle(), &main, "main", 380.0, 660.0);
@@ -363,6 +384,7 @@ pub fn run() {
             set_lyrics_visible,
             set_paw_visible,
             sync_paw_lyric_context,
+            get_current_lyric_context,
             save_current_window_position,
             exit_app
         ])
