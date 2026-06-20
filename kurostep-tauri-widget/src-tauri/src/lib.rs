@@ -228,7 +228,7 @@ fn clamp_position(
 fn window_positions_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let directory = app.path().app_config_dir().map_err(|error| error.to_string())?;
     fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-    Ok(directory.join("window-positions.json"))
+    Ok(directory.join("window-positions-v2.json"))
 }
 
 fn read_window_positions(app: &tauri::AppHandle) -> HashMap<String, WindowPoint> {
