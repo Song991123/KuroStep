@@ -179,6 +179,14 @@ fn saved_or_default_position(
         ));
     }
 
+    if label != "main" {
+        if let Some(position) =
+            child_position_from_main(app, label, width_px, height_px, monitor_position, monitor_size)
+        {
+            return Some(position);
+        }
+    }
+
     let margin = (24.0 * scale_factor).round() as i32;
     let main_width = (380.0 * scale_factor).round() as i32;
     let main_height = (660.0 * scale_factor).round() as i32;
@@ -221,6 +229,48 @@ fn saved_or_default_position(
     ))
 }
 
+fn child_position_from_main(
+    app: &tauri::AppHandle,
+    label: &str,
+    width_px: f64,
+    height_px: f64,
+    monitor_position: &PhysicalPosition<i32>,
+    monitor_size: &tauri::PhysicalSize<u32>,
+) -> Option<PhysicalPosition<i32>> {
+    let main = app.get_webview_window("main")?;
+    let main_position = main.outer_position().ok()?;
+    let main_size = main.outer_size().ok()?;
+    let scale_factor = main.scale_factor().unwrap_or(1.0);
+    let gap = (20.0 * scale_factor).round() as i32;
+    let raw = match label {
+        "paw" => PhysicalPosition {
+            x: main_position.x - width_px.ceil() as i32 - gap,
+            y: main_position.y + (42.0 * scale_factor).round() as i32,
+        },
+        "lyrics" => {
+            let above_y = main_position.y - height_px.ceil() as i32 - gap;
+            let below_y = main_position.y + main_size.height as i32 + gap;
+            PhysicalPosition {
+                x: main_position.x,
+                y: if above_y >= monitor_position.y + gap {
+                    above_y
+                } else {
+                    below_y
+                },
+            }
+        }
+        _ => return None,
+    };
+
+    Some(clamp_position(
+        raw,
+        monitor_position,
+        monitor_size,
+        width_px,
+        height_px,
+    ))
+}
+
 fn clamp_position(
     raw: PhysicalPosition<i32>,
     monitor_position: &PhysicalPosition<i32>,
@@ -241,7 +291,7 @@ fn clamp_position(
 fn window_positions_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let directory = app.path().app_config_dir().map_err(|error| error.to_string())?;
     fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-    Ok(directory.join("window-positions-v3.json"))
+    Ok(directory.join("window-positions-v4.json"))
 }
 
 fn read_window_positions(app: &tauri::AppHandle) -> HashMap<String, WindowPoint> {
