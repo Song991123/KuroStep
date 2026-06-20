@@ -60,6 +60,7 @@ fn set_lyrics_visible(
     if visible && !is_visible {
         restore_window_position(&app, &lyrics, "lyrics", width, height);
         lyrics.show().map_err(|error| error.to_string())?;
+        refocus_main_window(&app);
     } else if !visible && is_visible {
         lyrics.hide().map_err(|error| error.to_string())?;
     }
@@ -120,6 +121,7 @@ fn set_paw_visible(
     if visible && !is_visible {
         restore_window_position(&app, &paw, "paw", 380.0, 520.0);
         paw.show().map_err(|error| error.to_string())?;
+        refocus_main_window(&app);
     } else if !visible && is_visible {
         paw.hide().map_err(|error| error.to_string())?;
     }
@@ -196,6 +198,13 @@ fn get_or_create_paw_window(app: &tauri::AppHandle) -> Result<WebviewWindow, Str
         .visible(false)
         .build()
         .map_err(|error| error.to_string())
+}
+
+fn refocus_main_window(app: &tauri::AppHandle) {
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.show();
+        let _ = main.set_focus();
+    }
 }
 
 #[tauri::command]
