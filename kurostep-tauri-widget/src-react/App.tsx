@@ -601,7 +601,7 @@ function AuthScreen({
           {isSignup && <label>닉네임<input className="form-input" name="nickname" autoComplete="nickname" placeholder="검은 작업실 이름" /></label>}
           <label>이메일<input className="form-input" name="email" type="email" autoComplete="email" placeholder="you@example.com" /></label>
           <label>비밀번호<input className="form-input" name="password" type="password" autoComplete={isSignup ? "new-password" : "current-password"} placeholder="비밀번호" /></label>
-          <button className="action-button primary auth-submit" type="submit" disabled={busy}>{busy ? "문 여는 중이냥..." : isSignup ? "회원가입" : "로그인"}</button>
+          <button className="action-button primary auth-submit" type="submit" disabled={busy}>{busy ? "문 여는 중이냥" : isSignup ? "회원가입" : "로그인"}</button>
         </form>
       </section>
   );
@@ -1159,7 +1159,7 @@ function MusicPlayerWidget({
           </div>
         </div>
         {playerError && <p className="state-message">{playerError}</p>}
-        {!playerError && track && !playerReady && <p className="state-message">YouTube 플레이어를 깨우는 중이냥...</p>}
+        {!playerError && track && !playerReady && <p className="state-message">YouTube 플레이어를 깨우는 중이냥</p>}
         <button className="youtube-panel-toggle" id="youtube-video-toggle" type="button" aria-expanded={youtubeVisible} aria-controls="youtube-frame-shell" title={youtubeVisible ? "영상 접기" : "영상 펼치기"} aria-label={youtubeVisible ? "영상 접기" : "영상 펼치기"} onClick={onToggleYoutube}>
           <Icon name="chevronDown" />
           <span>{youtubeVisible ? "영상 접기" : "영상 펼치기"}</span>
@@ -1396,31 +1396,37 @@ function LyricsWidget({
           </div>
         )}
         {lyricsExpanded && (
-          <ol className="lyrics-full-list" id="lyrics-full-list">
-            {fullLines.length ? fullLines.map((line) => {
-              const ref = lyricRefs.find((item) => item.lineIndex === line.index);
-              return (
-              <li className={`lyrics-line${line.index === selectedLine?.lineIndex ? " active" : ""}`} data-line-index={line.index} key={line.index}>
-                <button
-                  className="lyrics-line-button"
-                  type="button"
-                  aria-label={`${formatTimestamp(line.startTimeMs)} 가사 선택`}
-                  onClick={() => onSelectLine({
-                    id: ref?.id || null,
-                    lineIndex: line.index,
-                    startTimeMs: line.startTimeMs,
-                    text: line.text,
-                  })}
-                >
-                  <span>{formatTimestamp(line.startTimeMs)}</span>
-                  <p>{line.text}</p>
-                </button>
-              </li>
-              );
-            }) : (
-              <li className="lyrics-line empty"><p>아직 불러온 가사가 없다냥.</p></li>
-            )}
-          </ol>
+          <div className="lyrics-full-panel">
+            <div className="lyrics-full-meta">
+              <span>{fullLines.length ? `${fullLines.length}줄` : "가사 대기 중"}</span>
+              <span>{selectedLine ? formatTimestamp(selectedLine.startTimeMs) : "싱크 준비"}</span>
+            </div>
+            <ol className="lyrics-full-list" id="lyrics-full-list">
+              {fullLines.length ? fullLines.map((line) => {
+                const ref = lyricRefs.find((item) => item.lineIndex === line.index);
+                return (
+                <li className={`lyrics-line${line.index === selectedLine?.lineIndex ? " active" : ""}`} data-line-index={line.index} key={line.index}>
+                  <button
+                    className="lyrics-line-button"
+                    type="button"
+                    aria-label={`${formatTimestamp(line.startTimeMs)} 가사 선택`}
+                    onClick={() => onSelectLine({
+                      id: ref?.id || null,
+                      lineIndex: line.index,
+                      startTimeMs: line.startTimeMs,
+                      text: line.text,
+                    })}
+                  >
+                    <span>{formatTimestamp(line.startTimeMs)}</span>
+                    <p>{line.text}</p>
+                  </button>
+                </li>
+                );
+              }) : (
+                <li className="lyrics-line empty"><p>아직 불러온 가사가 없다냥.</p></li>
+              )}
+            </ol>
+          </div>
         )}
       </div>
     </section>
@@ -1432,7 +1438,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [notice, setNotice] = useState<Notice>({ kind: "notice", message: "작업실 불러오는 중이냥..." });
+  const [notice, setNotice] = useState<Notice>({ kind: "notice", message: "작업실 불러오는 중이냥" });
   const [workspace, setWorkspace] = useState<Workspace>({
     tasks: [],
     work: null,
@@ -2050,7 +2056,7 @@ export default function App() {
     }
 
     setBusy(true);
-    setNotice({ kind: "notice", message: mode === "signup" ? "가입 정보 정리 중이냥..." : "작업실 문 여는 중이냥..." });
+    setNotice({ kind: "notice", message: mode === "signup" ? "가입 정보 정리 중이냥" : "작업실 문 여는 중이냥" });
     try {
       const session = await api<AuthSession>(mode === "signup" ? "/api/auth/signup" : "/api/auth/login", {
         method: "POST",
@@ -2239,7 +2245,7 @@ export default function App() {
       return true;
     }
 
-    setNotice({ kind: "notice", message: "BGM 바구니를 다시 준비하는 중이냥..." });
+    setNotice({ kind: "notice", message: "BGM 바구니를 다시 준비하는 중이냥" });
     await refreshWorkspace(session);
     if (workspaceRef.current.playlist) {
       return true;
@@ -2274,7 +2280,7 @@ export default function App() {
       return false;
     }
     try {
-      setNotice({ kind: "notice", message: "YouTube 링크를 작업 바구니에 담는 중이냥..." });
+      setNotice({ kind: "notice", message: "YouTube 링크를 작업 바구니에 담는 중이냥" });
 
       if (playlistId) {
         const preview = await api<YouTubePlaylistPreview>("/api/tracks/youtube-playlist/preview", {
@@ -2326,7 +2332,7 @@ export default function App() {
     if (!current || !auth?.userId || !currentWorkspace.playlist) return;
 
     try {
-      setNotice({ kind: "notice", message: "플레이리스트 곡을 BGM 바구니에 담는 중이냥..." });
+      setNotice({ kind: "notice", message: "플레이리스트 곡을 BGM 바구니에 담는 중이냥" });
       const shouldAutoSelectAddedTrack = !workspaceRef.current.currentTrack;
       const drafts = current.tracks.slice(0, current.count);
       let firstAddedTrackId: number | null = null;
@@ -2676,7 +2682,7 @@ export default function App() {
     setVolume(normalized);
   }
 
-  const visibleNotice = loading ? { kind: "notice" as const, message: "작업실 불러오는 중이냥..." } : notice;
+  const visibleNotice = loading ? { kind: "notice" as const, message: "작업실 불러오는 중이냥" } : notice;
 
   if (shellView === "paw" && !auth) {
     return (
