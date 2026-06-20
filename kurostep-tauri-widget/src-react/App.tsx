@@ -1418,6 +1418,14 @@ export default function App() {
     workspaceSyncChannelRef.current?.postMessage(payload);
   }
 
+  function readCurrentLyricContext() {
+    return readJson<{
+      trackId?: number | null;
+      line?: SelectedLine | null;
+      translation?: Translation | null;
+    }>("kurostep.currentLyricContext", {});
+  }
+
   useEffect(() => {
     workspaceRef.current = workspace;
   }, [workspace]);
@@ -1425,6 +1433,46 @@ export default function App() {
   useEffect(() => {
     translationCacheRef.current = translationCache;
   }, [translationCache]);
+
+  useEffect(() => {
+    if (shellView !== "main") return;
+    writeJson("kurostep.currentLyricContext", {
+      trackId: workspace.currentTrack?.id || null,
+      line: selectedLine || null,
+      translation: translation || null,
+      at: Date.now(),
+    });
+    broadcastWorkspaceSync("current-lyric-context");
+  }, [workspace.currentTrack?.id, selectedLine, translation]);
+
+  useEffect(() => {
+    if (shellView === "main") return;
+
+    function applyCurrentLyricContext() {
+      const context = readCurrentLyricContext();
+      if (context.trackId && workspaceRef.current.currentTrack?.id && context.trackId !== workspaceRef.current.currentTrack.id) {
+        return;
+      }
+      setSelectedLine(context.line || null);
+      setTranslation(context.translation || null);
+    }
+
+    function syncCurrentLyricFromStorage(event: StorageEvent) {
+      if (event.key === "kurostep.currentLyricContext") {
+        applyCurrentLyricContext();
+      }
+      if (event.key === "kurostep.workspaceSync") {
+        const reason = readJson<{ reason?: string }>("kurostep.workspaceSync", {}).reason;
+        if (reason === "current-lyric-context") {
+          applyCurrentLyricContext();
+        }
+      }
+    }
+
+    applyCurrentLyricContext();
+    window.addEventListener("storage", syncCurrentLyricFromStorage);
+    return () => window.removeEventListener("storage", syncCurrentLyricFromStorage);
+  }, []);
 
   function updateWorkspaceState(updater: Workspace | ((current: Workspace) => Workspace)) {
     const next = typeof updater === "function" ? updater(workspaceRef.current) : updater;
