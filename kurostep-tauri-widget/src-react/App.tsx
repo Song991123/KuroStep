@@ -105,6 +105,14 @@ function containsHangul(text: string) {
   return /[가-힣]/.test(text);
 }
 
+function normalizeMemoText(text: string | null | undefined) {
+  const value = String(text || "");
+  if (value.trim() === "작업 중 떠오른 번역 느낌을 살짝 적어둘게냥.") {
+    return "";
+  }
+  return value;
+}
+
 function clampLyricSyncOffset(value: number) {
   return Math.min(Math.max(Math.round(Number(value) || 0), -MAX_LYRIC_SYNC_OFFSET_MS), MAX_LYRIC_SYNC_OFFSET_MS);
 }
@@ -1345,7 +1353,7 @@ function LyricMemoWidget({
 
   useEffect(() => {
     setTranslatedText(translation?.translatedText || (selectedLine?.text && containsHangul(selectedLine.text) ? selectedLine.text : ""));
-    setMemoText(translation?.memoText || "");
+    setMemoText(normalizeMemoText(translation?.memoText));
   }, [selectedLine?.id, selectedLine?.lineIndex, selectedLine?.text, translation?.id, translation?.translatedText, translation?.memoText]);
 
   return (
@@ -1855,6 +1863,9 @@ export default function App() {
   }, [playbackPosition, lyric, lyricSource, lyricSyncOffsetMs, selectedLine?.id, selectedLine?.lineIndex]);
 
   useEffect(() => {
+    if (shellView !== "main") {
+      return;
+    }
     if (!auth?.userId || !selectedLine?.id || !selectedLine.text) {
       setTranslation(null);
       return;
@@ -1889,8 +1900,9 @@ export default function App() {
         if (cancelled) return;
         const savedKorean = translations.find((item) => item.languageCode === "ko") || translations[0];
         if (savedKorean) {
-          setTranslation(savedKorean);
-          setTranslationCache((current) => ({ ...current, [key]: savedKorean }));
+          const normalized = { ...savedKorean, memoText: normalizeMemoText(savedKorean.memoText) };
+          setTranslation(normalized);
+          setTranslationCache((current) => ({ ...current, [key]: normalized }));
           return;
         }
         if (containsHangul(selectedLine.text)) {
@@ -1924,7 +1936,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [auth?.userId, selectedLine?.id, selectedLine?.text]);
+  }, [auth?.userId, selectedLine?.id, selectedLine?.text, shellView]);
 
   useEffect(() => {
     if (!auth || !workspace.playlistTracks.length) return;
@@ -2568,12 +2580,13 @@ export default function App() {
         body: JSON.stringify({
           languageCode: "ko",
           translatedText: translatedText || line.text,
-          memoText,
+          memoText: normalizeMemoText(memoText),
         }),
       }, auth);
-      setTranslation(saved);
-      setTranslationCache((current) => ({ ...current, [String(line.id)]: saved }));
-      window.localStorage.setItem("kurostep.translationMemo", memoText);
+      const normalized = { ...saved, memoText: normalizeMemoText(saved.memoText) };
+      setTranslation(normalized);
+      setTranslationCache((current) => ({ ...current, [String(line.id)]: normalized }));
+      window.localStorage.setItem("kurostep.translationMemo", normalizeMemoText(memoText));
       if (showNotice) {
         setNotice({ kind: "notice", message: "번역 메모를 서버에 콕 저장했다냥." });
       }
@@ -2623,7 +2636,7 @@ export default function App() {
     }
 
     const activeTranslation = isTranslationForLine(translation, selectedLine) ? translation : null;
-    const memoFallback = activeTranslation?.memoText || window.localStorage.getItem("kurostep.translationMemo") || "저장한 가사 조각";
+    const memoFallback = normalizeMemoText(activeTranslation?.memoText) || normalizeMemoText(window.localStorage.getItem("kurostep.translationMemo")) || "저장한 가사 조각";
     const translatedDraft = activeTranslation?.translatedText || "";
     const serverTranslatedText = translatedDraft || selectedLine.text;
     const savedTranslation = selectedLine.id && auth?.userId
