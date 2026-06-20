@@ -215,6 +215,7 @@ public class LrclibClient implements LyricsProviderClient {
             }
 
             int count = 0;
+            LrclibRecord firstWithPlainLyrics = null;
             for (JsonNode item : root) {
                 count++;
                 String plainLyrics = textOrNull(item, "plainLyrics");
@@ -227,18 +228,30 @@ public class LrclibClient implements LyricsProviderClient {
                             syncedLyrics == null ? null : syncedLyrics.length()
                     );
                 }
-                if (hasLyrics(plainLyrics) || hasLyrics(syncedLyrics)) {
-                    return Optional.of(new LrclibRecord(
-                            longOrNull(item, "id"),
-                            textOrNull(item, "trackName"),
-                            textOrNull(item, "artistName"),
-                            textOrNull(item, "albumName"),
-                            doubleOrNull(item, "duration"),
-                            booleanOrNull(item, "instrumental"),
-                            plainLyrics,
-                            syncedLyrics
-                    ));
+                if (!hasLyrics(plainLyrics) && !hasLyrics(syncedLyrics)) {
+                    continue;
                 }
+
+                LrclibRecord record = new LrclibRecord(
+                        longOrNull(item, "id"),
+                        textOrNull(item, "trackName"),
+                        textOrNull(item, "artistName"),
+                        textOrNull(item, "albumName"),
+                        doubleOrNull(item, "duration"),
+                        booleanOrNull(item, "instrumental"),
+                        plainLyrics,
+                        syncedLyrics
+                );
+                if (hasLyrics(syncedLyrics)) {
+                    return Optional.of(record);
+                }
+                if (firstWithPlainLyrics == null) {
+                    firstWithPlainLyrics = record;
+                }
+            }
+
+            if (firstWithPlainLyrics != null) {
+                return Optional.of(firstWithPlainLyrics);
             }
 
             log.info("LRCLIB returned {} records but no lyrics text was detected.", count);

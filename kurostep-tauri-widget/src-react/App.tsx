@@ -38,6 +38,7 @@ const LYRIC_SYNC_LOOKAHEAD_MS = 350;
 const REPEAT_MODES = ["off", "all", "one"] as const;
 const MAX_YOUTUBE_RECOVERY_ATTEMPTS = 2;
 const LONG_FORM_TRACK_SECONDS = 12 * 60;
+const LYRIC_FETCH_TIMEOUT_MS = 45000;
 
 if (isEmbeddedContent) {
   document.documentElement.classList.add("embedded-mode");
@@ -64,6 +65,10 @@ type RepeatMode = typeof REPEAT_MODES[number];
 type PendingPlaylistImport = YouTubePlaylistPreview & {
   count: number;
 };
+
+function todayTasksPath(userId: number) {
+  return `/api/tasks?userId=${userId}&date=${todayIso()}`;
+}
 
 type YouTubePlayer = {
   cueVideoById: (options: { videoId: string; startSeconds?: number }) => void;
@@ -236,7 +241,7 @@ function parseLyricSource(fetchResponse: LyricFetchResponse): LyricSource {
 }
 
 function parseLyricLine(line: string, index: number) {
-  const match = line.match(/^\[(\d{2}):(\d{2})(?:\.(\d{2}))?\]\s*(.*)$/);
+  const match = line.match(/^\[(\d{1,2}):(\d{2})(?:\.(\d{2}))?\]\s*(.*)$/);
   if (!match) {
     return { index, startTimeMs: null, text: line.trim() };
   }
@@ -254,22 +259,22 @@ function parseLyricLine(line: string, index: number) {
 function chooseLineByPlaybackTime(lyric: Lyric | null, source: LyricSource | null, positionSeconds: number): SelectedLine | null {
   const refs = lyric?.lines || [];
   const sourceLines = source?.lines || [];
-  if (!refs.length) return null;
+  if (!refs.length && !sourceLines.length) return null;
 
   const positionMs = positionSeconds * 1000 + LYRIC_SYNC_LOOKAHEAD_MS;
-  const timedRefs = refs.filter((line) => Number.isFinite(line.startTimeMs));
-  if (timedRefs.length) {
-    const firstTimedRef = [...timedRefs].sort((left, right) => Number(left.startTimeMs) - Number(right.startTimeMs))[0];
-    if (positionMs < Number(firstTimedRef.startTimeMs)) {
-      return null;
-    }
-  }
+  const fallbackRefs = sourceLines.map((line) => ({
+    id: null,
+    lineIndex: line.index,
+    startTimeMs: line.startTimeMs,
+  }));
+  const lineRefs = refs.length ? refs : fallbackRefs;
+  const timedRefs = lineRefs.filter((line) => Number.isFinite(line.startTimeMs));
   const ref =
     timedRefs
       .filter((line) => Number(line.startTimeMs) <= positionMs)
       .sort((left, right) => Number(right.startTimeMs) - Number(left.startTimeMs))[0] ||
     timedRefs[0] ||
-    refs[0];
+    lineRefs[0];
   const sourceLine = sourceLines.find((line) => line.index === ref.lineIndex) || sourceLines[0];
   return {
     id: ref.id,
@@ -608,7 +613,7 @@ function TodayWorkWidget({
   tasks: CreatorTask[];
   work: CreatorTask | null;
   onSelectTask: (task: CreatorTask) => void;
-  onCreateTask: (title: string) => void;
+  onCreateTask: (title: string) => Promise<void> | void;
   onUpdateStatus: (status: TaskStatus) => void;
   onDeleteTask: () => void;
 }) {
@@ -616,10 +621,10 @@ function TodayWorkWidget({
   const [draftTitle, setDraftTitle] = useState("");
   const liveCounts = countTaskStatuses(tasks);
 
-  function submitTask() {
+  async function submitTask() {
     const title = draftTitle.trim();
     if (!title) return;
-    onCreateTask(title);
+    await onCreateTask(title);
     setDraftTitle("");
     setCreating(false);
   }
@@ -645,7 +650,7 @@ function TodayWorkWidget({
           aria-label="새 할 일 추가"
           onSubmit={(event) => {
             event.preventDefault();
-            submitTask();
+            void submitTask();
           }}
         >
           <input
@@ -782,6 +787,13 @@ function MusicPlayerWidget({
   const pageCount = getPlaylistPageCount(tracks.length);
   const visibleTracks = tracks.slice((page - 1) * PLAYLIST_PAGE_SIZE, page * PLAYLIST_PAGE_SIZE);
   const progressRatio = displayedDuration > 0 ? Math.min(position / displayedDuration, 1) : 0;
+
+  function getPlaylistDuration(playlistTrack: PlaylistTrack) {
+    if (playlistTrack.playlistTrackId === track?.playlistTrackId) {
+      return duration || track?.durationSeconds || playlistTrack.durationSeconds || 0;
+    }
+    return playlistTrack.durationSeconds || 0;
+  }
 
   useEffect(() => {
     repeatModeRef.current = repeatMode;
@@ -1159,7 +1171,7 @@ function MusicPlayerWidget({
                 <strong>{playlistTrack.title || `Track #${playlistTrack.trackId}`}</strong>
                 <small>{playlistTrack.artist || "YouTube"} · #{playlistTrack.trackId}</small>
               </span>
-              <span className="playlist-duration">{formatDuration(playlistTrack.durationSeconds)}</span>
+              <span className="playlist-duration">{formatDuration(getPlaylistDuration(playlistTrack))}</span>
               <button className="mini-icon-button danger playlist-remove-button" type="button" title="플레이리스트에서 곡 제거" aria-label="플레이리스트에서 곡 제거" onClick={() => onRemoveTrack(playlistTrack)}><Icon name="trash" /></button>
             </li>
           ))}
@@ -1193,7 +1205,7 @@ function TaskPawWidget({
   selectedLine: SelectedLine | null;
   translation: Translation | null;
   onSelectTask: (task: CreatorTask) => void;
-  onCreateTask: (title: string) => void;
+  onCreateTask: (title: string) => Promise<void> | void;
   onUpdateStatus: (status: TaskStatus) => void;
   onDeleteTask: () => void;
   onSaveMemo: (translatedText: string, memoText: string) => void;
@@ -1375,6 +1387,8 @@ export default function App() {
   const pendingTranslationRef = useRef(new Set<string>());
   const lyricLoadRequestRef = useRef(0);
   const lyricWarmupRef = useRef(new Map<number, Promise<LyricSource>>());
+  const lastSyncedDurationRef = useRef<Record<number, number>>({});
+  const workspaceSyncChannelRef = useRef<BroadcastChannel | null>(null);
 
   useEffect(() => {
     authRef.current = auth;
@@ -1398,6 +1412,12 @@ export default function App() {
     return () => window.removeEventListener("storage", syncAuthFromStorage);
   }, []);
 
+  function broadcastWorkspaceSync(reason: string) {
+    const payload = { reason, at: Date.now(), source: shellView };
+    writeJson("kurostep.workspaceSync", payload);
+    workspaceSyncChannelRef.current?.postMessage(payload);
+  }
+
   useEffect(() => {
     workspaceRef.current = workspace;
   }, [workspace]);
@@ -1410,6 +1430,41 @@ export default function App() {
     const next = typeof updater === "function" ? updater(workspaceRef.current) : updater;
     workspaceRef.current = next;
     setWorkspace(next);
+  }
+
+  function updateCurrentTrackDuration(seconds: number) {
+    const nextDuration = Math.floor(Number(seconds) || 0);
+    if (nextDuration <= 0) return;
+
+    setTrackDuration(nextDuration);
+    updateWorkspaceState((current) => ({
+      ...current,
+      playlistTracks: current.playlistTracks.map((playlistTrack) =>
+        playlistTrack.playlistTrackId === current.currentTrack?.playlistTrackId
+          ? { ...playlistTrack, durationSeconds: nextDuration }
+          : playlistTrack,
+      ),
+      currentTrack: current.currentTrack
+        ? { ...current.currentTrack, durationSeconds: nextDuration }
+        : current.currentTrack,
+    }));
+
+    const track = workspaceRef.current.currentTrack;
+    if (!authRef.current || !track?.id || !track.sourceId) return;
+    if (lastSyncedDurationRef.current[track.id] === nextDuration) return;
+    lastSyncedDurationRef.current[track.id] = nextDuration;
+    void api<Track>("/api/tracks", {
+      method: "POST",
+      body: JSON.stringify({
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        sourceType: track.sourceType,
+        sourceUrl: track.sourceUrl,
+        sourceId: track.sourceId,
+        durationSeconds: nextDuration,
+      }),
+    }, authRef.current).catch(() => {});
   }
 
   useEffect(() => {
@@ -1472,7 +1527,7 @@ export default function App() {
     if (existing) {
       return existing;
     }
-    const warmup = api<LyricFetchResponse>(`/api/tracks/${trackId}/lyrics/fetch`, { method: "POST" }, session)
+    const warmup = api<LyricFetchResponse>(`/api/tracks/${trackId}/lyrics/fetch`, { method: "POST", timeoutMs: LYRIC_FETCH_TIMEOUT_MS }, session)
       .then((response) => {
         const source = parseLyricSource(response);
         if (source.lines.length) {
@@ -1650,7 +1705,7 @@ export default function App() {
     }
     setLoading(true);
     try {
-      let tasks = await api<CreatorTask[]>(`/api/tasks/today?userId=${session.userId}`, {}, session);
+      let tasks = await api<CreatorTask[]>(todayTasksPath(session.userId), {}, session);
       if (tasks.length === 0) {
         await api<CreatorTask>(`/api/tasks?userId=${session.userId}`, {
           method: "POST",
@@ -1660,7 +1715,7 @@ export default function App() {
             taskDate: todayIso(),
           }),
         }, session);
-        tasks = await api<CreatorTask[]>(`/api/tasks/today?userId=${session.userId}`, {}, session);
+        tasks = await api<CreatorTask[]>(todayTasksPath(session.userId), {}, session);
       }
 
       let work = tasks.find((task) => task.status === "DOING") || tasks[0] || null;
@@ -1718,6 +1773,43 @@ export default function App() {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    function refreshFromPeer(reason?: string) {
+      setSavedLyricPieces(readJson<SavedLyricPiece[]>("kurostep.savedLyricPieces", []));
+      if (reason?.startsWith("lyric-piece")) return;
+
+      const session = authRef.current;
+      if (session?.accessToken) {
+        void refreshWorkspace(session);
+      }
+    }
+
+    function syncWorkspaceFromStorage(event: StorageEvent) {
+      if (event.key === "kurostep.savedLyricPieces") {
+        setSavedLyricPieces(readJson<SavedLyricPiece[]>("kurostep.savedLyricPieces", []));
+        return;
+      }
+      if (event.key !== "kurostep.workspaceSync") return;
+      refreshFromPeer(readJson<{ reason?: string }>("kurostep.workspaceSync", {}).reason);
+    }
+
+    const channel = "BroadcastChannel" in window ? new BroadcastChannel("kurostep.workspaceSync") : null;
+    workspaceSyncChannelRef.current = channel;
+    if (channel) {
+      channel.onmessage = (event) => {
+        refreshFromPeer((event.data as { reason?: string } | undefined)?.reason);
+      };
+    }
+    window.addEventListener("storage", syncWorkspaceFromStorage);
+    return () => {
+      window.removeEventListener("storage", syncWorkspaceFromStorage);
+      channel?.close();
+      if (workspaceSyncChannelRef.current === channel) {
+        workspaceSyncChannelRef.current = null;
+      }
+    };
+  }, [refreshWorkspace]);
 
   useEffect(() => {
     if (!auth?.accessToken) {
@@ -1810,7 +1902,7 @@ export default function App() {
 
   async function reloadTasks(session = authRef.current) {
     if (!session?.userId) return;
-    const tasks = await api<CreatorTask[]>(`/api/tasks/today?userId=${session.userId}`, {}, session);
+    const tasks = await api<CreatorTask[]>(todayTasksPath(session.userId), {}, session);
     updateWorkspaceState((current) => {
       const currentWorkId = current.work?.id;
       const work = tasks.find((task) => task.id === currentWorkId) || tasks.find((task) => task.status === "DOING") || tasks[0] || null;
@@ -1862,6 +1954,7 @@ export default function App() {
         body: JSON.stringify({ title: title.trim(), description: "", taskDate: todayIso() }),
       }, auth);
       await reloadTasks(auth);
+      broadcastWorkspaceSync("task-created");
       setNotice({ kind: "notice", message: "새 할 일을 발자국장에 넣었다냥." });
     } catch (error) {
       setNotice({ kind: "error", message: (error as Error).message });
@@ -1876,6 +1969,7 @@ export default function App() {
         body: JSON.stringify({ status }),
       }, auth);
       await reloadTasks(auth);
+      broadcastWorkspaceSync("task-status-updated");
       setNotice({ kind: "notice", message: `작업 상태를 ${statusLabel(status)}로 옮겼다냥.` });
     } catch (error) {
       setNotice({ kind: "error", message: (error as Error).message });
@@ -1887,6 +1981,7 @@ export default function App() {
     try {
       await api<void>(`/api/tasks/${workspace.work.id}?userId=${auth.userId}`, { method: "DELETE" }, auth);
       await reloadTasks(auth);
+      broadcastWorkspaceSync("task-deleted");
       setNotice({ kind: "notice", message: "할 일을 살짝 치웠다냥." });
     } catch (error) {
       setNotice({ kind: "error", message: (error as Error).message });
@@ -2003,6 +2098,7 @@ export default function App() {
         if (shouldAutoSelectAddedTrack && addedPlaylistTrack) {
           await selectTrack(addedPlaylistTrack);
         }
+        broadcastWorkspaceSync("playlist-track-added");
         setNotice({ kind: "notice", message: "곡을 BGM 바구니에 넣었다냥." });
       }
       return true;
@@ -2050,6 +2146,7 @@ export default function App() {
         }
       }
       setPendingPlaylistImport(null);
+      broadcastWorkspaceSync("playlist-imported");
       setNotice({ kind: "notice", message: `${drafts.length}곡을 BGM 바구니에 넣었다냥.` });
     } catch (error) {
       setNotice({ kind: "error", message: (error as Error).message });
@@ -2067,7 +2164,7 @@ export default function App() {
     let work = currentWorkspace.work;
     try {
       if (!work) {
-        const tasks = await api<CreatorTask[]>(`/api/tasks/today?userId=${auth.userId}`, {}, auth);
+        const tasks = await api<CreatorTask[]>(todayTasksPath(auth.userId), {}, auth);
         work = tasks.find((task) => task.status === "DOING") || tasks[0] || null;
         updateWorkspaceState((current) => ({
           ...current,
@@ -2107,6 +2204,7 @@ export default function App() {
         tasks: current.tasks.map((task) => (task.id === updatedWork.id ? updatedWork : task)),
         currentTrack: { ...detail, playlistTrackId: playlistTrack.playlistTrackId, playlistName: current.playlist?.name },
       }));
+      broadcastWorkspaceSync("current-track-selected");
       setNotice({ kind: "notice", message: "현재 곡을 바꿨다냥." });
     } catch (error) {
       setNotice({ kind: "error", message: (error as Error).message });
@@ -2151,6 +2249,7 @@ export default function App() {
           }));
         }
       }
+      broadcastWorkspaceSync("playlist-track-removed");
       setNotice({ kind: "notice", message: "BGM 바구니에서 곡을 뺐다냥." });
     } catch (error) {
       setNotice({ kind: "error", message: (error as Error).message });
@@ -2232,7 +2331,10 @@ export default function App() {
       setNotice({ kind: "notice", message: "아직 저장할 가사 줄이 없다냥." });
       return;
     }
-    await saveMemoForLine(selectedLine, translatedText, memoText);
+    const saved = await saveMemoForLine(selectedLine, translatedText, memoText);
+    if (saved) {
+      broadcastWorkspaceSync("lyric-memo-saved");
+    }
   }
 
   async function deleteMemo() {
@@ -2248,6 +2350,7 @@ export default function App() {
         delete next[String(selectedLine.id)];
         return next;
       });
+      broadcastWorkspaceSync("lyric-memo-deleted");
       setNotice({ kind: "notice", message: "이 줄의 번역 메모를 지웠다냥." });
     } catch (error) {
       setNotice({ kind: "error", message: (error as Error).message });
@@ -2266,9 +2369,6 @@ export default function App() {
     const savedTranslation = selectedLine.id && auth?.userId
       ? await saveMemoForLine(selectedLine, serverTranslatedText, memoFallback, { showNotice: false })
       : null;
-    if (selectedLine.id && auth?.userId && !savedTranslation) {
-      return;
-    }
     const translationForPiece = savedTranslation || translation;
 
     const piece: SavedLyricPiece = {
@@ -2288,6 +2388,7 @@ export default function App() {
       return next;
     });
     window.localStorage.setItem("kurostep.translationMemo", piece.memoText || memoFallback);
+    broadcastWorkspaceSync("lyric-piece-saved");
     setNotice({ kind: "notice", message: "현재 가사 조각을 저장했다냥." });
   }
 
@@ -2297,6 +2398,7 @@ export default function App() {
       writeJson("kurostep.savedLyricPieces", next);
       return next;
     });
+    broadcastWorkspaceSync("lyric-piece-deleted");
     setNotice({ kind: "notice", message: "저장한 가사 조각을 지웠다냥." });
   }
 
@@ -2449,7 +2551,7 @@ export default function App() {
           }}
           onPlayingChange={setIsPlaying}
           onPositionChange={setPlaybackPosition}
-          onDurationChange={setTrackDuration}
+          onDurationChange={updateCurrentTrackDuration}
           onVolumeChange={changeVolume}
           onToggleYoutube={() => setYoutubeVisible((value) => !value)}
           onMoveTrack={moveTrack}
