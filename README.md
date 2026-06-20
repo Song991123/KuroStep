@@ -27,7 +27,7 @@ KuroStep은 재택 창작자가 작업하면서 따로 관리하던 `Todo`, `작
 | 구분 | 링크 |
 |---|---|
 | 배포 UI | [GitHub Pages](https://song991123.github.io/KuroStep/) |
-| 데스크톱 릴리즈 | [GitHub Releases](https://github.com/Song991123/KuroStep/releases/tag/v0.1.1) |
+| 데스크톱 릴리즈 | [GitHub Releases](https://github.com/Song991123/KuroStep/releases/tag/v0.1.2) |
 | 상세 문서 | [docs](docs/README.md) |
 | 최종 보고서 | [docs/report/kurostep_v1_report.md](docs/report/kurostep_v1_report.md) |
 

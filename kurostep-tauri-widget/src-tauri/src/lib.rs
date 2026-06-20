@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tauri::{Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{Emitter, LogicalSize, Manager, Size, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 #[derive(Clone, Serialize)]
 struct LyricPayload {
@@ -18,8 +18,14 @@ fn set_lyrics_visible(
         .get_webview_window("lyrics")
         .ok_or_else(|| "lyrics window not found".to_string())?;
 
+    let (width, height) = estimate_lyrics_window_size(&line, &translation);
+
     lyrics
         .emit("lyrics:update", LyricPayload { line, translation })
+        .map_err(|error| error.to_string())?;
+
+    lyrics
+        .set_size(Size::Logical(LogicalSize { width, height }))
         .map_err(|error| error.to_string())?;
 
     let is_visible = lyrics.is_visible().map_err(|error| error.to_string())?;
@@ -31,6 +37,13 @@ fn set_lyrics_visible(
     }
 
     Ok(())
+}
+
+fn estimate_lyrics_window_size(line: &str, translation: &str) -> (f64, f64) {
+    let longest = line.chars().count().max(translation.chars().count()).max(10) as f64;
+    let width = (longest * 11.0 + 56.0).clamp(180.0, 720.0);
+    let height = if translation.trim().is_empty() { 58.0 } else { 84.0 };
+    (width, height)
 }
 
 #[tauri::command]

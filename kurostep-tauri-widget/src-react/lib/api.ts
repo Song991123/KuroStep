@@ -129,6 +129,10 @@ export type LyricFetchResponse = {
   plainLyrics?: string;
 };
 
+type ApiOptions = RequestInit & {
+  timeoutMs?: number;
+};
+
 export type SavedLyricPiece = {
   id: string;
   lineRefId?: number | null;
@@ -185,19 +189,20 @@ export function authErrorMessage(error: unknown, mode: "login" | "signup") {
   return `${mode === "signup" ? "회원가입" : "로그인"}에 실패했다냥: ${message}`;
 }
 
-export async function api<T>(path: string, options: RequestInit = {}, auth?: AuthSession | null): Promise<T> {
+export async function api<T>(path: string, options: ApiOptions = {}, auth?: AuthSession | null): Promise<T> {
   const controller = new AbortController();
   let timeoutId: number | undefined;
+  const { timeoutMs = API_TIMEOUT_MS, ...requestOptions } = options;
   const headers = {
     "Content-Type": "application/json",
     ...(auth?.accessToken ? { Authorization: `Bearer ${auth.accessToken}` } : {}),
-    ...(options.headers || {}),
+    ...(requestOptions.headers || {}),
   };
 
   try {
     const response = await Promise.race([
       fetch(`${API_BASE_URL}${path}`, {
-        ...options,
+        ...requestOptions,
         headers,
         signal: controller.signal,
       }),
@@ -205,7 +210,7 @@ export async function api<T>(path: string, options: RequestInit = {}, auth?: Aut
         timeoutId = window.setTimeout(() => {
           controller.abort();
           reject(new Error("서버 응답이 너무 늦다냥. 잠깐 뒤 다시 시도해줘냥."));
-        }, API_TIMEOUT_MS);
+        }, timeoutMs);
       }),
     ]);
     const text = await response.text();
