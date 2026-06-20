@@ -279,6 +279,13 @@ function parseLyricLine(line: string, index: number) {
   };
 }
 
+function hasTimedLyricSource(source: LyricSource | null | undefined) {
+  return Boolean(
+    source?.lines?.some((line) => Number.isFinite(line.startTimeMs)) ||
+    source?.lyric?.lines?.some((line) => Number.isFinite(line.startTimeMs)),
+  );
+}
+
 function chooseLineByPlaybackTime(lyric: Lyric | null, source: LyricSource | null, positionSeconds: number, syncOffsetMs = 0): SelectedLine | null {
   const refs = lyric?.lines || [];
   const sourceLines = source?.lines || [];
@@ -290,13 +297,14 @@ function chooseLineByPlaybackTime(lyric: Lyric | null, source: LyricSource | nul
     lineIndex: line.index,
     startTimeMs: line.startTimeMs,
   }));
-  const lineRefs = refs.length ? refs : fallbackRefs;
-  const timedRefs = lineRefs.filter((line) => Number.isFinite(line.startTimeMs));
+  const timedRefs = refs.filter((line) => Number.isFinite(line.startTimeMs));
+  const timedSourceRefs = fallbackRefs.filter((line) => Number.isFinite(line.startTimeMs));
+  const lineRefs = timedRefs.length ? timedRefs : timedSourceRefs.length ? timedSourceRefs : refs.length ? refs : fallbackRefs;
   const ref =
-    timedRefs
+    lineRefs
       .filter((line) => Number(line.startTimeMs) <= positionMs)
       .sort((left, right) => Number(right.startTimeMs) - Number(left.startTimeMs))[0] ||
-    timedRefs[0] ||
+    lineRefs.find((line) => Number.isFinite(line.startTimeMs)) ||
     lineRefs[0];
   const sourceLine = sourceLines.find((line) => line.index === ref.lineIndex) || sourceLines[0];
   return {
@@ -1658,7 +1666,7 @@ export default function App() {
   const warmTrackLyricCache = useCallback(async (trackId: number, session = authRef.current) => {
     const cacheKey = `kurostep.lyrics.${trackId}`;
     const cached = readJson<LyricSource | null>(cacheKey, null);
-    if (cached?.lines?.length && cached?.lyric) {
+    if (cached?.lines?.length && cached?.lyric && hasTimedLyricSource(cached)) {
       return cached;
     }
     const existing = lyricWarmupRef.current.get(trackId);
@@ -1702,7 +1710,7 @@ export default function App() {
 
     const cacheKey = `kurostep.lyrics.${track.id}`;
     const cached = readJson<LyricSource | null>(cacheKey, null);
-    if (cached?.lines?.length && cached?.lyric) {
+    if (cached?.lines?.length && cached?.lyric && hasTimedLyricSource(cached)) {
       if (requestId !== lyricLoadRequestRef.current) return;
       setLyric(cached.lyric || null);
       setLyricSource(cached);
