@@ -114,6 +114,51 @@ function normalizeMemoText(text: string | null | undefined) {
   return value;
 }
 
+function lyricDraftKey(trackId: number | null | undefined, line: SelectedLine | null | undefined) {
+  if (!line?.text) return "";
+  const lineKey = line.id != null ? `id-${line.id}` : `idx-${line.lineIndex}-${line.startTimeMs ?? "na"}-${line.text}`;
+  return `kurostep.translationDraft.${trackId || "trackless"}.${lineKey}`;
+}
+
+function makeLocalTranslation(line: SelectedLine, translatedText: string, memoText = ""): Translation {
+  return {
+    lyricLineRefId: line.id || null,
+    languageCode: "ko",
+    translatedText,
+    memoText: normalizeMemoText(memoText),
+    status: "LOCAL_DRAFT",
+  };
+}
+
+function readLocalTranslationDraft(trackId: number | null | undefined, line: SelectedLine | null | undefined) {
+  const key = lyricDraftKey(trackId, line);
+  if (!key || !line?.text) return null;
+  const draft = readJson<{ translatedText?: string; memoText?: string } | null>(key, null);
+  if (!draft) return null;
+  const translatedText = String(draft.translatedText || "");
+  const memoText = normalizeMemoText(draft.memoText);
+  if (!translatedText && !memoText) return null;
+  return makeLocalTranslation(line, translatedText || (containsHangul(line.text) ? line.text : ""), memoText);
+}
+
+function writeLocalTranslationDraft(trackId: number | null | undefined, line: SelectedLine | null | undefined, translatedText: string, memoText: string) {
+  const key = lyricDraftKey(trackId, line);
+  if (!key) return;
+  const draft = {
+    translatedText,
+    memoText: normalizeMemoText(memoText),
+    savedAt: new Date().toISOString(),
+  };
+  writeJson(key, draft);
+}
+
+function removeLocalTranslationDraft(trackId: number | null | undefined, line: SelectedLine | null | undefined) {
+  const key = lyricDraftKey(trackId, line);
+  if (key) {
+    window.localStorage.removeItem(key);
+  }
+}
+
 function clampLyricSyncOffset(value: number) {
   return Math.min(Math.max(Math.round(Number(value) || 0), -MAX_LYRIC_SYNC_OFFSET_MS), MAX_LYRIC_SYNC_OFFSET_MS);
 }
@@ -565,14 +610,18 @@ function WidgetShell({
 
 function SettingsScreen({
   auth,
+  autoTranslationEnabled,
   onBack,
   onLogout,
   onExit,
+  onToggleAutoTranslation,
 }: {
   auth: AuthSession;
+  autoTranslationEnabled: boolean;
   onBack: () => void;
   onLogout: () => void;
   onExit: () => void;
+  onToggleAutoTranslation: (enabled: boolean) => void;
 }) {
   return (
     <WidgetShell title="KuroStep" rightAction="none">
@@ -588,6 +637,21 @@ function SettingsScreen({
         <section className="settings-card">
           <h2>닉네임</h2>
           <p>{auth.nickname || "이름 없는 작업자냥"}</p>
+        </section>
+        <section className="settings-card setting-toggle-card">
+          <div>
+            <h2>자동 번역</h2>
+            <p>{autoTranslationEnabled ? "새 영어 가사를 만나면 한국어 초안을 자동으로 만든다냥." : "자동 초안은 멈추고, 직접 적은 번역만 보여준다냥."}</p>
+          </div>
+          <button
+            className={`toggle-pill ${autoTranslationEnabled ? "on" : ""}`}
+            type="button"
+            role="switch"
+            aria-checked={autoTranslationEnabled}
+            onClick={() => onToggleAutoTranslation(!autoTranslationEnabled)}
+          >
+            {autoTranslationEnabled ? "ON" : "OFF"}
+          </button>
         </section>
         <div className="settings-actions">
           <button className="action-button danger" type="button" onClick={onLogout}>로그아웃</button>
@@ -1308,6 +1372,7 @@ function TaskPawWidget({
   onDeleteTask: () => void;
   onSaveMemo: (translatedText: string, memoText: string) => void;
   onDeleteMemo: () => void;
+  onDraftMemo: (translatedText: string, memoText: string) => void;
   onDeletePiece: (pieceId: string) => void;
 }) {
   return (
@@ -1319,7 +1384,7 @@ function TaskPawWidget({
         </div>
       </div>
       <TodayWorkWidget tasks={workspace.tasks} work={workspace.work} onSelectTask={onSelectTask} onCreateTask={onCreateTask} onUpdateStatus={onUpdateStatus} onDeleteTask={onDeleteTask} />
-      <LyricMemoWidget selectedLine={selectedLine} translation={translation} onSaveMemo={onSaveMemo} onDeleteMemo={onDeleteMemo} />
+      <LyricMemoWidget selectedLine={selectedLine} translation={translation} onSaveMemo={onSaveMemo} onDeleteMemo={onDeleteMemo} onDraftChange={onDraftMemo} />
       <section className="widget-section saved-lyrics-widget" aria-labelledby="saved-lyrics-title">
         <SectionHeader title="저장한 가사 조각" />
         {savedLyricPieces.length ? (
@@ -1343,11 +1408,13 @@ function LyricMemoWidget({
   translation,
   onSaveMemo,
   onDeleteMemo,
+  onDraftChange,
 }: {
   selectedLine: SelectedLine | null;
   translation: Translation | null;
   onSaveMemo: (translatedText: string, memoText: string) => void;
   onDeleteMemo: () => void;
+  onDraftChange: (translatedText: string, memoText: string) => void;
 }) {
   const [translatedText, setTranslatedText] = useState("");
   const [memoText, setMemoText] = useState("");
@@ -1357,14 +1424,24 @@ function LyricMemoWidget({
     setMemoText(normalizeMemoText(translation?.memoText));
   }, [selectedLine?.id, selectedLine?.lineIndex, selectedLine?.text, translation?.id, translation?.translatedText, translation?.memoText]);
 
+  function changeTranslatedText(value: string) {
+    setTranslatedText(value);
+    onDraftChange(value, memoText);
+  }
+
+  function changeMemoText(value: string) {
+    setMemoText(value);
+    onDraftChange(translatedText, value);
+  }
+
   return (
     <section className="widget-section lyric-memo-widget" aria-labelledby="lyric-memo-title">
       <SectionHeader title="번역 메모" />
       {selectedLine?.text ? (
         <>
           <p className="memo-context" id="memo-context"><span>{formatTimestamp(selectedLine.startTimeMs)}</span> "{selectedLine.text}"</p>
-          <label className="memo-field"><span>번역문</span><textarea className="memo-input" id="translated-text" value={translatedText} onChange={(event) => setTranslatedText(event.target.value)} placeholder="이 줄의 한국어 번역을 적어줘냥" /></label>
-          <label className="memo-field"><span>작업 메모</span><textarea className="memo-input" id="translation-memo" value={memoText} onChange={(event) => setMemoText(event.target.value)} placeholder="이 가사를 작업에 어떻게 붙일지 적어줘냥" /></label>
+          <label className="memo-field"><span>번역문</span><textarea className="memo-input" id="translated-text" value={translatedText} onChange={(event) => changeTranslatedText(event.target.value)} placeholder="이 줄의 한국어 번역을 적어줘냥" /></label>
+          <label className="memo-field"><span>작업 메모</span><textarea className="memo-input" id="translation-memo" value={memoText} onChange={(event) => changeMemoText(event.target.value)} placeholder="이 가사를 작업에 어떻게 붙일지 적어줘냥" /></label>
           <div className="memo-actions">
             <button className="action-button primary compact" id="save-memo" type="button" onClick={() => onSaveMemo(translatedText, memoText)}>메모 저장</button>
             <button className="action-button compact danger" id="delete-memo" type="button" onClick={onDeleteMemo}>메모 삭제</button>
@@ -1493,6 +1570,7 @@ export default function App() {
   const [youtubeVisible, setYoutubeVisible] = useState(false);
   const [pawWidgetVisible, setPawWidgetVisible] = useState(() => readJson<boolean>("kurostep.pawWidgetVisible", true));
   const [lyricsOverlayVisible, setLyricsOverlayVisible] = useState(() => readJson<boolean>("kurostep.lyricsOverlayVisible", true));
+  const [autoTranslationEnabled, setAutoTranslationEnabled] = useState(() => readJson<boolean>("kurostep.autoTranslationEnabled", true));
   const [volume, setVolume] = useState(() => Number(window.localStorage.getItem("kurostep.volume") || 80));
   const [pendingPlaylistImport, setPendingPlaylistImport] = useState<PendingPlaylistImport | null>(null);
   const [lyric, setLyric] = useState<Lyric | null>(null);
@@ -1567,8 +1645,10 @@ export default function App() {
     if (context.trackId && workspaceRef.current.currentTrack?.id && context.trackId !== workspaceRef.current.currentTrack.id) {
       return;
     }
-    setSelectedLine(context.line || null);
-    setTranslation(context.translation || null);
+    const nextLine = context.line || null;
+    const localDraft = readLocalTranslationDraft(context.trackId, nextLine);
+    setSelectedLine(nextLine);
+    setTranslation(localDraft || context.translation || null);
   }
 
   useEffect(() => {
@@ -1776,6 +1856,15 @@ export default function App() {
     });
   }
 
+  function changeAutoTranslationEnabled(enabled: boolean) {
+    writeJson("kurostep.autoTranslationEnabled", enabled);
+    setAutoTranslationEnabled(enabled);
+    setNotice({
+      kind: "notice",
+      message: enabled ? "자동 번역 초안을 다시 켰다냥." : "자동 번역 초안을 잠깐 껐다냥.",
+    });
+  }
+
   const warmTrackLyricCache = useCallback(async (trackId: number, session = authRef.current) => {
     const cacheKey = `kurostep.lyrics.${trackId}`;
     const cached = readJson<LyricSource | null>(cacheKey, null);
@@ -1896,6 +1985,12 @@ export default function App() {
       return;
     }
     const key = String(selectedLine.id);
+    const localDraft = readLocalTranslationDraft(workspace.currentTrack?.id, selectedLine);
+    if (localDraft) {
+      setTranslation(localDraft);
+      setTranslationCache((current) => ({ ...current, [key]: localDraft }));
+      return;
+    }
     const cachedTranslation = translationCacheRef.current[key];
     if (cachedTranslation) {
       setTranslation(cachedTranslation);
@@ -1924,6 +2019,12 @@ export default function App() {
       .then(async (translations) => {
         if (cancelled) return;
         const savedKorean = translations.find((item) => item.languageCode === "ko") || translations[0];
+        const localDraftBeforeSave = readLocalTranslationDraft(workspaceRef.current.currentTrack?.id, selectedLine);
+        if (localDraftBeforeSave) {
+          setTranslation(localDraftBeforeSave);
+          setTranslationCache((current) => ({ ...current, [key]: localDraftBeforeSave }));
+          return;
+        }
         if (savedKorean) {
           const normalized = { ...savedKorean, memoText: normalizeMemoText(savedKorean.memoText) };
           setTranslation(normalized);
@@ -1931,6 +2032,9 @@ export default function App() {
           return;
         }
         if (containsHangul(selectedLine.text)) {
+          return;
+        }
+        if (!autoTranslationEnabled) {
           return;
         }
         const created = await api<Translation>(`/api/lyric-line-refs/${selectedLine.id}/translations/auto-draft?userId=${auth.userId}`, {
@@ -1943,6 +2047,12 @@ export default function App() {
           }),
         }, auth);
         if (cancelled) return;
+        const localDraftBeforeAutoDraft = readLocalTranslationDraft(workspaceRef.current.currentTrack?.id, selectedLine);
+        if (localDraftBeforeAutoDraft) {
+          setTranslation(localDraftBeforeAutoDraft);
+          setTranslationCache((current) => ({ ...current, [key]: localDraftBeforeAutoDraft }));
+          return;
+        }
         setTranslation(created);
         setTranslationCache((current) => ({ ...current, [key]: created }));
       })
@@ -1961,7 +2071,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [auth?.userId, selectedLine?.id, selectedLine?.text, shellView]);
+  }, [auth?.userId, workspace.currentTrack?.id, selectedLine?.id, selectedLine?.text, shellView, autoTranslationEnabled]);
 
   useEffect(() => {
     if (!auth || !workspace.playlistTracks.length) return;
@@ -2611,6 +2721,7 @@ export default function App() {
       const normalized = { ...saved, memoText: normalizeMemoText(saved.memoText) };
       setTranslation(normalized);
       setTranslationCache((current) => ({ ...current, [String(line.id)]: normalized }));
+      writeLocalTranslationDraft(workspaceRef.current.currentTrack?.id, line, normalized.translatedText, normalized.memoText || "");
       window.localStorage.setItem("kurostep.translationMemo", normalizeMemoText(memoText));
       if (showNotice) {
         setNotice({ kind: "notice", message: "번역 메모를 서버에 콕 저장했다냥." });
@@ -2633,6 +2744,22 @@ export default function App() {
     }
   }
 
+  function draftMemo(translatedText: string, memoText: string) {
+    if (!selectedLine?.text) {
+      return;
+    }
+    const normalized = makeLocalTranslation(
+      selectedLine,
+      translatedText || (containsHangul(selectedLine.text) ? selectedLine.text : ""),
+      memoText,
+    );
+    writeLocalTranslationDraft(workspace.currentTrack?.id, selectedLine, normalized.translatedText, normalized.memoText || "");
+    setTranslation(normalized);
+    if (selectedLine.id != null) {
+      setTranslationCache((current) => ({ ...current, [String(selectedLine.id)]: normalized }));
+    }
+  }
+
   async function deleteMemo() {
     const activeTranslation = isTranslationForLine(translation, selectedLine) ? translation : null;
     if (!auth?.userId || !selectedLine?.id || !activeTranslation?.id) {
@@ -2642,6 +2769,7 @@ export default function App() {
     try {
       await api<void>(`/api/lyric-line-refs/${selectedLine.id}/translations?userId=${auth.userId}&languageCode=ko`, { method: "DELETE" }, auth);
       setTranslation(null);
+      removeLocalTranslationDraft(workspace.currentTrack?.id, selectedLine);
       setTranslationCache((current) => {
         const next = { ...current };
         delete next[String(selectedLine.id)];
@@ -2807,7 +2935,16 @@ export default function App() {
   }
 
   if (settingsOpen) {
-    return <SettingsScreen auth={auth} onBack={() => setSettingsOpen(false)} onLogout={logout} onExit={exitApp} />;
+    return (
+      <SettingsScreen
+        auth={auth}
+        autoTranslationEnabled={autoTranslationEnabled}
+        onBack={() => setSettingsOpen(false)}
+        onLogout={logout}
+        onExit={exitApp}
+        onToggleAutoTranslation={changeAutoTranslationEnabled}
+      />
+    );
   }
 
   if (shellView === "paw") {
@@ -2824,6 +2961,7 @@ export default function App() {
           onDeleteTask={deleteTask}
           onSaveMemo={saveMemo}
           onDeleteMemo={deleteMemo}
+          onDraftMemo={draftMemo}
           onDeletePiece={deleteSavedLyricPiece}
         />
       </WidgetShell>
@@ -2934,6 +3072,7 @@ export default function App() {
             onDeleteTask={deleteTask}
             onSaveMemo={saveMemo}
             onDeleteMemo={deleteMemo}
+            onDraftMemo={draftMemo}
             onDeletePiece={deleteSavedLyricPiece}
           />
         </aside>

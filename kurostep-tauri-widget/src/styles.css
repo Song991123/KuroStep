@@ -338,6 +338,43 @@ select,
   font-weight: 700;
 }
 
+.setting-toggle-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.setting-toggle-card h2,
+.setting-toggle-card p {
+  margin: 0;
+}
+
+.setting-toggle-card p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.toggle-pill {
+  width: 58px;
+  height: 30px;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 80%);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.toggle-pill.on {
+  border-color: rgb(26 26 26 / 18%);
+  background: var(--text-charcoal);
+  color: white;
+}
+
 .settings-actions {
   display: grid;
   margin-top: auto;
