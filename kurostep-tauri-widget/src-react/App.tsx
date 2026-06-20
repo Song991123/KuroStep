@@ -93,6 +93,10 @@ function readLyricSyncOffset(track: Pick<Track, "id" | "sourceId"> | null | unde
   return clampLyricSyncOffset(Number(window.localStorage.getItem(key) || 0));
 }
 
+function containsHangul(text: string) {
+  return /[가-힣]/.test(text);
+}
+
 function clampLyricSyncOffset(value: number) {
   return Math.min(Math.max(Math.round(Number(value) || 0), -MAX_LYRIC_SYNC_OFFSET_MS), MAX_LYRIC_SYNC_OFFSET_MS);
 }
@@ -1848,6 +1852,17 @@ export default function App() {
         if (savedKorean) {
           setTranslation(savedKorean);
           setTranslationCache((current) => ({ ...current, [key]: savedKorean }));
+          return;
+        }
+        if (containsHangul(selectedLine.text)) {
+          const koreanDraft: Translation = {
+            languageCode: "ko",
+            translatedText: selectedLine.text,
+            memoText: window.localStorage.getItem("kurostep.translationMemo") || "작업 중 떠오른 번역 느낌을 살짝 적어둘게냥.",
+            status: "LOCAL_DRAFT",
+          };
+          setTranslation(koreanDraft);
+          setTranslationCache((current) => ({ ...current, [key]: koreanDraft }));
           return;
         }
         const created = await api<Translation>(`/api/lyric-line-refs/${selectedLine.id}/translations/auto-draft?userId=${auth.userId}`, {
