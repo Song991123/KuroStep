@@ -989,6 +989,18 @@ function MusicPlayerWidget({
   }, [volume, videoId]);
 
   useEffect(() => {
+    if (!playerReady || !videoId) return;
+    const durationTimer = window.setInterval(() => {
+      const nextDuration = Math.floor(playerRef.current?.getDuration?.() || 0);
+      if (nextDuration > 0) {
+        displayedDurationRef.current = nextDuration;
+        onDurationChange(nextDuration);
+      }
+    }, 500);
+    return () => window.clearInterval(durationTimer);
+  }, [playerReady, videoId]);
+
+  useEffect(() => {
     if (!playerRef.current || !videoId) return;
     if (isPlaying) {
       playerRef.current.playVideo?.();
