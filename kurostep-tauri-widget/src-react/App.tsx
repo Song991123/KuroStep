@@ -35,6 +35,8 @@ const isTauriApp =
   window.location.hostname === "tauri.localhost";
 const PLAYBACK_TICK_MS = 500;
 const LYRIC_SYNC_LOOKAHEAD_MS = 350;
+const LYRIC_SYNC_STEP_MS = 500;
+const MAX_LYRIC_SYNC_OFFSET_MS = 30000;
 const REPEAT_MODES = ["off", "all", "one"] as const;
 const MAX_YOUTUBE_RECOVERY_ATTEMPTS = 2;
 const LONG_FORM_TRACK_SECONDS = 12 * 60;
@@ -68,6 +70,27 @@ type PendingPlaylistImport = YouTubePlaylistPreview & {
 
 function todayTasksPath(userId: number) {
   return `/api/tasks?userId=${userId}&date=${todayIso()}`;
+}
+
+function lyricSyncOffsetKey(track: Pick<Track, "id" | "sourceId"> | null | undefined) {
+  if (!track?.id && !track?.sourceId) return "";
+  return `kurostep.lyricSyncOffset.${track.sourceId || track.id}`;
+}
+
+function readLyricSyncOffset(track: Pick<Track, "id" | "sourceId"> | null | undefined) {
+  const key = lyricSyncOffsetKey(track);
+  if (!key) return 0;
+  return clampLyricSyncOffset(Number(window.localStorage.getItem(key) || 0));
+}
+
+function clampLyricSyncOffset(value: number) {
+  return Math.min(Math.max(Math.round(Number(value) || 0), -MAX_LYRIC_SYNC_OFFSET_MS), MAX_LYRIC_SYNC_OFFSET_MS);
+}
+
+function formatLyricSyncOffset(value: number) {
+  if (!value) return "기본";
+  const seconds = (Math.abs(value) / 1000).toFixed(1).replace(/\.0$/, "");
+  return value > 0 ? `앞당김 ${seconds}초` : `늦춤 ${seconds}초`;
 }
 
 type YouTubePlayer = {
@@ -256,12 +279,12 @@ function parseLyricLine(line: string, index: number) {
   };
 }
 
-function chooseLineByPlaybackTime(lyric: Lyric | null, source: LyricSource | null, positionSeconds: number): SelectedLine | null {
+function chooseLineByPlaybackTime(lyric: Lyric | null, source: LyricSource | null, positionSeconds: number, syncOffsetMs = 0): SelectedLine | null {
   const refs = lyric?.lines || [];
   const sourceLines = source?.lines || [];
   if (!refs.length && !sourceLines.length) return null;
 
-  const positionMs = positionSeconds * 1000 + LYRIC_SYNC_LOOKAHEAD_MS;
+  const positionMs = positionSeconds * 1000 + LYRIC_SYNC_LOOKAHEAD_MS + syncOffsetMs;
   const fallbackRefs = sourceLines.map((line) => ({
     id: null,
     lineIndex: line.index,
@@ -1285,9 +1308,12 @@ function LyricsWidget({
   selectedLine,
   translation,
   lyricsExpanded,
+  lyricSyncOffsetMs,
   onToggleExpanded,
   onSelectLine,
   onSavePiece,
+  onAdjustSync,
+  onResetSync,
 }: {
   currentTrack: Track | null;
   lyric: Lyric | null;
@@ -1295,9 +1321,12 @@ function LyricsWidget({
   selectedLine: SelectedLine | null;
   translation: Translation | null;
   lyricsExpanded: boolean;
+  lyricSyncOffsetMs: number;
   onToggleExpanded: () => void;
   onSelectLine: (line: SelectedLine) => void;
   onSavePiece: () => void;
+  onAdjustSync: (deltaMs: number) => void;
+  onResetSync: () => void;
 }) {
   const fullLines = lyricSource?.lines || [];
   const lyricRefs = lyric?.lines || [];
@@ -1318,6 +1347,14 @@ function LyricsWidget({
         <p>{lineText}</p>
         {translation?.translatedText && <small>{translation.translatedText}</small>}
         <button className="action-button compact" id="save-lyric-piece" type="button" disabled={!selectedLine?.text} onClick={onSavePiece}>현재 줄 저장</button>
+        {currentTrack && (
+          <div className="lyric-sync-controls" aria-label="가사 싱크 보정">
+            <span>싱크 {formatLyricSyncOffset(lyricSyncOffsetMs)}</span>
+            <button className="mini-sync-button" type="button" onClick={() => onAdjustSync(-LYRIC_SYNC_STEP_MS)}>늦추기</button>
+            <button className="mini-sync-button" type="button" onClick={() => onAdjustSync(LYRIC_SYNC_STEP_MS)}>앞당기기</button>
+            <button className="mini-sync-button" type="button" onClick={onResetSync}>초기화</button>
+          </div>
+        )}
         {lyricsExpanded && (
           <ol className="lyrics-full-list" id="lyrics-full-list">
             {fullLines.length ? fullLines.map((line) => {
@@ -1369,6 +1406,7 @@ export default function App() {
   const [repeatMode, setRepeatMode] = useState<RepeatMode>(() => normalizeRepeatMode(window.localStorage.getItem("kurostep.repeatMode")));
   const [playbackPosition, setPlaybackPosition] = useState(0);
   const [trackDuration, setTrackDuration] = useState(0);
+  const [lyricSyncOffsetMs, setLyricSyncOffsetMs] = useState(0);
   const [youtubeVisible, setYoutubeVisible] = useState(false);
   const [pawWidgetVisible, setPawWidgetVisible] = useState(() => readJson<boolean>("kurostep.pawWidgetVisible", true));
   const [lyricsOverlayVisible, setLyricsOverlayVisible] = useState(() => readJson<boolean>("kurostep.lyricsOverlayVisible", true));
@@ -1436,12 +1474,18 @@ export default function App() {
 
   useEffect(() => {
     if (shellView !== "main") return;
-    writeJson("kurostep.currentLyricContext", {
+    const context = {
       trackId: workspace.currentTrack?.id || null,
       line: selectedLine || null,
       translation: translation || null,
       at: Date.now(),
-    });
+    };
+    writeJson("kurostep.currentLyricContext", context);
+    if ("BroadcastChannel" in window) {
+      const channel = new BroadcastChannel("kurostep.currentLyricContext");
+      channel.postMessage(context);
+      channel.close();
+    }
     broadcastWorkspaceSync("current-lyric-context");
   }, [workspace.currentTrack?.id, selectedLine, translation]);
 
@@ -1470,8 +1514,28 @@ export default function App() {
     }
 
     applyCurrentLyricContext();
+    const channel = "BroadcastChannel" in window ? new BroadcastChannel("kurostep.currentLyricContext") : null;
+    if (channel) {
+      channel.onmessage = (event) => {
+        const context = event.data as {
+          trackId?: number | null;
+          line?: SelectedLine | null;
+          translation?: Translation | null;
+        };
+        if (context.trackId && workspaceRef.current.currentTrack?.id && context.trackId !== workspaceRef.current.currentTrack.id) {
+          return;
+        }
+        setSelectedLine(context.line || null);
+        setTranslation(context.translation || null);
+      };
+    }
     window.addEventListener("storage", syncCurrentLyricFromStorage);
-    return () => window.removeEventListener("storage", syncCurrentLyricFromStorage);
+    const intervalId = window.setInterval(applyCurrentLyricContext, 500);
+    return () => {
+      window.removeEventListener("storage", syncCurrentLyricFromStorage);
+      window.clearInterval(intervalId);
+      channel?.close();
+    };
   }, []);
 
   function updateWorkspaceState(updater: Workspace | ((current: Workspace) => Workspace)) {
@@ -1681,6 +1745,7 @@ export default function App() {
   useEffect(() => {
     setPlaybackPosition(0);
     setTrackDuration(workspace.currentTrack?.durationSeconds || 0);
+    setLyricSyncOffsetMs(readLyricSyncOffset(workspace.currentTrack));
     setSelectedLine(null);
     setTranslation(null);
     void loadTrackLyrics(workspace.currentTrack, authRef.current);
@@ -1692,14 +1757,14 @@ export default function App() {
   }, [auth?.accessToken, workspace.currentTrack?.id, lyricSource?.lines?.length, isPlaying, loadTrackLyrics]);
 
   useEffect(() => {
-    const nextLine = chooseLineByPlaybackTime(lyric, lyricSource, playbackPosition);
+    const nextLine = chooseLineByPlaybackTime(lyric, lyricSource, playbackPosition, lyricSyncOffsetMs);
     if (!nextLine) {
       return;
     }
     if (nextLine?.id !== selectedLine?.id || nextLine?.lineIndex !== selectedLine?.lineIndex) {
       setSelectedLine(nextLine);
     }
-  }, [playbackPosition, lyric, lyricSource, selectedLine?.id, selectedLine?.lineIndex]);
+  }, [playbackPosition, lyric, lyricSource, lyricSyncOffsetMs, selectedLine?.id, selectedLine?.lineIndex]);
 
   useEffect(() => {
     if (!auth?.userId || !selectedLine?.id || !selectedLine.text) return;
@@ -2524,6 +2589,29 @@ export default function App() {
     setPlaybackPosition(Math.min(Math.max(seconds, 0), max));
   }
 
+  function adjustLyricSync(deltaMs: number) {
+    const track = workspace.currentTrack;
+    if (!track) return;
+    const key = lyricSyncOffsetKey(track);
+    setLyricSyncOffsetMs((current) => {
+      const next = clampLyricSyncOffset(current + deltaMs);
+      if (key) {
+        window.localStorage.setItem(key, String(next));
+      }
+      setNotice({ kind: "notice", message: `가사 싱크 ${formatLyricSyncOffset(next)}으로 맞췄다냥.` });
+      return next;
+    });
+  }
+
+  function resetLyricSync() {
+    const key = lyricSyncOffsetKey(workspace.currentTrack);
+    if (key) {
+      window.localStorage.removeItem(key);
+    }
+    setLyricSyncOffsetMs(0);
+    setNotice({ kind: "notice", message: "가사 싱크 보정을 기본값으로 돌렸다냥." });
+  }
+
   function changeVolume(nextVolume: number) {
     const normalized = Math.min(Math.max(Number(nextVolume) || 0, 0), 100);
     if (normalized > 0) {
@@ -2660,9 +2748,12 @@ export default function App() {
           selectedLine={selectedLine}
           translation={translation}
           lyricsExpanded={lyricsExpanded}
+          lyricSyncOffsetMs={lyricSyncOffsetMs}
           onToggleExpanded={() => setLyricsExpanded((value) => !value)}
           onSelectLine={setSelectedLine}
           onSavePiece={saveCurrentLyricPiece}
+          onAdjustSync={adjustLyricSync}
+          onResetSync={resetLyricSync}
         />
       </div>
       {!isTauriApp && !isEmbeddedContent && pawWidgetVisible && (
