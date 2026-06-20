@@ -1410,6 +1410,39 @@ select,
   line-height: 1.35;
 }
 
+.lyric-sync-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(3, auto);
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.lyric-sync-controls span {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.mini-sync-button {
+  height: 22px;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  padding: 0 7px;
+  background: rgb(255 253 248 / 88%);
+  color: #5f5a53;
+  font-size: 10px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.mini-sync-button:hover {
+  border-color: rgb(230 185 30 / 40%);
+  background: rgb(230 185 30 / 10%);
+}
+
 .lyrics-preview.playing {
   background: linear-gradient(180deg, rgb(230 185 30 / 9%), transparent);
 }
