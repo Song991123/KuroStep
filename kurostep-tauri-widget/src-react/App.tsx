@@ -292,26 +292,36 @@ function chooseLineByPlaybackTime(lyric: Lyric | null, source: LyricSource | nul
   if (!refs.length && !sourceLines.length) return null;
 
   const positionMs = positionSeconds * 1000 + LYRIC_SYNC_LOOKAHEAD_MS + syncOffsetMs;
-  const fallbackRefs = sourceLines.map((line) => ({
-    id: null,
-    lineIndex: line.index,
-    startTimeMs: line.startTimeMs,
-  }));
   const timedRefs = refs.filter((line) => Number.isFinite(line.startTimeMs));
-  const timedSourceRefs = fallbackRefs.filter((line) => Number.isFinite(line.startTimeMs));
-  const lineRefs = timedRefs.length ? timedRefs : timedSourceRefs.length ? timedSourceRefs : refs.length ? refs : fallbackRefs;
-  const ref =
-    lineRefs
+  const timedSourceLines = sourceLines.filter((line) => Number.isFinite(line.startTimeMs));
+  const sourceLine =
+    timedSourceLines
       .filter((line) => Number(line.startTimeMs) <= positionMs)
       .sort((left, right) => Number(right.startTimeMs) - Number(left.startTimeMs))[0] ||
-    lineRefs.find((line) => Number.isFinite(line.startTimeMs)) ||
-    lineRefs[0];
-  const sourceLine = sourceLines.find((line) => line.index === ref.lineIndex) || sourceLines[0];
+    timedSourceLines[0];
+
+  if (sourceLine) {
+    const ref = timedRefs.find((line) => Math.abs(Number(line.startTimeMs) - Number(sourceLine.startTimeMs)) <= 50);
+    return {
+      id: ref?.id || null,
+      lineIndex: sourceLine.index,
+      startTimeMs: sourceLine.startTimeMs,
+      text: sourceLine.text || "",
+    };
+  }
+
+  const ref =
+    timedRefs
+      .filter((line) => Number(line.startTimeMs) <= positionMs)
+      .sort((left, right) => Number(right.startTimeMs) - Number(left.startTimeMs))[0] ||
+    timedRefs[0] ||
+    refs[0];
+  const fallbackSourceLine = sourceLines.find((line) => line.index === ref?.lineIndex) || sourceLines[0];
   return {
-    id: ref.id,
-    lineIndex: ref.lineIndex,
-    startTimeMs: ref.startTimeMs,
-    text: sourceLine?.text || "",
+    id: ref?.id || null,
+    lineIndex: ref?.lineIndex ?? fallbackSourceLine?.index ?? 0,
+    startTimeMs: ref?.startTimeMs ?? fallbackSourceLine?.startTimeMs ?? null,
+    text: fallbackSourceLine?.text || "",
   };
 }
 
