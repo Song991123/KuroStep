@@ -52,12 +52,12 @@ public class LrclibClient implements LyricsProviderClient {
 
     private Optional<LrclibRecord> findBySearchCandidates(Track track) {
         for (SearchCandidate candidate : buildSearchCandidates(track)) {
-            Optional<LrclibRecord> record = findByTrackFields(candidate.trackName(), candidate.artistName());
+            Optional<LrclibRecord> record = findByTrackFields(candidate.trackName(), candidate.artistName(), track.getDurationSeconds());
             if (record.isPresent()) {
                 return record;
             }
 
-            record = findByKeyword(candidate.trackName(), candidate.artistName());
+            record = findByKeyword(candidate.trackName(), candidate.artistName(), track.getDurationSeconds());
             if (record.isPresent()) {
                 return record;
             }
@@ -95,7 +95,7 @@ public class LrclibClient implements LyricsProviderClient {
                 .toList();
     }
 
-    private Optional<LrclibRecord> findByTrackFields(String trackName, String artistName) {
+    private Optional<LrclibRecord> findByTrackFields(String trackName, String artistName, Integer targetDurationSeconds) {
         String uri = UriComponentsBuilder.fromUriString(baseUrl + "/api/search")
                 .queryParam("track_name", trackName)
                 .queryParamIfPresent("artist_name", java.util.Optional.ofNullable(artistName).filter(this::hasText))
@@ -103,10 +103,10 @@ public class LrclibClient implements LyricsProviderClient {
                 .encode()
                 .toUriString();
 
-        return fetchFirst(uri);
+        return fetchBest(uri, targetDurationSeconds);
     }
 
-    private Optional<LrclibRecord> findByKeyword(String trackName, String artistName) {
+    private Optional<LrclibRecord> findByKeyword(String trackName, String artistName, Integer targetDurationSeconds) {
         String keyword = hasText(artistName)
                 ? trackName + " " + artistName
                 : trackName;
@@ -116,7 +116,7 @@ public class LrclibClient implements LyricsProviderClient {
                 .encode()
                 .toUriString();
 
-        return fetchFirst(uri);
+        return fetchBest(uri, targetDurationSeconds);
     }
 
     private String normalizeTitle(String value) {
@@ -181,7 +181,7 @@ public class LrclibClient implements LyricsProviderClient {
         return new TitleArtist(trackName, artist);
     }
 
-    private Optional<LrclibRecord> fetchFirst(String uri) {
+    private Optional<LrclibRecord> fetchBest(String uri, Integer targetDurationSeconds) {
         log.info("LRCLIB request uri={}", uri);
         String body;
         try {
@@ -204,10 +204,10 @@ public class LrclibClient implements LyricsProviderClient {
             return Optional.empty();
         }
 
-        return parseFirst(body);
+        return parseBest(body, targetDurationSeconds);
     }
 
-    private Optional<LrclibRecord> parseFirst(String body) {
+    private Optional<LrclibRecord> parseBest(String body, Integer targetDurationSeconds) {
         try {
             JsonNode root = objectMapper.readTree(body);
             if (root == null || !root.isArray()) {
@@ -216,6 +216,7 @@ public class LrclibClient implements LyricsProviderClient {
 
             int count = 0;
             LrclibRecord firstWithPlainLyrics = null;
+            LrclibRecord bestSyncedLyrics = null;
             for (JsonNode item : root) {
                 count++;
                 String plainLyrics = textOrNull(item, "plainLyrics");
@@ -243,13 +244,17 @@ public class LrclibClient implements LyricsProviderClient {
                         syncedLyrics
                 );
                 if (hasLyrics(syncedLyrics)) {
-                    return Optional.of(record);
+                    bestSyncedLyrics = chooseCloserDuration(bestSyncedLyrics, record, targetDurationSeconds);
+                    continue;
                 }
                 if (firstWithPlainLyrics == null) {
                     firstWithPlainLyrics = record;
                 }
             }
 
+            if (bestSyncedLyrics != null) {
+                return Optional.of(bestSyncedLyrics);
+            }
             if (firstWithPlainLyrics != null) {
                 return Optional.of(firstWithPlainLyrics);
             }
@@ -260,6 +265,26 @@ public class LrclibClient implements LyricsProviderClient {
             log.warn("LRCLIB response parse failed. body={}", body, e);
             return Optional.empty();
         }
+    }
+
+    private LrclibRecord chooseCloserDuration(LrclibRecord current, LrclibRecord candidate, Integer targetDurationSeconds) {
+        if (current == null) {
+            return candidate;
+        }
+        if (targetDurationSeconds == null || targetDurationSeconds <= 0) {
+            return current;
+        }
+
+        double currentDistance = durationDistance(current.duration(), targetDurationSeconds);
+        double candidateDistance = durationDistance(candidate.duration(), targetDurationSeconds);
+        return candidateDistance < currentDistance ? candidate : current;
+    }
+
+    private double durationDistance(Double duration, Integer targetDurationSeconds) {
+        if (duration == null || duration <= 0) {
+            return Double.MAX_VALUE;
+        }
+        return Math.abs(duration - targetDurationSeconds);
     }
 
     private String textOrNull(JsonNode node, String fieldName) {
