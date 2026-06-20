@@ -46,6 +46,16 @@ if (isEmbeddedContent) {
   document.documentElement.classList.add("embedded-mode");
 }
 
+function blockDeveloperShortcut(event: KeyboardEvent) {
+  const key = event.key.toLowerCase();
+  const isMacDevtools = event.metaKey && event.altKey && ["i", "j", "c"].includes(key);
+  const isWinDevtools = event.ctrlKey && event.shiftKey && ["i", "j", "c"].includes(key);
+  if (event.key === "F12" || isMacDevtools || isWinDevtools) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+}
+
 type Workspace = {
   tasks: CreatorTask[];
   work: CreatorTask | null;
@@ -1445,6 +1455,17 @@ export default function App() {
   const lyricWarmupRef = useRef(new Map<number, Promise<LyricSource>>());
   const lastSyncedDurationRef = useRef<Record<number, number>>({});
   const workspaceSyncChannelRef = useRef<BroadcastChannel | null>(null);
+
+  useEffect(() => {
+    if (!isEmbeddedContent && !isTauriApp) return;
+    const blockContextMenu = (event: MouseEvent) => event.preventDefault();
+    document.addEventListener("contextmenu", blockContextMenu);
+    document.addEventListener("keydown", blockDeveloperShortcut, true);
+    return () => {
+      document.removeEventListener("contextmenu", blockContextMenu);
+      document.removeEventListener("keydown", blockDeveloperShortcut, true);
+    };
+  }, []);
 
   useEffect(() => {
     authRef.current = auth;
