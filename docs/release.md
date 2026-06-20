@@ -56,13 +56,13 @@ Tauri 앱은 GitHub Actions에서 macOS와 Windows 번들을 만듭니다.
 .github/workflows/tauri-release.yml
 ```
 
-0.1 핫픽스 릴리즈는 기존 `v0.1.0`을 삭제해서 같은 태그를 재사용하지 않고, 새 태그로 빌드합니다. `v0.1.0`은 2026-06-12에 `844955b` 기준으로 만들어진 이전 산출물입니다. `v0.1.1`과 `v0.1.2`는 기본 실행은 가능했지만 재생 시간, synced lyrics 선택, 작업 발자국 동기화, 가사 오버레이 클릭 영역, WebView 캐시 무효화에서 QA 차단 이슈가 확인되어 `v0.1.4`이 사용자가 받아야 할 기준 릴리즈입니다.
+0.1 핫픽스 릴리즈는 기존 `v0.1.0`을 삭제해서 같은 태그를 재사용하지 않고, 새 태그로 빌드합니다. `v0.1.0`은 2026-06-12에 `844955b` 기준으로 만들어진 이전 산출물입니다. `v0.1.1`과 `v0.1.2`는 기본 실행은 가능했지만 재생 시간, synced lyrics 선택, 작업 발자국 동기화, 가사 오버레이 클릭 영역, WebView 캐시 무효화에서 QA 차단 이슈가 확인되어 `v0.1.5`이 사용자가 받아야 할 기준 릴리즈입니다.
 
 릴리즈 빌드 전 확인할 항목:
 
-- `kurostep-tauri-widget/package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` 버전이 모두 `0.1.4`인지 확인합니다.
-- GitHub Pages가 최신 React 번들을 배포했는지 확인합니다. 데스크톱 앱은 `shell.js`의 `v=20260621-v014` 캐시 키로 최신 React UI를 다시 불러옵니다.
-- Vite 빌드 asset 이름에도 `v014`이 들어가야 합니다. WebView가 이전 `/assets/index-*.js`를 캐시하면 Pages만 배포해도 설치 앱이 구 UI를 계속 보여줄 수 있습니다.
+- `kurostep-tauri-widget/package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` 버전이 모두 `0.1.5`인지 확인합니다.
+- GitHub Pages가 최신 React 번들을 배포했는지 확인합니다. 데스크톱 앱은 `shell.js`의 `v=20260621-v015` 캐시 키로 최신 React UI를 다시 불러옵니다.
+- Vite 빌드 asset 이름에도 `v015`이 들어가야 합니다. WebView가 이전 `/assets/index-*.js`를 캐시하면 Pages만 배포해도 설치 앱이 구 UI를 계속 보여줄 수 있습니다.
 - EC2 API 배포 workflow가 main 최신 커밋에서 성공했는지 확인합니다. 특히 LRCLIB 결과에서 plain lyrics보다 synced lyrics가 있는 후보를 우선 선택하는지 확인합니다.
 - 배포 API에서 같은 YouTube `sourceId`를 다시 저장했을 때 `LEMONADE / aespa`로 메타데이터가 갱신되는지 확인합니다.
 - Tauri 앱은 로컬 `shell.html`을 열지만 실제 제품 UI는 GitHub Pages React iframe을 로드하므로, 데스크톱 릴리즈 전에 Pages와 EC2를 먼저 맞춥니다.
@@ -70,11 +70,11 @@ Tauri 앱은 GitHub Actions에서 macOS와 Windows 번들을 만듭니다.
 - macOS 빌드는 ad-hoc signing 상태라 Gatekeeper 경고가 날 수 있습니다. 포트폴리오 문서에는 Finder에서 Control-click > Open으로 여는 테스트 방법을 함께 둡니다.
 - 빌드 후에는 메인 플레이어 창, 작업 발자국 창, 가사 오버레이 창이 분리되는지 실제 앱에서 다시 확인합니다.
 
-0.1.4 릴리즈 빌드:
+0.1.5 릴리즈 빌드:
 
 ```text
 Actions > Build KuroStep Desktop Release > Run workflow
-version: v0.1.4
+version: v0.1.5
 branch: main
 ```
 

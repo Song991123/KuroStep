@@ -1785,13 +1785,17 @@ export default function App() {
   }, [playbackPosition, lyric, lyricSource, lyricSyncOffsetMs, selectedLine?.id, selectedLine?.lineIndex]);
 
   useEffect(() => {
-    if (!auth?.userId || !selectedLine?.id || !selectedLine.text) return;
+    if (!auth?.userId || !selectedLine?.id || !selectedLine.text) {
+      setTranslation(null);
+      return;
+    }
     const key = String(selectedLine.id);
     const cachedTranslation = translationCacheRef.current[key];
     if (cachedTranslation) {
       setTranslation(cachedTranslation);
       return;
     }
+    setTranslation(null);
     if (pendingTranslationRef.current.has(key)) {
       return;
     }
