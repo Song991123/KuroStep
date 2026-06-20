@@ -665,7 +665,7 @@ async function handleAuthSubmit(event) {
 
   appState.authBusy = true;
   appState.error = "";
-  appState.notice = appState.authMode === "signup" ? "가입 정보 정리 중이냥..." : "작업실 문 여는 중이냥...";
+  appState.notice = appState.authMode === "signup" ? "가입 정보 정리 중이냥" : "작업실 문 여는 중이냥";
   render();
 
   try {
@@ -1105,7 +1105,7 @@ async function registerTrackFromInputs() {
   const importSequence = ++linkImportSequence;
   appState.linkSaving = true;
   appState.error = "";
-  appState.notice = "YouTube 링크를 작업 바구니에 담는 중이냥...";
+      appState.notice = "YouTube 링크를 작업 바구니에 담는 중이냥";
   refreshLinkWidgetDom();
   updatePlaybackDom();
 
@@ -2483,7 +2483,7 @@ function settingsWidget() {
 
 function appNoticeWidget() {
   if (appState.loading) {
-    return `<p class="app-status" id="app-status">작업실 정리 중이냥...</p>`;
+    return `<p class="app-status" id="app-status">작업실 정리 중이냥</p>`;
   }
   if (appState.error) {
     return `<p class="app-status error" id="app-status">${escapeHtml(appState.error)}</p>`;

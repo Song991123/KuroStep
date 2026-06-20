@@ -1,6 +1,6 @@
 const DEPLOYED_BASE_URL = "https://song991123.github.io/KuroStep/";
 const DEPLOYED_ORIGIN = new URL(DEPLOYED_BASE_URL).origin;
-const CONTENT_CACHE_VERSION = "20260621-v015";
+const CONTENT_CACHE_VERSION = "20260621-v016";
 const params = new URLSearchParams(window.location.search);
 const view = params.get("view") || "main";
 const shellWindow = document.querySelector("#shell-window");
@@ -10,6 +10,7 @@ const shellTitleText = document.querySelector("#shell-title-text");
 let authenticated = false;
 let trustedContentOrigin = DEPLOYED_ORIGIN;
 let pawPopup = null;
+let positionSaveTimer = null;
 
 if (view === "paw") {
   shellWindow.classList.add("paw");
@@ -80,6 +81,23 @@ async function invokeNative(command, payload = {}) {
     throw new Error("Tauri invoke bridge is not available");
   }
   return invoke(command, payload);
+}
+
+function blockDeveloperShortcut(event) {
+  const key = event.key.toLowerCase();
+  const isMacDevtools = event.metaKey && event.altKey && ["i", "j", "c"].includes(key);
+  const isWinDevtools = event.ctrlKey && event.shiftKey && ["i", "j", "c"].includes(key);
+  if (event.key === "F12" || isMacDevtools || isWinDevtools) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+}
+
+function scheduleWindowPositionSave() {
+  window.clearTimeout(positionSaveTimer);
+  positionSaveTimer = window.setTimeout(() => {
+    invokeNative("save_current_window_position", { label: view }).catch(() => {});
+  }, 250);
 }
 
 async function setNativePawVisible(visible, payload = {}) {
@@ -184,7 +202,17 @@ document.querySelector("#shell-drag-region")?.addEventListener("pointerdown", (e
     return;
   }
   startDrag();
+  scheduleWindowPositionSave();
 });
+
+window.addEventListener("pointerup", scheduleWindowPositionSave);
+window.addEventListener("blur", scheduleWindowPositionSave);
+window.setInterval(() => {
+  invokeNative("save_current_window_position", { label: view }).catch(() => {});
+}, 5000);
+
+document.addEventListener("contextmenu", (event) => event.preventDefault());
+document.addEventListener("keydown", blockDeveloperShortcut, true);
 
 window.addEventListener("message", (event) => {
   if (event.origin !== trustedContentOrigin) {
