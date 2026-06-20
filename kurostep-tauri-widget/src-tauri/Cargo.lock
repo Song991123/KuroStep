@@ -1616,7 +1616,7 @@ dependencies = [
 
 [[package]]
 name = "kurostep-tauri-widget"
-version = "0.1.11"
+version = "0.1.13"
 dependencies = [
  "serde",
  "serde_json",

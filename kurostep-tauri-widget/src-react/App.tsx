@@ -1721,14 +1721,21 @@ export default function App() {
       return;
     }
     if (!auth) return;
+    const contextJson = JSON.stringify({
+      trackId: workspace.currentTrack?.id || null,
+      line: selectedLine || null,
+      translation: activeTranslation || null,
+      at: Date.now(),
+    });
     void invokeNative("set_lyrics_visible", {
       visible: lyricsOverlayVisible,
       line: selectedLine?.text || "",
       translation: activeTranslation?.translatedText || "",
+      contextJson,
     }).catch((error) => {
       setNotice({ kind: "error", message: `가사 오버레이 갱신을 못 했다냥: ${(error as Error).message || error}` });
     });
-  }, [auth, lyricsOverlayVisible, selectedLine?.text, activeTranslation?.translatedText]);
+  }, [auth, lyricsOverlayVisible, workspace.currentTrack?.id, selectedLine, activeTranslation]);
 
   function requestPawWidgetVisible(visible: boolean) {
     writeJson("kurostep.pawWidgetVisible", visible);
@@ -1751,6 +1758,12 @@ export default function App() {
       visible,
       line: selectedLine?.text || "",
       translation: activeTranslation?.translatedText || "",
+      contextJson: JSON.stringify({
+        trackId: workspaceRef.current.currentTrack?.id || null,
+        line: selectedLine || null,
+        translation: activeTranslation || null,
+        at: Date.now(),
+      }),
     }).catch((error) => {
       setNotice({ kind: "error", message: `가사 오버레이 창을 못 열었다냥: ${(error as Error).message || error}` });
     });
