@@ -25,9 +25,11 @@ struct LyricContextState {
 #[tauri::command]
 fn set_lyrics_visible(
     app: tauri::AppHandle,
+    state: tauri::State<LyricContextState>,
     visible: bool,
     line: String,
     translation: String,
+    context_json: Option<String>,
 ) -> Result<(), String> {
     let display_line = if line.trim().is_empty() {
         "가사 발자국을 기다리는 중이다냥.".to_string()
@@ -60,6 +62,10 @@ fn set_lyrics_visible(
         lyrics.show().map_err(|error| error.to_string())?;
     } else if !visible && is_visible {
         lyrics.hide().map_err(|error| error.to_string())?;
+    }
+
+    if let Some(context_json) = context_json {
+        sync_paw_context(&app, &state, context_json)?;
     }
 
     Ok(())
@@ -127,14 +133,39 @@ fn sync_paw_lyric_context(
     state: tauri::State<LyricContextState>,
     context_json: String,
 ) -> Result<(), String> {
+    sync_paw_context(&app, &state, context_json)
+}
+
+fn sync_paw_context(
+    app: &tauri::AppHandle,
+    state: &tauri::State<LyricContextState>,
+    context_json: String,
+) -> Result<(), String> {
     *state.current.lock().map_err(|error| error.to_string())? = context_json.clone();
 
     if let Some(paw) = app.get_webview_window("paw") {
-        paw.emit("paw:lyric-context", context_json)
-            .map_err(|error| error.to_string())?;
+        let _ = paw.emit("paw:lyric-context", context_json.clone());
+        let _ = paw.eval(&paw_lyric_context_script(&context_json));
     }
 
     Ok(())
+}
+
+fn paw_lyric_context_script(context_json: &str) -> String {
+    let context_literal = serde_json::to_string(context_json).unwrap_or_else(|_| "\"{}\"".to_string());
+    format!(
+        r##"(() => {{
+  const contextJson = {context_literal};
+  window.__KUROSTEP_LATEST_LYRIC_CONTEXT__ = contextJson;
+  const message = {{
+    source: "kurostep-shell",
+    type: "current_lyric_context",
+    contextJson,
+  }};
+  document.querySelector("#shell-frame")?.contentWindow?.postMessage(message, "https://song991123.github.io");
+  window.dispatchEvent(new CustomEvent("kurostep:lyric-context", {{ detail: contextJson }}));
+}})();"##
+    )
 }
 
 #[tauri::command]

@@ -1,6 +1,6 @@
 const DEPLOYED_BASE_URL = "https://song991123.github.io/KuroStep/";
 const DEPLOYED_ORIGIN = new URL(DEPLOYED_BASE_URL).origin;
-const CONTENT_CACHE_VERSION = "20260621-v021";
+const CONTENT_CACHE_VERSION = "20260621-v023";
 const params = new URLSearchParams(window.location.search);
 const view = params.get("view") || "main";
 const shellWindow = document.querySelector("#shell-window");
@@ -138,6 +138,10 @@ if (tauriListen) {
     forwardLyricContextToContent(event.payload);
   }).catch?.(() => {});
 }
+
+window.addEventListener("kurostep:lyric-context", (event) => {
+  forwardLyricContextToContent(event.detail);
+});
 
 if (view === "paw") {
   shellFrame.addEventListener("load", () => {
