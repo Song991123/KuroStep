@@ -41,7 +41,8 @@ function blockDeveloperShortcut(event) {
   }
 }
 
-dragRegion.addEventListener("mousedown", startWindowDrag);
+lineElement.addEventListener("mousedown", startWindowDrag);
+translationElement.addEventListener("mousedown", startWindowDrag);
 window.addEventListener("mouseup", scheduleWindowPositionSave);
 window.addEventListener("blur", scheduleWindowPositionSave);
 window.setInterval(() => {

@@ -31,24 +31,25 @@ body {
 .lyrics-overlay {
   display: inline-flex;
   width: fit-content;
-  max-width: min(720px, 96vw);
+  max-width: none;
   flex-direction: column;
   align-items: center;
-  padding: 8px 18px 10px;
+  padding: 6px 10px 8px;
   text-align: center;
-  cursor: move;
-  pointer-events: auto;
-  -webkit-app-region: drag;
+  pointer-events: none;
   animation: floatDown 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .lyric-line,
 .lyric-translation {
   margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: calc(96vw - 20px);
+  cursor: move;
+  overflow: visible;
+  overflow-wrap: normal;
+  pointer-events: auto;
   white-space: nowrap;
-  max-width: calc(96vw - 36px);
+  -webkit-app-region: drag;
   text-shadow:
     -1px -1px 0 var(--bg-cream),
      1px -1px 0 var(--bg-cream),

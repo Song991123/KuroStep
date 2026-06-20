@@ -1417,7 +1417,7 @@ select,
 
 .lyric-sync-controls {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(3, auto);
+  grid-template-columns: minmax(0, 1fr) repeat(5, auto);
   align-items: center;
   gap: 5px;
   min-width: 0;
@@ -1767,8 +1767,6 @@ select,
   font-weight: 650;
   line-height: 1.35;
   overflow-wrap: anywhere;
-  animation: slideUpFade 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards;
-  opacity: 0;
 }
 
 .memo-context span {
