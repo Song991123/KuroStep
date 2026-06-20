@@ -38,7 +38,7 @@ function contentUrl() {
   url.searchParams.set("view", view);
   url.searchParams.set("embedded", "1");
   url.searchParams.set("shell", "tauri");
-  url.searchParams.set("v", "20260621-v012");
+  url.searchParams.set("v", "20260621-v013");
   trustedContentOrigin = url.origin;
   return url.toString();
 }

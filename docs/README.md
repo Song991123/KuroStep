@@ -17,5 +17,5 @@ KuroStep의 공개 포트폴리오 문서입니다. 루트 README에는 핵심�
 ## 🔗 바로가기
 
 - Web UI: [https://song991123.github.io/KuroStep/](https://song991123.github.io/KuroStep/)
-- GitHub Releases: [https://github.com/Song991123/KuroStep/releases/tag/v0.1.2](https://github.com/Song991123/KuroStep/releases/tag/v0.1.2)
+- GitHub Releases: [https://github.com/Song991123/KuroStep/releases/tag/v0.1.3](https://github.com/Song991123/KuroStep/releases/tag/v0.1.3)
 - Backend Swagger: `/swagger-ui/index.html`
