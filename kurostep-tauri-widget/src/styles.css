@@ -1391,23 +1391,28 @@ select,
 .lyrics-preview {
   display: grid;
   gap: 10px;
+  min-width: 0;
   padding: 14px 16px 16px;
 }
 
 .lyrics-preview p {
   margin: 0;
+  min-width: 0;
   color: var(--text-charcoal);
   font-size: 15px;
   font-weight: 900;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .lyrics-preview small {
   display: block;
+  min-width: 0;
   color: var(--muted);
   font-size: 11px;
   font-weight: 800;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .lyric-sync-controls {
@@ -1455,14 +1460,17 @@ select,
 }
 
 .lyrics-full-list {
-  max-height: 188px;
+  max-height: 216px;
   display: grid;
   gap: 2px;
   margin: 0;
-  padding: 0;
+  padding: 4px;
   overflow: auto;
   list-style: none;
   scrollbar-width: none;
+  border: 1px solid rgb(26 26 26 / 8%);
+  border-radius: 8px;
+  background: rgb(255 253 248 / 78%);
 }
 
 .lyrics-full-list::-webkit-scrollbar {
@@ -1479,7 +1487,7 @@ select,
   width: 100%;
   border: 0;
   display: grid;
-  grid-template-columns: 40px 1fr;
+  grid-template-columns: 42px minmax(0, 1fr);
   gap: 8px;
   align-items: start;
   padding: 0;
@@ -1504,10 +1512,12 @@ select,
 .lyrics-line p,
 .lyrics-line-button p {
   margin: 0;
+  min-width: 0;
   color: #615c55;
   font-size: 12px;
   font-weight: 750;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .lyrics-line.active {
@@ -1726,14 +1736,13 @@ select,
 
 .memo-context {
   margin: 0 0 7px;
-  overflow: hidden;
+  max-width: 100%;
   color: #5a5a5a;
   font-size: 12px;
   font-style: italic;
   font-weight: 650;
   line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   animation: slideUpFade 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards;
   opacity: 0;
 }
@@ -1758,6 +1767,7 @@ select,
 }
 
 .memo-field {
+  box-sizing: border-box;
   display: grid;
   gap: 6px;
   width: 100%;
@@ -1781,7 +1791,7 @@ select,
   width: 100%;
   min-width: 0;
   min-height: 58px;
-  max-height: 96px;
+  max-height: 112px;
   border: 1px solid var(--border-light);
   border-radius: 6px;
   display: block;
@@ -1792,24 +1802,46 @@ select,
   color: var(--text-charcoal);
   font-size: 13px;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .memo-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, auto)) minmax(0, 1fr);
   gap: 7px;
   align-items: center;
   margin-top: 9px;
+  min-width: 0;
 }
 
 .memo-save-state {
   min-width: 0;
   min-height: 16px;
+  max-width: 100%;
+  justify-self: start;
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: rgb(26 26 26 / 5%);
   color: var(--muted);
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1.3;
+  overflow: hidden;
   overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 360px) {
+  .memo-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .memo-save-state {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    white-space: normal;
+  }
 }
 
 .saved-lyric-list {
