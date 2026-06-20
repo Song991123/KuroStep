@@ -29,6 +29,7 @@ import { extractYoutubeId, extractYoutubePlaylistId, fetchYoutubeMetadata } from
 const query = new URLSearchParams(window.location.search);
 const isEmbeddedContent = query.get("embedded") === "1";
 const shellView = query.get("view") || "main";
+const isTauriEmbeddedContent = isEmbeddedContent && query.get("shell") === "tauri";
 const isTauriApp =
   Boolean((window as Window & { __TAURI__?: unknown }).__TAURI__) ||
   window.location.protocol === "tauri:" ||
@@ -1614,18 +1615,24 @@ export default function App() {
       }
     }
 
-    applyStoredCurrentLyricContext();
-    const channel = "BroadcastChannel" in window ? new BroadcastChannel("kurostep.currentLyricContext") : null;
+    if (!isTauriEmbeddedContent) {
+      applyStoredCurrentLyricContext();
+    }
+    const channel = !isTauriEmbeddedContent && "BroadcastChannel" in window ? new BroadcastChannel("kurostep.currentLyricContext") : null;
     if (channel) {
       channel.onmessage = (event) => {
         applyCurrentLyricContext(event.data as CurrentLyricContext);
       };
     }
-    window.addEventListener("storage", syncCurrentLyricFromStorage);
-    const intervalId = window.setInterval(applyStoredCurrentLyricContext, 500);
+    if (!isTauriEmbeddedContent) {
+      window.addEventListener("storage", syncCurrentLyricFromStorage);
+    }
+    const intervalId = !isTauriEmbeddedContent ? window.setInterval(applyStoredCurrentLyricContext, 500) : null;
     return () => {
       window.removeEventListener("storage", syncCurrentLyricFromStorage);
-      window.clearInterval(intervalId);
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
       channel?.close();
     };
   }, []);
