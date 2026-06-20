@@ -79,6 +79,13 @@ type PendingPlaylistImport = YouTubePlaylistPreview & {
   count: number;
 };
 
+type CurrentLyricContext = {
+  trackId?: number | null;
+  line?: SelectedLine | null;
+  translation?: Translation | null;
+  at?: number;
+};
+
 function todayTasksPath(userId: number) {
   return `/api/tasks?userId=${userId}&date=${todayIso()}`;
 }
@@ -1337,9 +1344,9 @@ function LyricMemoWidget({
   const [memoText, setMemoText] = useState("");
 
   useEffect(() => {
-    setTranslatedText(translation?.translatedText || "");
-    setMemoText(translation?.memoText || window.localStorage.getItem("kurostep.translationMemo") || "작업 중 떠오른 번역 느낌을 살짝 적어둘게냥.");
-  }, [selectedLine?.id, translation?.id, translation?.translatedText, translation?.memoText]);
+    setTranslatedText(translation?.translatedText || (selectedLine?.text && containsHangul(selectedLine.text) ? selectedLine.text : ""));
+    setMemoText(translation?.memoText || "");
+  }, [selectedLine?.id, selectedLine?.lineIndex, selectedLine?.text, translation?.id, translation?.translatedText, translation?.memoText]);
 
   return (
     <section className="widget-section lyric-memo-widget" aria-labelledby="lyric-memo-title">
@@ -1536,11 +1543,7 @@ export default function App() {
   }
 
   function readCurrentLyricContext() {
-    return readJson<{
-      trackId?: number | null;
-      line?: SelectedLine | null;
-      translation?: Translation | null;
-    }>("kurostep.currentLyricContext", {});
+    return readJson<CurrentLyricContext>("kurostep.currentLyricContext", {});
   }
 
   useEffect(() => {
@@ -1550,6 +1553,14 @@ export default function App() {
   useEffect(() => {
     translationCacheRef.current = translationCache;
   }, [translationCache]);
+
+  function applyCurrentLyricContext(context: CurrentLyricContext) {
+    if (context.trackId && workspaceRef.current.currentTrack?.id && context.trackId !== workspaceRef.current.currentTrack.id) {
+      return;
+    }
+    setSelectedLine(context.line || null);
+    setTranslation(context.translation || null);
+  }
 
   useEffect(() => {
     if (shellView !== "main") return;
@@ -1565,51 +1576,40 @@ export default function App() {
       channel.postMessage(context);
       channel.close();
     }
+    void invokeNative("sync_paw_lyric_context", {
+      contextJson: JSON.stringify(context),
+    }).catch(() => {});
     broadcastWorkspaceSync("current-lyric-context");
   }, [workspace.currentTrack?.id, selectedLine, activeTranslation]);
 
   useEffect(() => {
     if (shellView === "main") return;
 
-    function applyCurrentLyricContext() {
-      const context = readCurrentLyricContext();
-      if (context.trackId && workspaceRef.current.currentTrack?.id && context.trackId !== workspaceRef.current.currentTrack.id) {
-        return;
-      }
-      setSelectedLine(context.line || null);
-      setTranslation(context.translation || null);
+    function applyStoredCurrentLyricContext() {
+      applyCurrentLyricContext(readCurrentLyricContext());
     }
 
     function syncCurrentLyricFromStorage(event: StorageEvent) {
       if (event.key === "kurostep.currentLyricContext") {
-        applyCurrentLyricContext();
+        applyStoredCurrentLyricContext();
       }
       if (event.key === "kurostep.workspaceSync") {
         const reason = readJson<{ reason?: string }>("kurostep.workspaceSync", {}).reason;
         if (reason === "current-lyric-context") {
-          applyCurrentLyricContext();
+          applyStoredCurrentLyricContext();
         }
       }
     }
 
-    applyCurrentLyricContext();
+    applyStoredCurrentLyricContext();
     const channel = "BroadcastChannel" in window ? new BroadcastChannel("kurostep.currentLyricContext") : null;
     if (channel) {
       channel.onmessage = (event) => {
-        const context = event.data as {
-          trackId?: number | null;
-          line?: SelectedLine | null;
-          translation?: Translation | null;
-        };
-        if (context.trackId && workspaceRef.current.currentTrack?.id && context.trackId !== workspaceRef.current.currentTrack.id) {
-          return;
-        }
-        setSelectedLine(context.line || null);
-        setTranslation(context.translation || null);
+        applyCurrentLyricContext(event.data as CurrentLyricContext);
       };
     }
     window.addEventListener("storage", syncCurrentLyricFromStorage);
-    const intervalId = window.setInterval(applyCurrentLyricContext, 500);
+    const intervalId = window.setInterval(applyStoredCurrentLyricContext, 500);
     return () => {
       window.removeEventListener("storage", syncCurrentLyricFromStorage);
       window.clearInterval(intervalId);
@@ -1660,9 +1660,18 @@ export default function App() {
 
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
-      const data = event.data as { source?: string; action?: string; type?: string; command?: string; message?: string };
+      const data = event.data as { source?: string; action?: string; type?: string; command?: string; message?: string; context?: CurrentLyricContext; contextJson?: string };
       if (data?.source === "kurostep-shell" && data.action === "open_settings") {
         setSettingsOpen(true);
+        return;
+      }
+      if (data?.source === "kurostep-shell" && data.type === "current_lyric_context") {
+        try {
+          const context = data.context || (data.contextJson ? JSON.parse(data.contextJson) as CurrentLyricContext : {});
+          applyCurrentLyricContext(context);
+        } catch {
+          // Ignore a malformed shell sync packet; storage polling remains as fallback.
+        }
         return;
       }
       if (data?.source === "kurostep-shell" && data.type === "native_error") {
@@ -1861,7 +1870,7 @@ export default function App() {
         lyricLineRefId: selectedLine.id || null,
         languageCode: "ko",
         translatedText: selectedLine.text,
-        memoText: window.localStorage.getItem("kurostep.translationMemo") || "작업 중 떠오른 번역 느낌을 살짝 적어둘게냥.",
+        memoText: "",
         status: "LOCAL_DRAFT",
       };
       setTranslation(koreanDraft);
@@ -1893,7 +1902,7 @@ export default function App() {
             sourceText: selectedLine.text,
             sourceLanguageCode: "en",
             targetLanguageCode: "ko",
-            memoText: window.localStorage.getItem("kurostep.translationMemo") || "작업 중 떠오른 번역 느낌을 살짝 적어둘게냥.",
+            memoText: "",
           }),
         }, auth);
         if (cancelled) return;

@@ -1,6 +1,6 @@
 const DEPLOYED_BASE_URL = "https://song991123.github.io/KuroStep/";
 const DEPLOYED_ORIGIN = new URL(DEPLOYED_BASE_URL).origin;
-const CONTENT_CACHE_VERSION = "20260621-v017";
+const CONTENT_CACHE_VERSION = "20260621-v018";
 const params = new URLSearchParams(window.location.search);
 const view = params.get("view") || "main";
 const shellWindow = document.querySelector("#shell-window");
@@ -91,6 +91,27 @@ function blockDeveloperShortcut(event) {
     event.preventDefault();
     event.stopPropagation();
   }
+}
+
+function forwardLyricContextToContent(contextJson) {
+  if (view !== "paw") {
+    return;
+  }
+  shellFrame.contentWindow?.postMessage(
+    {
+      source: "kurostep-shell",
+      type: "current_lyric_context",
+      contextJson: contextJson || "{}",
+    },
+    trustedContentOrigin,
+  );
+}
+
+const tauriListen = window.__TAURI__?.event?.listen;
+if (tauriListen) {
+  tauriListen("paw:lyric-context", (event) => {
+    forwardLyricContextToContent(event.payload);
+  }).catch?.(() => {});
 }
 
 function scheduleWindowPositionSave() {

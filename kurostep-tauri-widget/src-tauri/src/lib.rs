@@ -116,6 +116,16 @@ fn set_paw_visible(
     Ok(())
 }
 
+#[tauri::command]
+fn sync_paw_lyric_context(app: tauri::AppHandle, context_json: String) -> Result<(), String> {
+    if let Some(paw) = app.get_webview_window("paw") {
+        paw.emit("paw:lyric-context", context_json)
+            .map_err(|error| error.to_string())?;
+    }
+
+    Ok(())
+}
+
 fn get_or_create_paw_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
     if let Some(paw) = app.get_webview_window("paw") {
         return Ok(paw);
@@ -352,6 +362,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             set_lyrics_visible,
             set_paw_visible,
+            sync_paw_lyric_context,
             save_current_window_position,
             exit_app
         ])
