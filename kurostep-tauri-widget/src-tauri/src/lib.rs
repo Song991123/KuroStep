@@ -154,14 +154,17 @@ fn saved_or_default_position(
     width: f64,
     height: f64,
 ) -> Option<PhysicalPosition<i32>> {
-    let monitor = window
-        .current_monitor()
-        .ok()
-        .flatten()
+    let monitor = app
+        .get_webview_window("main")
+        .and_then(|main| main.current_monitor().ok().flatten())
+        .or_else(|| window.current_monitor().ok().flatten())
         .or_else(|| app.primary_monitor().ok().flatten())?;
     let monitor_position = monitor.position();
     let monitor_size = monitor.size();
+    let scale_factor = monitor.scale_factor();
     let positions = read_window_positions(app);
+    let width_px = width * scale_factor;
+    let height_px = height * scale_factor;
 
     if let Some(point) = positions.get(label) {
         return Some(clamp_position(
@@ -171,27 +174,37 @@ fn saved_or_default_position(
             },
             monitor_position,
             monitor_size,
-            width,
-            height,
+            width_px,
+            height_px,
         ));
     }
 
-    let margin = 24;
-    let main_width = 380;
+    let margin = (24.0 * scale_factor).round() as i32;
+    let main_width = (380.0 * scale_factor).round() as i32;
+    let main_height = (660.0 * scale_factor).round() as i32;
+    let paw_gap = (20.0 * scale_factor).round() as i32;
+    let lyrics_gap = (18.0 * scale_factor).round() as i32;
     let main_x = monitor_position.x + monitor_size.width as i32 - main_width - margin;
-    let main_y = monitor_position.y + 76;
+    let main_y = monitor_position.y + (76.0 * scale_factor).round() as i32;
+    let lyrics_y_above = main_y - height_px.ceil() as i32 - lyrics_gap;
+    let lyrics_y_below = main_y + main_height + lyrics_gap;
+    let lyrics_y = if lyrics_y_above >= monitor_position.y + margin {
+        lyrics_y_above
+    } else {
+        lyrics_y_below
+    };
     let raw = match label {
         "main" => PhysicalPosition {
             x: main_x,
             y: main_y,
         },
         "paw" => PhysicalPosition {
-            x: main_x - 400,
-            y: main_y + 42,
+            x: main_x - main_width - paw_gap,
+            y: main_y + (42.0 * scale_factor).round() as i32,
         },
         "lyrics" => PhysicalPosition {
             x: main_x,
-            y: main_y - height as i32 - 18,
+            y: lyrics_y,
         },
         _ => PhysicalPosition {
             x: monitor_position.x + margin,
@@ -203,8 +216,8 @@ fn saved_or_default_position(
         raw,
         monitor_position,
         monitor_size,
-        width,
-        height,
+        width_px,
+        height_px,
     ))
 }
 
@@ -228,7 +241,7 @@ fn clamp_position(
 fn window_positions_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let directory = app.path().app_config_dir().map_err(|error| error.to_string())?;
     fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-    Ok(directory.join("window-positions-v2.json"))
+    Ok(directory.join("window-positions-v3.json"))
 }
 
 fn read_window_positions(app: &tauri::AppHandle) -> HashMap<String, WindowPoint> {
