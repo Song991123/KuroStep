@@ -24,14 +24,24 @@ fn set_lyrics_visible(
     line: String,
     translation: String,
 ) -> Result<(), String> {
+    let display_line = if line.trim().is_empty() {
+        "가사 발자국을 기다리는 중이다냥.".to_string()
+    } else {
+        line
+    };
+    let display_translation = if translation.trim() == display_line.trim() {
+        "".to_string()
+    } else {
+        translation
+    };
     let lyrics = app
         .get_webview_window("lyrics")
         .ok_or_else(|| "lyrics window not found".to_string())?;
 
-    let (width, height) = estimate_lyrics_window_size(&line, &translation);
+    let (width, height) = estimate_lyrics_window_size(&display_line, &display_translation);
 
     lyrics
-        .emit("lyrics:update", LyricPayload { line, translation })
+        .emit("lyrics:update", LyricPayload { line: display_line, translation: display_translation })
         .map_err(|error| error.to_string())?;
 
     lyrics
@@ -51,10 +61,19 @@ fn set_lyrics_visible(
 }
 
 fn estimate_lyrics_window_size(line: &str, translation: &str) -> (f64, f64) {
-    let longest = line.chars().count().max(translation.chars().count()).max(10) as f64;
-    let width = (longest * 11.0 + 56.0).clamp(180.0, 720.0);
+    let line_units = visual_units(line).max(10.0);
+    let translation_units = visual_units(translation);
+    let longest = line_units.max(translation_units);
+    let width = (longest * 13.5 + 64.0).clamp(260.0, 1180.0);
     let height = if translation.trim().is_empty() { 58.0 } else { 84.0 };
     (width, height)
+}
+
+fn visual_units(value: &str) -> f64 {
+    value
+        .chars()
+        .map(|character| if character.is_ascii() { 0.72 } else { 1.08 })
+        .sum()
 }
 
 #[tauri::command]

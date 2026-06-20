@@ -35,7 +35,8 @@ const isTauriApp =
   window.location.hostname === "tauri.localhost";
 const PLAYBACK_TICK_MS = 500;
 const LYRIC_SYNC_LOOKAHEAD_MS = 350;
-const LYRIC_SYNC_STEP_MS = 500;
+const LYRIC_SYNC_FINE_STEP_MS = 500;
+const LYRIC_SYNC_COARSE_STEP_MS = 5000;
 const MAX_LYRIC_SYNC_OFFSET_MS = 30000;
 const REPEAT_MODES = ["off", "all", "one"] as const;
 const MAX_YOUTUBE_RECOVERY_ATTEMPTS = 2;
@@ -105,6 +106,20 @@ function formatLyricSyncOffset(value: number) {
   if (!value) return "기본";
   const seconds = (Math.abs(value) / 1000).toFixed(1).replace(/\.0$/, "");
   return value > 0 ? `앞당김 ${seconds}초` : `늦춤 ${seconds}초`;
+}
+
+function isTranslationForLine(translation: Translation | null | undefined, line: SelectedLine | null | undefined) {
+  if (!translation || !line?.text) return false;
+  if (translation.lyricLineRefId != null && line.id != null) {
+    return Number(translation.lyricLineRefId) === Number(line.id);
+  }
+  if (translation.status === "LOCAL_DRAFT") {
+    if (translation.lyricLineRefId != null && line.id != null) {
+      return Number(translation.lyricLineRefId) === Number(line.id);
+    }
+    return translation.translatedText === line.text;
+  }
+  return false;
 }
 
 type YouTubePlayer = {
@@ -278,17 +293,17 @@ function parseLyricSource(fetchResponse: LyricFetchResponse): LyricSource {
 }
 
 function parseLyricLine(line: string, index: number) {
-  const match = line.match(/^\[(\d{1,2}):(\d{2})(?:\.(\d{2}))?\]\s*(.*)$/);
+  const match = line.match(/^\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]\s*(.*)$/);
   if (!match) {
     return { index, startTimeMs: null, text: line.trim() };
   }
 
   const minutes = Number(match[1]);
   const seconds = Number(match[2]);
-  const centiseconds = Number(match[3] || 0);
+  const milliseconds = Number(`${match[3] || ""}000`.slice(0, 3));
   return {
     index,
-    startTimeMs: (minutes * 60 + seconds) * 1000 + centiseconds * 10,
+    startTimeMs: (minutes * 60 + seconds) * 1000 + milliseconds,
     text: match[4].trim(),
   };
 }
@@ -1394,8 +1409,10 @@ function LyricsWidget({
         {currentTrack && (
           <div className="lyric-sync-controls" aria-label="가사 싱크 보정">
             <span>싱크 {formatLyricSyncOffset(lyricSyncOffsetMs)}</span>
-            <button className="mini-sync-button" type="button" onClick={() => onAdjustSync(-LYRIC_SYNC_STEP_MS)}>늦추기</button>
-            <button className="mini-sync-button" type="button" onClick={() => onAdjustSync(LYRIC_SYNC_STEP_MS)}>앞당기기</button>
+            <button className="mini-sync-button" type="button" onClick={() => onAdjustSync(-LYRIC_SYNC_COARSE_STEP_MS)}>5초 늦게</button>
+            <button className="mini-sync-button" type="button" onClick={() => onAdjustSync(-LYRIC_SYNC_FINE_STEP_MS)}>0.5초 늦게</button>
+            <button className="mini-sync-button" type="button" onClick={() => onAdjustSync(LYRIC_SYNC_FINE_STEP_MS)}>0.5초 빨리</button>
+            <button className="mini-sync-button" type="button" onClick={() => onAdjustSync(LYRIC_SYNC_COARSE_STEP_MS)}>5초 빨리</button>
             <button className="mini-sync-button" type="button" onClick={onResetSync}>초기화</button>
           </div>
         )}
@@ -1413,7 +1430,7 @@ function LyricsWidget({
                   <button
                     className="lyrics-line-button"
                     type="button"
-                    aria-label={`${formatTimestamp(line.startTimeMs)} 가사 선택`}
+                    aria-label={`${formatTimestamp(line.startTimeMs)} 이 줄로 싱크 맞추기`}
                     onClick={() => onSelectLine({
                       id: ref?.id || null,
                       lineIndex: line.index,
@@ -1477,6 +1494,7 @@ export default function App() {
   const lyricWarmupRef = useRef(new Map<number, Promise<LyricSource>>());
   const lastSyncedDurationRef = useRef<Record<number, number>>({});
   const workspaceSyncChannelRef = useRef<BroadcastChannel | null>(null);
+  const activeTranslation = isTranslationForLine(translation, selectedLine) ? translation : null;
 
   useEffect(() => {
     if (!isEmbeddedContent && !isTauriApp) return;
@@ -1538,7 +1556,7 @@ export default function App() {
     const context = {
       trackId: workspace.currentTrack?.id || null,
       line: selectedLine || null,
-      translation: translation || null,
+      translation: activeTranslation || null,
       at: Date.now(),
     };
     writeJson("kurostep.currentLyricContext", context);
@@ -1548,7 +1566,7 @@ export default function App() {
       channel.close();
     }
     broadcastWorkspaceSync("current-lyric-context");
-  }, [workspace.currentTrack?.id, selectedLine, translation]);
+  }, [workspace.currentTrack?.id, selectedLine, activeTranslation]);
 
   useEffect(() => {
     if (shellView === "main") return;
@@ -1684,11 +1702,11 @@ export default function App() {
     void invokeNative("set_lyrics_visible", {
       visible: lyricsOverlayVisible,
       line: selectedLine?.text || "",
-      translation: translation?.translatedText || "",
+      translation: activeTranslation?.translatedText || "",
     }).catch((error) => {
       setNotice({ kind: "error", message: `가사 오버레이 갱신을 못 했다냥: ${(error as Error).message || error}` });
     });
-  }, [auth, lyricsOverlayVisible, selectedLine?.text, translation?.translatedText]);
+  }, [auth, lyricsOverlayVisible, selectedLine?.text, activeTranslation?.translatedText]);
 
   function requestPawWidgetVisible(visible: boolean) {
     writeJson("kurostep.pawWidgetVisible", visible);
@@ -1710,7 +1728,7 @@ export default function App() {
     void invokeNative("set_lyrics_visible", {
       visible,
       line: selectedLine?.text || "",
-      translation: translation?.translatedText || "",
+      translation: activeTranslation?.translatedText || "",
     }).catch((error) => {
       setNotice({ kind: "error", message: `가사 오버레이 창을 못 열었다냥: ${(error as Error).message || error}` });
     });
@@ -1838,7 +1856,19 @@ export default function App() {
       setTranslation(cachedTranslation);
       return;
     }
-    setTranslation(null);
+    if (containsHangul(selectedLine.text)) {
+      const koreanDraft: Translation = {
+        lyricLineRefId: selectedLine.id || null,
+        languageCode: "ko",
+        translatedText: selectedLine.text,
+        memoText: window.localStorage.getItem("kurostep.translationMemo") || "작업 중 떠오른 번역 느낌을 살짝 적어둘게냥.",
+        status: "LOCAL_DRAFT",
+      };
+      setTranslation(koreanDraft);
+      setTranslationCache((current) => ({ ...current, [key]: koreanDraft }));
+    } else {
+      setTranslation(null);
+    }
     if (pendingTranslationRef.current.has(key)) {
       return;
     }
@@ -1855,14 +1885,6 @@ export default function App() {
           return;
         }
         if (containsHangul(selectedLine.text)) {
-          const koreanDraft: Translation = {
-            languageCode: "ko",
-            translatedText: selectedLine.text,
-            memoText: window.localStorage.getItem("kurostep.translationMemo") || "작업 중 떠오른 번역 느낌을 살짝 적어둘게냥.",
-            status: "LOCAL_DRAFT",
-          };
-          setTranslation(koreanDraft);
-          setTranslationCache((current) => ({ ...current, [key]: koreanDraft }));
           return;
         }
         const created = await api<Translation>(`/api/lyric-line-refs/${selectedLine.id}/translations/auto-draft?userId=${auth.userId}`, {
@@ -1881,7 +1903,9 @@ export default function App() {
       .catch((error) => {
         if (!cancelled) {
           setTranslation(null);
-          setNotice({ kind: "notice", message: "번역 메모는 잠깐 놓쳤다냥. 다음 줄에서 다시 이어볼게냥." });
+          if (!containsHangul(selectedLine.text)) {
+            setNotice({ kind: "notice", message: "이 줄은 직접 번역 메모를 적어두면 된다냥." });
+          }
         }
       })
       .finally(() => {
@@ -2563,7 +2587,8 @@ export default function App() {
   }
 
   async function deleteMemo() {
-    if (!auth?.userId || !selectedLine?.id || !translation?.id) {
+    const activeTranslation = isTranslationForLine(translation, selectedLine) ? translation : null;
+    if (!auth?.userId || !selectedLine?.id || !activeTranslation?.id) {
       setNotice({ kind: "notice", message: "아직 지울 번역 메모가 없다냥." });
       return;
     }
@@ -2588,13 +2613,14 @@ export default function App() {
       return;
     }
 
-    const memoFallback = translation?.memoText || window.localStorage.getItem("kurostep.translationMemo") || "저장한 가사 조각";
-    const translatedDraft = translation?.translatedText || "";
+    const activeTranslation = isTranslationForLine(translation, selectedLine) ? translation : null;
+    const memoFallback = activeTranslation?.memoText || window.localStorage.getItem("kurostep.translationMemo") || "저장한 가사 조각";
+    const translatedDraft = activeTranslation?.translatedText || "";
     const serverTranslatedText = translatedDraft || selectedLine.text;
     const savedTranslation = selectedLine.id && auth?.userId
       ? await saveMemoForLine(selectedLine, serverTranslatedText, memoFallback, { showNotice: false })
       : null;
-    const translationForPiece = savedTranslation || translation;
+    const translationForPiece = savedTranslation || activeTranslation;
 
     const piece: SavedLyricPiece = {
       id: `${selectedLine.id || selectedLine.lineIndex || Date.now()}-${Date.now()}`,
@@ -2679,6 +2705,22 @@ export default function App() {
     });
   }
 
+  function syncLyricsToLine(line: SelectedLine) {
+    setSelectedLine(line);
+    if (!Number.isFinite(line.startTimeMs)) return;
+
+    const track = workspace.currentTrack;
+    if (!track) return;
+
+    const key = lyricSyncOffsetKey(track);
+    const next = clampLyricSyncOffset(Number(line.startTimeMs) - playbackPosition * 1000 - LYRIC_SYNC_LOOKAHEAD_MS);
+    if (key) {
+      window.localStorage.setItem(key, String(next));
+    }
+    setLyricSyncOffsetMs(next);
+    setNotice({ kind: "notice", message: `현재 들리는 줄에 맞춰 가사 싱크를 ${formatLyricSyncOffset(next)}으로 저장했다냥.` });
+  }
+
   function resetLyricSync() {
     const key = lyricSyncOffsetKey(workspace.currentTrack);
     if (key) {
@@ -2728,7 +2770,7 @@ export default function App() {
           workspace={workspace}
           savedLyricPieces={savedLyricPieces}
           selectedLine={selectedLine}
-          translation={translation}
+          translation={activeTranslation}
           onSelectTask={(task) => updateWorkspaceState((current) => ({ ...current, work: task }))}
           onCreateTask={createTask}
           onUpdateStatus={updateStatus}
@@ -2822,11 +2864,11 @@ export default function App() {
           lyric={lyric}
           lyricSource={lyricSource}
           selectedLine={selectedLine}
-          translation={translation}
+          translation={activeTranslation}
           lyricsExpanded={lyricsExpanded}
           lyricSyncOffsetMs={lyricSyncOffsetMs}
           onToggleExpanded={() => setLyricsExpanded((value) => !value)}
-          onSelectLine={setSelectedLine}
+          onSelectLine={syncLyricsToLine}
           onSavePiece={saveCurrentLyricPiece}
           onAdjustSync={adjustLyricSync}
           onResetSync={resetLyricSync}
@@ -2838,7 +2880,7 @@ export default function App() {
             workspace={workspace}
             savedLyricPieces={savedLyricPieces}
             selectedLine={selectedLine}
-            translation={translation}
+            translation={activeTranslation}
             onSelectTask={(task) => updateWorkspaceState((current) => ({ ...current, work: task }))}
             onCreateTask={createTask}
             onUpdateStatus={updateStatus}
