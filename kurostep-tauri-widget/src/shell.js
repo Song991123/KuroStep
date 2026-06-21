@@ -1,6 +1,6 @@
 const DEPLOYED_BASE_URL = "https://song991123.github.io/KuroStep/";
 const DEPLOYED_ORIGIN = new URL(DEPLOYED_BASE_URL).origin;
-const CONTENT_CACHE_VERSION = "20260621-v026";
+const CONTENT_CACHE_VERSION = "20260621-v027";
 const params = new URLSearchParams(window.location.search);
 const view = params.get("view") || "main";
 const shellWindow = document.querySelector("#shell-window");

@@ -1360,6 +1360,7 @@ function TaskPawWidget({
   onDeleteTask,
   onSaveMemo,
   onDeleteMemo,
+  onDraftMemo,
   onDeletePiece,
 }: {
   workspace: Workspace;
