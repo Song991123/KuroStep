@@ -1764,24 +1764,16 @@ export default function App() {
       }
     }
 
-    if (!isTauriEmbeddedContent) {
-      applyStoredCurrentLyricContext();
-    }
-    const channel = !isTauriEmbeddedContent && "BroadcastChannel" in window ? new BroadcastChannel("kurostep.currentLyricContext") : null;
+    applyStoredCurrentLyricContext();
+    const channel = "BroadcastChannel" in window ? new BroadcastChannel("kurostep.currentLyricContext") : null;
     if (channel) {
       channel.onmessage = (event) => {
         applyCurrentLyricContext(event.data as CurrentLyricContext);
       };
     }
-    if (!isTauriEmbeddedContent) {
-      window.addEventListener("storage", syncCurrentLyricFromStorage);
-    }
-    const intervalId = !isTauriEmbeddedContent ? window.setInterval(applyStoredCurrentLyricContext, 500) : null;
+    window.addEventListener("storage", syncCurrentLyricFromStorage);
     return () => {
       window.removeEventListener("storage", syncCurrentLyricFromStorage);
-      if (intervalId) {
-        window.clearInterval(intervalId);
-      }
       channel?.close();
     };
   }, []);
