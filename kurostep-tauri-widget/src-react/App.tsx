@@ -944,6 +944,7 @@ function MusicPlayerWidget({
   const lastPlaybackTimeRef = useRef(0);
   const stalledTickRef = useRef(0);
   const recoveryAttemptsRef = useRef(0);
+  const lastReportedDurationRef = useRef(0);
   const repeatModeRef = useRef<RepeatMode>(repeatMode);
   const isPlayingRef = useRef(isPlaying);
   const videoId = getYoutubeVideoId(track);
@@ -976,6 +977,16 @@ function MusicPlayerWidget({
   useEffect(() => {
     displayedDurationRef.current = displayedDuration;
   }, [displayedDuration]);
+
+  function reportDuration(seconds: number) {
+    const nextDuration = Math.floor(Number(seconds) || 0);
+    if (nextDuration <= 0 || lastReportedDurationRef.current === nextDuration) {
+      return;
+    }
+    lastReportedDurationRef.current = nextDuration;
+    displayedDurationRef.current = nextDuration;
+    onDurationChange(nextDuration);
+  }
 
   async function recoverYoutubePlayback(reason = "unknown") {
     const player = playerRef.current;
@@ -1021,6 +1032,7 @@ function MusicPlayerWidget({
         if (cancelled) return;
         if (playerRef.current?.cueVideoById) {
           videoIdRef.current = videoId;
+          lastReportedDurationRef.current = 0;
           setPlayerReady(true);
           playerRef.current.cueVideoById({ videoId, startSeconds: 0 });
           onPositionChange(0);
@@ -1032,6 +1044,7 @@ function MusicPlayerWidget({
 
         playerRef.current = null;
         videoIdRef.current = videoId;
+        lastReportedDurationRef.current = 0;
         playerRef.current = new YT.Player("youtube-player", {
           videoId,
           playerVars: {
@@ -1046,20 +1059,14 @@ function MusicPlayerWidget({
               if (cancelled) return;
               setPlayerReady(true);
               event.target.setVolume?.(volume);
-              const nextDuration = Math.floor(event.target.getDuration?.() || 0);
-              if (nextDuration > 0) {
-                onDurationChange(nextDuration);
-              }
+              reportDuration(event.target.getDuration?.() || 0);
               if (isPlaying) {
                 event.target.playVideo?.();
               }
             },
             onStateChange: (event) => {
               if (!window.YT) return;
-              const nextDuration = Math.floor(playerRef.current?.getDuration?.() || 0);
-              if (nextDuration > 0) {
-                onDurationChange(nextDuration);
-              }
+              reportDuration(playerRef.current?.getDuration?.() || 0);
               if (event.data === window.YT.PlayerState.PLAYING) {
                 stalledTickRef.current = 0;
                 recoveryAttemptsRef.current = 0;
@@ -1106,11 +1113,7 @@ function MusicPlayerWidget({
   useEffect(() => {
     if (!playerReady || !videoId) return;
     const durationTimer = window.setInterval(() => {
-      const nextDuration = Math.floor(playerRef.current?.getDuration?.() || 0);
-      if (nextDuration > 0) {
-        displayedDurationRef.current = nextDuration;
-        onDurationChange(nextDuration);
-      }
+      reportDuration(playerRef.current?.getDuration?.() || 0);
     }, 500);
     return () => window.clearInterval(durationTimer);
   }, [playerReady, videoId]);
@@ -1141,8 +1144,7 @@ function MusicPlayerWidget({
       playbackPositionRef.current = current;
       onPositionChange(current);
       if (nextDuration > 0) {
-        displayedDurationRef.current = nextDuration;
-        onDurationChange(nextDuration);
+        reportDuration(nextDuration);
       }
 
       const isProgressStuck = Math.abs(current - lastPlaybackTimeRef.current) < 0.15;
@@ -1769,6 +1771,10 @@ export default function App() {
   function updateCurrentTrackDuration(seconds: number) {
     const nextDuration = Math.floor(Number(seconds) || 0);
     if (nextDuration <= 0) return;
+    const currentTrack = workspaceRef.current.currentTrack;
+    if (trackDuration === nextDuration && currentTrack?.durationSeconds === nextDuration) {
+      return;
+    }
 
     setTrackDuration(nextDuration);
     updateWorkspaceState((current) => ({
