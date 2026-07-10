@@ -117,13 +117,25 @@ function normalizeMemoText(text: string | null | undefined) {
 
 function lyricDraftKey(trackId: number | null | undefined, line: SelectedLine | null | undefined) {
   if (!line?.text) return "";
-  const lineKey = line.id != null ? `id-${line.id}` : `idx-${line.lineIndex}-${line.startTimeMs ?? "na"}-${line.text}`;
-  return `kurostep.translationDraft.${trackId || "trackless"}.${lineKey}`;
+  const lineKey = lyricLineKey(line);
+  return lineKey ? `kurostep.translationDraft.${trackId || "trackless"}.${lineKey}` : "";
+}
+
+function lyricLineKey(line: SelectedLine | null | undefined) {
+  if (!line?.text) return "";
+  if (line.id != null) return `id-${line.id}`;
+  return `idx-${line.lineIndex}-${line.startTimeMs ?? "na"}-${line.text}`;
+}
+
+function isSameLyricLine(left: SelectedLine | null | undefined, right: SelectedLine | null | undefined) {
+  const leftKey = lyricLineKey(left);
+  return Boolean(leftKey && leftKey === lyricLineKey(right));
 }
 
 function makeLocalTranslation(line: SelectedLine, translatedText: string, memoText = ""): Translation {
   return {
     lyricLineRefId: line.id || null,
+    clientLineKey: lyricLineKey(line),
     languageCode: "ko",
     translatedText,
     memoText: normalizeMemoText(memoText),
@@ -172,6 +184,9 @@ function formatLyricSyncOffset(value: number) {
 
 function isTranslationForLine(translation: Translation | null | undefined, line: SelectedLine | null | undefined) {
   if (!translation || !line?.text) return false;
+  if (translation.clientLineKey) {
+    return translation.clientLineKey === lyricLineKey(line);
+  }
   if (translation.lyricLineRefId != null && line.id != null) {
     return Number(translation.lyricLineRefId) === Number(line.id);
   }
@@ -179,7 +194,7 @@ function isTranslationForLine(translation: Translation | null | undefined, line:
     if (translation.lyricLineRefId != null && line.id != null) {
       return Number(translation.lyricLineRefId) === Number(line.id);
     }
-    return translation.translatedText === line.text;
+    return line.id == null && translation.translatedText === line.text;
   }
   return false;
 }
@@ -1596,8 +1611,10 @@ export default function App() {
   const [savedLyricPieces, setSavedLyricPieces] = useState(() => readJson<SavedLyricPiece[]>("kurostep.savedLyricPieces", []));
   const authRef = useRef<AuthSession | null>(auth);
   const workspaceRef = useRef<Workspace>(workspace);
+  const selectedLineRef = useRef<SelectedLine | null>(selectedLine);
   const translationCacheRef = useRef<Record<string, Translation>>(translationCache);
   const pendingTranslationRef = useRef(new Set<string>());
+  const lastAppliedLyricContextAtRef = useRef(0);
   const lyricLoadRequestRef = useRef(0);
   const lyricWarmupRef = useRef(new Map<number, Promise<LyricSource>>());
   const lastSyncedDurationRef = useRef<Record<number, number>>({});
@@ -1652,6 +1669,10 @@ export default function App() {
   }, [workspace]);
 
   useEffect(() => {
+    selectedLineRef.current = selectedLine;
+  }, [selectedLine]);
+
+  useEffect(() => {
     translationCacheRef.current = translationCache;
   }, [translationCache]);
 
@@ -1659,10 +1680,18 @@ export default function App() {
     if (context.trackId && workspaceRef.current.currentTrack?.id && context.trackId !== workspaceRef.current.currentTrack.id) {
       return;
     }
+    const contextAt = Number(context.at || 0);
+    if (contextAt && contextAt < lastAppliedLyricContextAtRef.current) {
+      return;
+    }
+    if (contextAt) {
+      lastAppliedLyricContextAtRef.current = contextAt;
+    }
     const nextLine = context.line || null;
     const localDraft = readLocalTranslationDraft(context.trackId, nextLine);
+    const nextTranslation = localDraft || (isTranslationForLine(context.translation, nextLine) ? context.translation || null : null);
     setSelectedLine(nextLine);
-    setTranslation(localDraft || context.translation || null);
+    setTranslation(nextTranslation);
   }
 
   useEffect(() => {
@@ -1998,8 +2027,17 @@ export default function App() {
       setTranslation(null);
       return;
     }
-    const key = String(selectedLine.id);
-    const localDraft = readLocalTranslationDraft(workspace.currentTrack?.id, selectedLine);
+    const lineSnapshot = selectedLine;
+    const trackIdSnapshot = workspace.currentTrack?.id || null;
+    const key = String(lineSnapshot.id);
+    const lineStillCurrent = () =>
+      workspaceRef.current.currentTrack?.id === trackIdSnapshot && isSameLyricLine(selectedLineRef.current, lineSnapshot);
+    const applyTranslationForLine = (nextTranslation: Translation | null) => {
+      if (lineStillCurrent()) {
+        setTranslation(nextTranslation);
+      }
+    };
+    const localDraft = readLocalTranslationDraft(trackIdSnapshot, lineSnapshot);
     if (localDraft) {
       setTranslation(localDraft);
       setTranslationCache((current) => ({ ...current, [key]: localDraft }));
@@ -2010,14 +2048,8 @@ export default function App() {
       setTranslation(cachedTranslation);
       return;
     }
-    if (containsHangul(selectedLine.text)) {
-      const koreanDraft: Translation = {
-        lyricLineRefId: selectedLine.id || null,
-        languageCode: "ko",
-        translatedText: selectedLine.text,
-        memoText: "",
-        status: "LOCAL_DRAFT",
-      };
+    if (containsHangul(lineSnapshot.text)) {
+      const koreanDraft = makeLocalTranslation(lineSnapshot, lineSnapshot.text);
       setTranslation(koreanDraft);
       setTranslationCache((current) => ({ ...current, [key]: koreanDraft }));
     } else {
@@ -2029,51 +2061,56 @@ export default function App() {
     pendingTranslationRef.current.add(key);
 
     let cancelled = false;
-    api<Translation[]>(`/api/lyric-line-refs/${selectedLine.id}/translations?userId=${auth.userId}`, {}, auth)
+    api<Translation[]>(`/api/lyric-line-refs/${lineSnapshot.id}/translations?userId=${auth.userId}`, {}, auth)
       .then(async (translations) => {
-        if (cancelled) return;
+        if (cancelled || !lineStillCurrent()) return;
         const savedKorean = translations.find((item) => item.languageCode === "ko") || translations[0];
-        const localDraftBeforeSave = readLocalTranslationDraft(workspaceRef.current.currentTrack?.id, selectedLine);
+        const localDraftBeforeSave = readLocalTranslationDraft(trackIdSnapshot, lineSnapshot);
         if (localDraftBeforeSave) {
-          setTranslation(localDraftBeforeSave);
+          applyTranslationForLine(localDraftBeforeSave);
           setTranslationCache((current) => ({ ...current, [key]: localDraftBeforeSave }));
           return;
         }
         if (savedKorean) {
-          const normalized = { ...savedKorean, memoText: normalizeMemoText(savedKorean.memoText) };
-          setTranslation(normalized);
+          const normalized = {
+            ...savedKorean,
+            clientLineKey: lyricLineKey(lineSnapshot),
+            memoText: normalizeMemoText(savedKorean.memoText),
+          };
+          applyTranslationForLine(normalized);
           setTranslationCache((current) => ({ ...current, [key]: normalized }));
           return;
         }
-        if (containsHangul(selectedLine.text)) {
+        if (containsHangul(lineSnapshot.text)) {
           return;
         }
         if (!autoTranslationEnabled) {
           return;
         }
-        const created = await api<Translation>(`/api/lyric-line-refs/${selectedLine.id}/translations/auto-draft?userId=${auth.userId}`, {
+        const created = await api<Translation>(`/api/lyric-line-refs/${lineSnapshot.id}/translations/auto-draft?userId=${auth.userId}`, {
           method: "POST",
           body: JSON.stringify({
-            sourceText: selectedLine.text,
+            sourceText: lineSnapshot.text,
             sourceLanguageCode: "en",
             targetLanguageCode: "ko",
             memoText: "",
           }),
         }, auth);
-        if (cancelled) return;
-        const localDraftBeforeAutoDraft = readLocalTranslationDraft(workspaceRef.current.currentTrack?.id, selectedLine);
+        if (cancelled || !lineStillCurrent()) return;
+        const localDraftBeforeAutoDraft = readLocalTranslationDraft(trackIdSnapshot, lineSnapshot);
         if (localDraftBeforeAutoDraft) {
-          setTranslation(localDraftBeforeAutoDraft);
+          applyTranslationForLine(localDraftBeforeAutoDraft);
           setTranslationCache((current) => ({ ...current, [key]: localDraftBeforeAutoDraft }));
           return;
         }
-        setTranslation(created);
-        setTranslationCache((current) => ({ ...current, [key]: created }));
+        const normalized = { ...created, clientLineKey: lyricLineKey(lineSnapshot), memoText: normalizeMemoText(created.memoText) };
+        applyTranslationForLine(normalized);
+        setTranslationCache((current) => ({ ...current, [key]: normalized }));
       })
       .catch((error) => {
-        if (!cancelled) {
+        if (!cancelled && lineStillCurrent()) {
           setTranslation(null);
-          if (!containsHangul(selectedLine.text)) {
+          if (!containsHangul(lineSnapshot.text)) {
             setNotice({ kind: "notice", message: "이 줄은 직접 번역 메모를 적어두면 된다냥." });
           }
         }
@@ -2085,7 +2122,16 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [auth?.userId, workspace.currentTrack?.id, selectedLine?.id, selectedLine?.text, shellView, autoTranslationEnabled]);
+  }, [
+    auth?.userId,
+    workspace.currentTrack?.id,
+    selectedLine?.id,
+    selectedLine?.lineIndex,
+    selectedLine?.startTimeMs,
+    selectedLine?.text,
+    shellView,
+    autoTranslationEnabled,
+  ]);
 
   useEffect(() => {
     if (!auth || !workspace.playlistTracks.length) return;

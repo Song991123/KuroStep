@@ -117,6 +117,7 @@ export type SelectedLine = {
 export type Translation = {
   id?: number;
   lyricLineRefId?: number | null;
+  clientLineKey?: string;
   status?: string;
   languageCode: string;
   translatedText: string;
