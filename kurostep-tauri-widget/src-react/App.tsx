@@ -449,6 +449,16 @@ function formatDuration(seconds?: number) {
   return `${minutes}:${String(rest).padStart(2, "0")}`;
 }
 
+function normalizeTrackDuration(seconds: number, stableSeconds = 0) {
+  const nextDuration = Math.round(Number(seconds) || 0);
+  const currentDuration = Math.round(Number(stableSeconds) || 0);
+  if (nextDuration <= 0) return 0;
+  if (currentDuration > 0 && Math.abs(currentDuration - nextDuration) <= 1) {
+    return currentDuration;
+  }
+  return nextDuration;
+}
+
 function normalizeRepeatMode(mode: string | null | undefined): RepeatMode {
   return REPEAT_MODES.includes(mode as RepeatMode) ? mode as RepeatMode : "off";
 }
@@ -979,7 +989,7 @@ function MusicPlayerWidget({
   }, [displayedDuration]);
 
   function reportDuration(seconds: number) {
-    const nextDuration = Math.floor(Number(seconds) || 0);
+    const nextDuration = normalizeTrackDuration(seconds, displayedDurationRef.current);
     if (nextDuration <= 0 || lastReportedDurationRef.current === nextDuration) {
       return;
     }
@@ -1139,7 +1149,10 @@ function MusicPlayerWidget({
       const rawCurrent = player?.getCurrentTime?.();
       const current = Number.isFinite(rawCurrent) ? Number(rawCurrent) : playbackPositionRef.current;
       const rawDuration = player?.getDuration?.();
-      const nextDuration = Math.floor(Number.isFinite(rawDuration) && Number(rawDuration) > 0 ? Number(rawDuration) : displayedDurationRef.current || 0);
+      const nextDuration = normalizeTrackDuration(
+        Number.isFinite(rawDuration) && Number(rawDuration) > 0 ? Number(rawDuration) : displayedDurationRef.current || 0,
+        displayedDurationRef.current,
+      );
       const playerState = player?.getPlayerState?.();
       playbackPositionRef.current = current;
       onPositionChange(current);
@@ -1769,9 +1782,9 @@ export default function App() {
   }
 
   function updateCurrentTrackDuration(seconds: number) {
-    const nextDuration = Math.floor(Number(seconds) || 0);
-    if (nextDuration <= 0) return;
     const currentTrack = workspaceRef.current.currentTrack;
+    const nextDuration = normalizeTrackDuration(seconds, currentTrack?.durationSeconds || trackDuration);
+    if (nextDuration <= 0) return;
     if (trackDuration === nextDuration && currentTrack?.durationSeconds === nextDuration) {
       return;
     }
