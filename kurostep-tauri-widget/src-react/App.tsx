@@ -1802,6 +1802,7 @@ export default function App() {
               }
             })
             .catch(() => {});
+          applyStoredCurrentLyricContext();
         }, 500)
       : null;
     window.addEventListener("storage", syncCurrentLyricFromStorage);
