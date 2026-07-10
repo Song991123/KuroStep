@@ -199,6 +199,19 @@ function isTranslationForLine(translation: Translation | null | undefined, line:
   return false;
 }
 
+function translationStatusLabel(status: string | null | undefined) {
+  switch (status) {
+    case "AUTO_DRAFT":
+      return "자동 초안";
+    case "LOCAL_DRAFT":
+      return "작성 중";
+    case "SAVED":
+      return "저장됨";
+    default:
+      return "";
+  }
+}
+
 type YouTubePlayer = {
   cueVideoById: (options: { videoId: string; startSeconds?: number }) => void;
   playVideo: () => void;
@@ -1461,6 +1474,7 @@ function LyricMemoWidget({
 
   useEffect(() => {
     if (draftDirtyRef.current) return;
+    if (!translation) return;
     setTranslatedText(translation?.translatedText || (selectedLine?.text && containsHangul(selectedLine.text) ? selectedLine.text : ""));
     setMemoText(normalizeMemoText(translation?.memoText));
   }, [translation?.id, translation?.translatedText, translation?.memoText, lineKey, selectedLine?.text]);
@@ -1477,6 +1491,13 @@ function LyricMemoWidget({
     onDraftChange(translatedText, value);
   }
 
+  function deleteMemo() {
+    draftDirtyRef.current = false;
+    setTranslatedText(selectedLine?.text && containsHangul(selectedLine.text) ? selectedLine.text : "");
+    setMemoText("");
+    onDeleteMemo();
+  }
+
   return (
     <section className="widget-section lyric-memo-widget" aria-labelledby="lyric-memo-title">
       <SectionHeader title="번역 메모" />
@@ -1487,8 +1508,8 @@ function LyricMemoWidget({
           <label className="memo-field"><span>작업 메모</span><textarea className="memo-input" id="translation-memo" value={memoText} onChange={(event) => changeMemoText(event.target.value)} placeholder="이 가사를 작업에 어떻게 붙일지 적어줘냥" /></label>
           <div className="memo-actions">
             <button className="action-button primary compact" id="save-memo" type="button" onClick={() => onSaveMemo(translatedText, memoText)}>메모 저장</button>
-            <button className="action-button compact danger" id="delete-memo" type="button" onClick={onDeleteMemo}>메모 삭제</button>
-            <span className="memo-save-state" id="memo-save-state">{translation?.status || ""}</span>
+            <button className="action-button compact danger" id="delete-memo" type="button" onClick={deleteMemo}>메모 삭제</button>
+            <span className="memo-save-state" id="memo-save-state">{translationStatusLabel(translation?.status)}</span>
           </div>
         </>
       ) : <p className="state-message">곡을 재생하면 현재 가사와 한국어 메모를 만질 수 있다냥.</p>}
@@ -1717,7 +1738,7 @@ export default function App() {
     const localDraft = readLocalTranslationDraft(context.trackId, nextLine);
     const nextTranslation = localDraft || (isTranslationForLine(context.translation, nextLine) ? context.translation || null : null);
     setSelectedLine(nextLine);
-    setTranslation(nextTranslation);
+    setTranslation((current) => nextTranslation || (isTranslationForLine(current, nextLine) ? current : null));
   }
 
   useEffect(() => {
@@ -1774,6 +1795,13 @@ export default function App() {
     const shellRequestInterval = isTauriEmbeddedContent
       ? window.setInterval(() => {
           postShellMessage({ type: "request_lyric_context" });
+          void invokeNative("get_current_lyric_context")
+            .then((contextJson) => {
+              if (typeof contextJson === "string" && contextJson) {
+                applyCurrentLyricContext(JSON.parse(contextJson) as CurrentLyricContext);
+              }
+            })
+            .catch(() => {});
         }, 500)
       : null;
     window.addEventListener("storage", syncCurrentLyricFromStorage);
