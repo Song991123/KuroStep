@@ -17,6 +17,14 @@ struct WindowPoint {
     y: i32,
 }
 
+#[derive(Clone, Copy)]
+struct WindowRect {
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+}
+
 #[derive(Default)]
 struct LyricContextState {
     current: Mutex<String>,
@@ -48,7 +56,13 @@ fn set_lyrics_visible(
     let (width, height) = estimate_lyrics_window_size(&display_line, &display_translation);
 
     lyrics
-        .emit("lyrics:update", LyricPayload { line: display_line, translation: display_translation })
+        .emit(
+            "lyrics:update",
+            LyricPayload {
+                line: display_line,
+                translation: display_translation,
+            },
+        )
         .map_err(|error| error.to_string())?;
 
     lyrics
@@ -77,7 +91,11 @@ fn estimate_lyrics_window_size(line: &str, translation: &str) -> (f64, f64) {
     let translation_units = visual_units(translation);
     let longest = line_units.max(translation_units);
     let width = (longest * 15.5 + 88.0).clamp(280.0, 1480.0);
-    let height = if translation.trim().is_empty() { 62.0 } else { 92.0 };
+    let height = if translation.trim().is_empty() {
+        62.0
+    } else {
+        92.0
+    };
     (width, height)
 }
 
@@ -154,7 +172,8 @@ fn sync_paw_context(
 }
 
 fn paw_lyric_context_script(context_json: &str) -> String {
-    let context_literal = serde_json::to_string(context_json).unwrap_or_else(|_| "\"{}\"".to_string());
+    let context_literal =
+        serde_json::to_string(context_json).unwrap_or_else(|_| "\"{}\"".to_string());
     format!(
         r##"(() => {{
   const contextJson = {context_literal};
@@ -259,7 +278,7 @@ fn saved_or_default_position(
     let height_px = height * scale_factor;
 
     if let Some(point) = positions.get(label) {
-        return Some(clamp_position(
+        let saved_position = clamp_position(
             PhysicalPosition {
                 x: point.x,
                 y: point.y,
@@ -268,13 +287,42 @@ fn saved_or_default_position(
             monitor_size,
             width_px,
             height_px,
-        ));
+        );
+        let safety_gap = (12.0 * scale_factor).round() as i32;
+        if label == "main"
+            || !overlaps_visible_peer_window(
+                app,
+                label,
+                saved_position,
+                width_px,
+                height_px,
+                safety_gap,
+            )
+        {
+            return Some(saved_position);
+        }
+
+        if let Some(position) = child_position_from_main(
+            app,
+            label,
+            width_px,
+            height_px,
+            monitor_position,
+            monitor_size,
+        ) {
+            return Some(position);
+        }
     }
 
     if label != "main" {
-        if let Some(position) =
-            child_position_from_main(app, label, width_px, height_px, monitor_position, monitor_size)
-        {
+        if let Some(position) = child_position_from_main(
+            app,
+            label,
+            width_px,
+            height_px,
+            monitor_position,
+            monitor_size,
+        ) {
             return Some(position);
         }
     }
@@ -319,6 +367,50 @@ fn saved_or_default_position(
         width_px,
         height_px,
     ))
+}
+
+fn overlaps_visible_peer_window(
+    app: &tauri::AppHandle,
+    label: &str,
+    position: PhysicalPosition<i32>,
+    width: f64,
+    height: f64,
+    gap: i32,
+) -> bool {
+    let candidate = WindowRect {
+        x: position.x,
+        y: position.y,
+        width: width.ceil() as i32,
+        height: height.ceil() as i32,
+    };
+
+    ["main", "paw", "lyrics"]
+        .iter()
+        .filter(|peer_label| **peer_label != label)
+        .filter_map(|peer_label| app.get_webview_window(peer_label))
+        .filter(|peer| peer.is_visible().unwrap_or(false))
+        .filter_map(|peer| current_window_rect(&peer))
+        .any(|peer_rect| rectangles_touch_or_overlap(candidate, peer_rect, gap))
+}
+
+fn current_window_rect(window: &WebviewWindow) -> Option<WindowRect> {
+    let position = window.outer_position().ok()?;
+    let size = window.outer_size().ok()?;
+    Some(WindowRect {
+        x: position.x,
+        y: position.y,
+        width: size.width as i32,
+        height: size.height as i32,
+    })
+}
+
+fn rectangles_touch_or_overlap(a: WindowRect, b: WindowRect, gap: i32) -> bool {
+    let a_right = a.x + a.width;
+    let a_bottom = a.y + a.height;
+    let b_right = b.x + b.width;
+    let b_bottom = b.y + b.height;
+
+    a.x < b_right + gap && a_right + gap > b.x && a.y < b_bottom + gap && a_bottom + gap > b.y
 }
 
 fn child_position_from_main(
@@ -381,7 +473,10 @@ fn clamp_position(
 }
 
 fn window_positions_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let directory = app.path().app_config_dir().map_err(|error| error.to_string())?;
+    let directory = app
+        .path()
+        .app_config_dir()
+        .map_err(|error| error.to_string())?;
     fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
     Ok(directory.join("window-positions-v5.json"))
 }
