@@ -1240,7 +1240,7 @@ function MusicPlayerWidget({
         </div>
       </div>
       <section className="widget-section now-playing" aria-labelledby="now-playing-title">
-        <SectionHeader title="NOW PLAYING" />
+        <SectionHeader title="지금 재생 중" />
         <div className={`player-area ${isPlaying ? "playing" : "paused"}`} id="player-area" title="작업 카드에 연결된 곡">
           <div className="cat-tail" aria-hidden="true"></div>
           <div className="record" aria-label="재생 중인 레코드">
@@ -1299,7 +1299,7 @@ function MusicPlayerWidget({
         </div>
       </section>
       <section className="sub-section link-widget" aria-labelledby="link-widget-title">
-        <SectionHeader title="YOUTUBE LINK" />
+        <SectionHeader title="유튜브 링크" />
         <form className="link-form" id="link-widget-title" onSubmit={(event) => {
           event.preventDefault();
           submitLink();
@@ -1333,7 +1333,7 @@ function MusicPlayerWidget({
       </section>
       <section className="widget-section playlist-widget" aria-labelledby="playlist-title">
         <div className="section-head">
-          <h2 className="section-title">PLAYLIST</h2>
+          <h2 className="section-title">재생 목록</h2>
           <button className="mini-icon-button" id="shuffle-playlist" type="button" title="셔플" aria-label="셔플" onClick={onShuffle}><Icon name="shuffle" /></button>
         </div>
         <p className="playlist-name">{playlist?.name || "오늘의 작업 BGM"} · {tracks.length}곡 · {page}/{pageCount}쪽</p>
@@ -1450,18 +1450,29 @@ function LyricMemoWidget({
 }) {
   const [translatedText, setTranslatedText] = useState("");
   const [memoText, setMemoText] = useState("");
+  const lineKey = lyricLineKey(selectedLine);
+  const draftDirtyRef = useRef(false);
 
   useEffect(() => {
     setTranslatedText(translation?.translatedText || (selectedLine?.text && containsHangul(selectedLine.text) ? selectedLine.text : ""));
     setMemoText(normalizeMemoText(translation?.memoText));
-  }, [selectedLine?.id, selectedLine?.lineIndex, selectedLine?.text, translation?.id, translation?.translatedText, translation?.memoText]);
+    draftDirtyRef.current = false;
+  }, [lineKey, selectedLine?.text]);
+
+  useEffect(() => {
+    if (draftDirtyRef.current) return;
+    setTranslatedText(translation?.translatedText || (selectedLine?.text && containsHangul(selectedLine.text) ? selectedLine.text : ""));
+    setMemoText(normalizeMemoText(translation?.memoText));
+  }, [translation?.id, translation?.translatedText, translation?.memoText, lineKey, selectedLine?.text]);
 
   function changeTranslatedText(value: string) {
+    draftDirtyRef.current = true;
     setTranslatedText(value);
     onDraftChange(value, memoText);
   }
 
   function changeMemoText(value: string) {
+    draftDirtyRef.current = true;
     setMemoText(value);
     onDraftChange(translatedText, value);
   }

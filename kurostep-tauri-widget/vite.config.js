@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-const assetVersion = "v034";
+const assetVersion = "v035";
 
 export default defineConfig({
   base: "/KuroStep/",
