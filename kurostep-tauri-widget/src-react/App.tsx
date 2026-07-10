@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent, type ReactNode } from "react";
 import pawBlack from "../src/assets/paw-print.svg";
 import pawNeutral from "../src/assets/paw-print-neutral.svg";
 import {
@@ -13,6 +13,7 @@ import {
   type CreatorTask,
   type Lyric,
   type LyricFetchResponse,
+  type LyricRef,
   type LyricSource,
   type SelectedLine,
   type Playlist,
@@ -1483,7 +1484,18 @@ function LyricsWidget({
 }) {
   const fullLines = lyricSource?.lines || [];
   const lyricRefs = lyric?.lines || [];
+  const activeLineRef = useRef<HTMLLIElement | null>(null);
+  const lyricRefByLineIndex = useMemo(() => {
+    const refs = new Map<number, LyricRef>();
+    lyricRefs.forEach((lineRef) => refs.set(lineRef.lineIndex, lineRef));
+    return refs;
+  }, [lyricRefs]);
   const lineText = selectedLine?.text || (currentTrack ? "처음 듣는 곡이면 가사 발자국을 굽는 중이다냥." : "아직 재생 중인 곡이 없다냥.");
+
+  useEffect(() => {
+    if (!lyricsExpanded || selectedLine?.lineIndex == null) return;
+    activeLineRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [lyricsExpanded, selectedLine?.lineIndex]);
 
   return (
     <section className="widget-group lyrics-widget" aria-label="가사 창">
@@ -1518,9 +1530,10 @@ function LyricsWidget({
             </div>
             <ol className="lyrics-full-list" id="lyrics-full-list">
               {fullLines.length ? fullLines.map((line) => {
-                const ref = lyricRefs.find((item) => item.lineIndex === line.index);
+                const isActive = line.index === selectedLine?.lineIndex;
+                const ref = lyricRefByLineIndex.get(line.index);
                 return (
-                <li className={`lyrics-line${line.index === selectedLine?.lineIndex ? " active" : ""}`} data-line-index={line.index} key={line.index}>
+                <li className={`lyrics-line${isActive ? " active" : ""}`} data-line-index={line.index} key={line.index} ref={isActive ? activeLineRef : undefined}>
                   <button
                     className="lyrics-line-button"
                     type="button"

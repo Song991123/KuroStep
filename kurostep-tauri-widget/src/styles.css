@@ -1455,13 +1455,14 @@ select,
 
 .lyric-sync-controls {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(5, auto);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
-  gap: 5px;
+  gap: 7px;
   min-width: 0;
 }
 
 .lyric-sync-controls span {
+  grid-column: 1 / -1;
   min-width: 0;
   color: var(--muted);
   font-size: 14px;
@@ -1470,14 +1471,17 @@ select,
 }
 
 .mini-sync-button {
-  height: 22px;
+  min-width: 0;
+  height: 30px;
   border: 1px solid var(--border-light);
   border-radius: 999px;
-  padding: 0 7px;
+  padding: 0 8px;
   background: rgb(255 253 248 / 88%);
   color: #5f5a53;
   font-size: 14px;
   font-weight: 850;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
 }
 
