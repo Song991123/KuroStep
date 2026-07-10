@@ -1,6 +1,6 @@
 const DEPLOYED_BASE_URL = "https://song991123.github.io/KuroStep/";
 const DEPLOYED_ORIGIN = new URL(DEPLOYED_BASE_URL).origin;
-const CONTENT_CACHE_VERSION = "20260710-v037";
+const CONTENT_CACHE_VERSION = "20260710-v039";
 const params = new URLSearchParams(window.location.search);
 const view = params.get("view") || "main";
 const shellWindow = document.querySelector("#shell-window");
@@ -112,6 +112,20 @@ function forwardLyricContextToContent(contextJson) {
   );
 }
 
+function sendLyricContextToTarget(target, origin, contextJson) {
+  if (view !== "paw" || !target) {
+    return;
+  }
+  target.postMessage(
+    {
+      source: "kurostep-shell",
+      type: "current_lyric_context",
+      contextJson: contextJson || "{}",
+    },
+    origin || "*",
+  );
+}
+
 function lyricContextStamp(contextJson) {
   try {
     const context = JSON.parse(contextJson || "{}");
@@ -124,6 +138,9 @@ function lyricContextStamp(contextJson) {
 function acceptLyricContext(contextJson) {
   const nextContextJson = contextJson || "{}";
   const nextStamp = lyricContextStamp(nextContextJson);
+  if (nextContextJson === latestLyricContextJson) {
+    return false;
+  }
   if (!nextStamp && latestLyricContextStamp) {
     return false;
   }
@@ -135,14 +152,21 @@ function acceptLyricContext(contextJson) {
   return true;
 }
 
-async function refreshLyricContextFromNative() {
+async function refreshLyricContextFromNative(target = null, origin = "*") {
   if (view !== "paw") {
     return;
   }
   try {
     const contextJson = await invokeNative("get_current_lyric_context");
     if (contextJson) {
-      forwardLyricContextToContent(contextJson);
+      if (target) {
+        const isLatestContext = contextJson === latestLyricContextJson;
+        if (acceptLyricContext(contextJson) || isLatestContext) {
+          sendLyricContextToTarget(target, origin, contextJson);
+        }
+      } else {
+        forwardLyricContextToContent(contextJson);
+      }
     }
   } catch {
     // The iframe still has storage/BroadcastChannel fallbacks when native polling is unavailable.
@@ -175,6 +199,7 @@ if (view === "paw") {
   shellFrame.addEventListener("load", () => {
     void refreshLyricContextFromNative();
   });
+  window.setInterval(refreshLyricContextFromNative, 500);
 }
 
 function scheduleWindowPositionSave() {
@@ -223,8 +248,13 @@ function closePawPopup() {
   pawPopup = null;
 }
 
-async function handleNativeMessage(message) {
+async function handleNativeMessage(message, replyTarget = null, replyOrigin = "*") {
   if (!message || message.source !== "kurostep-content") {
+    return;
+  }
+
+  if (message.type === "request_lyric_context") {
+    await refreshLyricContextFromNative(replyTarget, replyOrigin);
     return;
   }
 
@@ -307,7 +337,7 @@ window.addEventListener("message", (event) => {
   if (event.origin !== trustedContentOrigin) {
     return;
   }
-  handleNativeMessage(event.data);
+  handleNativeMessage(event.data, event.source, event.origin);
 });
 
 shellFrame.src = contentUrl();

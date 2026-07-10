@@ -1771,10 +1771,18 @@ export default function App() {
         applyCurrentLyricContext(event.data as CurrentLyricContext);
       };
     }
+    const shellRequestInterval = isTauriEmbeddedContent
+      ? window.setInterval(() => {
+          postShellMessage({ type: "request_lyric_context" });
+        }, 500)
+      : null;
     window.addEventListener("storage", syncCurrentLyricFromStorage);
     return () => {
       window.removeEventListener("storage", syncCurrentLyricFromStorage);
       channel?.close();
+      if (shellRequestInterval) {
+        window.clearInterval(shellRequestInterval);
+      }
     };
   }, []);
 
