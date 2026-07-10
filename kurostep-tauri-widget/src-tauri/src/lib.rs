@@ -329,7 +329,7 @@ fn saved_or_default_position(
 
     let margin = (24.0 * scale_factor).round() as i32;
     let main_width = (380.0 * scale_factor).round() as i32;
-    let main_height = (660.0 * scale_factor).round() as i32;
+    let main_height = (720.0 * scale_factor).round() as i32;
     let paw_gap = (20.0 * scale_factor).round() as i32;
     let lyrics_gap = (18.0 * scale_factor).round() as i32;
     let main_x = monitor_position.x + monitor_size.width as i32 - main_width - margin;
@@ -511,7 +511,7 @@ pub fn run() {
         .manage(LyricContextState::default())
         .setup(|app| {
             if let Some(main) = app.get_webview_window("main") {
-                restore_window_position(app.handle(), &main, "main", 380.0, 660.0);
+                restore_window_position(app.handle(), &main, "main", 380.0, 720.0);
             }
             Ok(())
         })

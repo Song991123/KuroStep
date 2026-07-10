@@ -5,7 +5,7 @@ export function PlayerWidget(track) {
   if (!track) {
     return `
       <section class="widget-section now-playing">
-        ${SectionHeader("NOW PLAYING")}
+        ${SectionHeader("지금 재생 중")}
         <p class="state-message">아직 같이 걸을 곡이 없어요.</p>
       </section>
     `;
@@ -15,7 +15,7 @@ export function PlayerWidget(track) {
 
   return `
     <section class="widget-section now-playing" aria-labelledby="now-playing-title">
-      ${SectionHeader("NOW PLAYING")}
+      ${SectionHeader("지금 재생 중")}
       <div class="player-area${playingClass}" title="${track.isPlaying ? "재생 중" : "작업 카드에 연결된 곡"}">
         <div class="cat-tail" aria-hidden="true"></div>
         <div class="record" aria-label="재생 중인 레코드">

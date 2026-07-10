@@ -42,6 +42,98 @@ function notifyShellAuthState() {
   });
 }
 
+function currentLyricContextJson() {
+  return JSON.stringify({
+    sentAt: Date.now(),
+    trackId: appState.currentTrack?.id || null,
+    playlistTrackId: appState.currentTrack?.playlistTrackId || null,
+    playbackPositionSeconds: appState.playbackPositionSeconds || 0,
+    line: appState.selectedLine
+      ? {
+          id: appState.selectedLine.id || null,
+          lineIndex: appState.selectedLine.lineIndex,
+          startTimeMs: appState.selectedLine.startTimeMs,
+          text: appState.selectedLine.text || "",
+        }
+      : null,
+    translation: appState.translation
+      ? {
+          id: appState.translation.id || null,
+          translatedText: appState.translation.translatedText || "",
+          memoText: appState.translation.memoText || "",
+          status: appState.translation.status || "",
+        }
+      : null,
+  });
+}
+
+function applyExternalLyricContext(contextJson) {
+  if (!isPawWindow()) {
+    return;
+  }
+
+  let context;
+  try {
+    context = JSON.parse(contextJson || "{}");
+  } catch {
+    return;
+  }
+
+  const sentAt = Number(context.sentAt || 0);
+  if (sentAt && latestExternalLyricContextStamp && sentAt < latestExternalLyricContextStamp) {
+    return;
+  }
+  latestExternalLyricContextStamp = Math.max(latestExternalLyricContextStamp, sentAt);
+
+  if (context.trackId && appState.currentTrack?.id && Number(context.trackId) !== Number(appState.currentTrack.id)) {
+    return;
+  }
+
+  appState.playbackPositionSeconds = Number(context.playbackPositionSeconds || appState.playbackPositionSeconds || 0);
+  appState.selectedLine = context.line
+    ? {
+        id: context.line.id,
+        lineIndex: context.line.lineIndex,
+        startTimeMs: context.line.startTimeMs,
+        text: context.line.text || "",
+      }
+    : null;
+  appState.translation = context.translation
+    ? {
+        id: context.translation.id,
+        translatedText: context.translation.translatedText || "",
+        memoText: context.translation.memoText || readMemoFallback(),
+        status: context.translation.status || "",
+      }
+    : null;
+
+  updateLyricMemoDom();
+  updateLyricsPreviewDom();
+  updatePlaybackDom();
+}
+
+async function syncPawLyricContext() {
+  if (!appState.auth || !appState.pawWidgetVisible) {
+    return;
+  }
+
+  const contextJson = currentLyricContextJson();
+  const invoke = window.__TAURI__?.core?.invoke;
+  if (invoke) {
+    try {
+      await invoke("sync_paw_lyric_context", { contextJson });
+    } catch {
+      // The shell bridge handles the normal desktop iframe path.
+    }
+    return;
+  }
+
+  postShellMessage({
+    type: "current_lyric_context",
+    contextJson,
+  });
+}
+
 const appState = {
   auth: readJson("kurostep.auth"),
   authMode: "login",
@@ -91,6 +183,7 @@ let draggedPlaylistTrackId = null;
 let syncedPawWindowVisible = null;
 let linkImportSequence = 0;
 let lyricPrepareSequence = 0;
+let latestExternalLyricContextStamp = 0;
 const lyricCacheWarmups = new Map();
 const lyricWarmupQueue = [];
 let lyricWarmupQueueRunning = false;
@@ -1823,6 +1916,7 @@ function handlePlaybackTick() {
     updateLyricMemoDom();
     updateLyricsPreviewDom();
     syncLyricsOverlay();
+    syncPawLyricContext();
     updatePlaybackDom();
     return;
   }
@@ -1833,12 +1927,14 @@ function handlePlaybackTick() {
     updateLyricsPreviewDom();
     if (appState.translation) {
       syncLyricsOverlay();
+      syncPawLyricContext();
     }
     ensureSelectedLineTranslation(appState.auth.userId)
       .then(() => {
         warmUpcomingTranslations(appState.auth.userId, nextLine);
         updateLyricMemoDom();
         updateLyricsPreviewDom();
+        syncPawLyricContext();
         return syncLyricsOverlay();
       })
       .catch((error) => {
@@ -1878,6 +1974,7 @@ async function seekPlaybackToSeconds(seconds, translateLine = true) {
   youtubePlayer?.seekTo?.(appState.playbackPositionSeconds, true);
 
   await syncLyricsOverlay();
+  await syncPawLyricContext();
   updatePlaybackDom();
   updateLyricMemoDom();
 }
@@ -2098,6 +2195,7 @@ async function syncLyricsOverlay() {
     visible: true,
     line: appState.selectedLine?.text || "",
     translation: appState.translation?.translatedText || "",
+    contextJson: currentLyricContextJson(),
   };
   const invoke = window.__TAURI__?.core?.invoke;
   if (invoke) {
@@ -2240,19 +2338,33 @@ function updatePlaybackDom() {
 }
 
 function updateLyricMemoDom() {
+  const lineKey = appState.selectedLine
+    ? `${appState.selectedLine.id || appState.selectedLine.lineIndex || "line"}-${appState.selectedLine.startTimeMs ?? "na"}`
+    : "";
   const context = document.querySelector("#memo-context");
   if (context && appState.selectedLine) {
-    context.innerHTML = `<span>${escapeHtml(formatTimestamp(appState.selectedLine.startTimeMs))}</span> "${escapeHtml(appState.selectedLine.text)}"`;
+    if (context.dataset.lineKey !== lineKey) {
+      context.innerHTML = `<span>${escapeHtml(formatTimestamp(appState.selectedLine.startTimeMs))}</span> "${escapeHtml(appState.selectedLine.text)}"`;
+      context.dataset.lineKey = lineKey;
+    }
   }
 
   const translated = document.querySelector("#translated-text");
   if (translated) {
-    translated.value = appState.translation?.translatedText || "";
+    const nextValue = appState.translation?.translatedText || "";
+    if (translated.dataset.lineKey !== lineKey || (document.activeElement !== translated && translated.value !== nextValue)) {
+      translated.value = nextValue;
+      translated.dataset.lineKey = lineKey;
+    }
   }
 
   const memo = document.querySelector("#translation-memo");
   if (memo) {
-    memo.value = appState.translation?.memoText || readMemoFallback();
+    const nextValue = appState.translation?.memoText || readMemoFallback();
+    if (memo.dataset.lineKey !== lineKey || (document.activeElement !== memo && memo.value !== nextValue)) {
+      memo.value = nextValue;
+      memo.dataset.lineKey = lineKey;
+    }
   }
 
   const saveState = document.querySelector("#memo-save-state");
@@ -2610,7 +2722,7 @@ function todayWorkWidget(work, counts, tasks = []) {
 
 function playerWidget(track) {
   if (!track) {
-    return emptySection("NOW PLAYING", "아직 같이 걸을 곡이 없다냥.");
+    return emptySection("지금 재생 중", "아직 같이 걸을 곡이 없다냥.");
   }
 
   const duration = getTrackDurationSeconds();
@@ -2618,7 +2730,7 @@ function playerWidget(track) {
 
   return `
     <section class="widget-section now-playing" aria-labelledby="now-playing-title">
-      ${sectionHeader("NOW PLAYING")}
+      ${sectionHeader("지금 재생 중")}
       <div class="player-area ${appState.isPlaying ? "playing" : "paused"}" id="player-area" title="작업 카드에 연결된 곡">
         <div class="cat-tail" aria-hidden="true"></div>
         <div class="record" aria-label="재생 중인 레코드">
@@ -2677,7 +2789,7 @@ function playerWidget(track) {
 function youtubeLinkWidget() {
   return `
     <section class="sub-section link-widget" aria-labelledby="link-widget-title">
-      ${sectionHeader("YOUTUBE LINK")}
+      ${sectionHeader("유튜브 링크")}
       <div class="link-form" id="link-widget-title">
         <input class="form-input wide" id="track-url-input" type="url" value="" placeholder="영상 또는 플레이리스트 링크를 붙여넣어줘냥" aria-label="유튜브 링크" />
         <button class="action-button primary" id="register-track-link" type="button" ${appState.linkSaving ? "disabled" : ""}>
@@ -2694,7 +2806,7 @@ function getPlaylistPageCount(trackCount) {
 
 function playlistWidget(tracks) {
   if (!tracks.length) {
-    return emptySection("PLAYLIST", "플레이리스트가 아직 조용하다냥.");
+    return emptySection("재생 목록", "플레이리스트가 아직 조용하다냥.");
   }
 
   const pageCount = getPlaylistPageCount(tracks.length);
@@ -2723,7 +2835,7 @@ function playlistWidget(tracks) {
   return `
     <section class="widget-section playlist-widget" aria-labelledby="playlist-title">
       <div class="section-head">
-        <h2 class="section-title">PLAYLIST</h2>
+        <h2 class="section-title">재생 목록</h2>
         <button class="mini-icon-button" id="shuffle-playlist" type="button" title="셔플" aria-label="셔플">${iconSvg("shuffle")}</button>
       </div>
       <p class="playlist-name">${escapeHtml(appState.playlist?.name || "")} · ${escapeHtml(String(tracks.length))}곡 · ${escapeHtml(String(currentPage))}/${escapeHtml(String(pageCount))}쪽</p>
@@ -3258,6 +3370,7 @@ async function setLyricsOverlayVisible(visible) {
         visible,
         line: appState.selectedLine?.text || "",
         translation: appState.translation?.translatedText || "",
+        contextJson: currentLyricContextJson(),
       });
       keepYoutubePlayingAfterOverlayChange();
       appState.notice = visible ? "가사 창 띄웠다냥." : "가사 창 접었다냥.";
@@ -3272,6 +3385,7 @@ async function setLyricsOverlayVisible(visible) {
         visible,
         line: appState.selectedLine?.text || "",
         translation: appState.translation?.translatedText || "",
+        contextJson: currentLyricContextJson(),
       },
     })
   ) {
@@ -3365,6 +3479,11 @@ window.addEventListener("storage", (event) => {
 
 window.addEventListener("message", (event) => {
   if (!event.data || event.data.source !== "kurostep-shell") {
+    return;
+  }
+
+  if (event.data.type === "current_lyric_context") {
+    applyExternalLyricContext(event.data.contextJson);
     return;
   }
 

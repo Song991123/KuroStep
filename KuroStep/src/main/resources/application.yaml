@@ -32,3 +32,5 @@ kurostep:
     lrclib-base-url: ${KUROSTEP_LRCLIB_BASE_URL:https://lrclib.net}
   translation:
     mymemory-base-url: ${KUROSTEP_MYMEMORY_BASE_URL:https://api.mymemory.translated.net}
+    deepl-base-url: ${KUROSTEP_DEEPL_BASE_URL:https://api-free.deepl.com}
+    deepl-api-key: ${KUROSTEP_DEEPL_API_KEY:}

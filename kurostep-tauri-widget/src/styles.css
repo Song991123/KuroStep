@@ -614,7 +614,6 @@ select,
 .widget-section {
   padding: 11px 16px;
   border-bottom: 1px dotted var(--border-light);
-  animation: shimmerBorder 1.2s ease-out forwards;
 }
 
 .widget-group .widget-section {
@@ -628,20 +627,6 @@ select,
 
 .widget-section:last-child {
   border-bottom: 0;
-}
-
-@keyframes shimmerBorder {
-  0% {
-    border-bottom-color: transparent;
-  }
-
-  50% {
-    border-bottom-color: rgb(230 185 30 / 55%);
-  }
-
-  100% {
-    border-bottom-color: var(--border-light);
-  }
 }
 
 .section-head {

@@ -16,7 +16,7 @@ export function PlaylistWidget(tracks) {
 
   return `
     <section class="widget-section playlist-widget" aria-labelledby="playlist-title">
-      ${SectionHeader("PLAYLIST", "관리")}
+      ${SectionHeader("재생 목록", "관리")}
       <ol class="playlist-list" id="playlist-title">
         ${items}
       </ol>

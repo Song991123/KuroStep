@@ -1,6 +1,6 @@
 const DEPLOYED_BASE_URL = "https://song991123.github.io/KuroStep/";
 const DEPLOYED_ORIGIN = new URL(DEPLOYED_BASE_URL).origin;
-const CONTENT_CACHE_VERSION = "20260710-v033";
+const CONTENT_CACHE_VERSION = "20260710-v034";
 const params = new URLSearchParams(window.location.search);
 const view = params.get("view") || "main";
 const shellWindow = document.querySelector("#shell-window");
@@ -12,6 +12,7 @@ let trustedContentOrigin = DEPLOYED_ORIGIN;
 let pawPopup = null;
 let positionSaveTimer = null;
 let latestLyricContextJson = "{}";
+let latestLyricContextStamp = 0;
 
 if (view === "paw") {
   shellWindow.classList.add("paw");
@@ -98,7 +99,9 @@ function forwardLyricContextToContent(contextJson) {
   if (view !== "paw") {
     return;
   }
-  latestLyricContextJson = contextJson || "{}";
+  if (!acceptLyricContext(contextJson)) {
+    return;
+  }
   shellFrame.contentWindow?.postMessage(
     {
       source: "kurostep-shell",
@@ -107,6 +110,29 @@ function forwardLyricContextToContent(contextJson) {
     },
     trustedContentOrigin,
   );
+}
+
+function lyricContextStamp(contextJson) {
+  try {
+    const context = JSON.parse(contextJson || "{}");
+    return Number(context.sentAt || context.updatedAt || 0);
+  } catch {
+    return 0;
+  }
+}
+
+function acceptLyricContext(contextJson) {
+  const nextContextJson = contextJson || "{}";
+  const nextStamp = lyricContextStamp(nextContextJson);
+  if (!nextStamp && latestLyricContextStamp) {
+    return false;
+  }
+  if (nextStamp && latestLyricContextStamp && nextStamp < latestLyricContextStamp) {
+    return false;
+  }
+  latestLyricContextJson = nextContextJson;
+  latestLyricContextStamp = Math.max(latestLyricContextStamp, nextStamp);
+  return true;
 }
 
 async function refreshLyricContextFromNative() {
@@ -124,7 +150,9 @@ async function refreshLyricContextFromNative() {
 }
 
 async function syncLyricContextFromContent(contextJson) {
-  latestLyricContextJson = contextJson || "{}";
+  if (!acceptLyricContext(contextJson)) {
+    return;
+  }
   try {
     await invokeNative("sync_paw_lyric_context", { contextJson: latestLyricContextJson });
   } catch {
@@ -145,10 +173,8 @@ window.addEventListener("kurostep:lyric-context", (event) => {
 
 if (view === "paw") {
   shellFrame.addEventListener("load", () => {
-    forwardLyricContextToContent(latestLyricContextJson);
     void refreshLyricContextFromNative();
   });
-  window.setInterval(refreshLyricContextFromNative, 500);
 }
 
 function scheduleWindowPositionSave() {
