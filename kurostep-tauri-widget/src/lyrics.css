@@ -43,7 +43,7 @@ body {
 .lyric-line,
 .lyric-translation {
   margin: 0;
-  max-width: calc(96vw - 20px);
+  max-width: none;
   cursor: move;
   overflow: visible;
   overflow-wrap: normal;

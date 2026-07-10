@@ -55,7 +55,7 @@ iframe,
 
 .shell-header {
   position: relative;
-  height: 30px;
+  height: 38px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -73,7 +73,7 @@ iframe,
 .shell-tools {
   display: flex;
   gap: 6px;
-  width: 30px;
+  width: 34px;
   -webkit-app-region: no-drag;
 }
 
@@ -89,8 +89,8 @@ iframe,
 }
 
 .shell-tool-button {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -104,8 +104,8 @@ iframe,
 
 .shell-tool-button svg,
 .shell-action-button svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   fill: none;
   stroke: currentColor;
   stroke-width: 2.7;
@@ -125,7 +125,7 @@ iframe,
   max-width: 150px;
   overflow: hidden;
   color: #8f8981;
-  font-size: 11px;
+  font-size: 14px;
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -133,8 +133,8 @@ iframe,
 }
 
 .shell-title img {
-  width: 13px;
-  height: 13px;
+  width: 16px;
+  height: 16px;
   opacity: 0.9;
   filter: drop-shadow(0 1px 2px rgb(26 26 26 / 12%));
 }
@@ -149,9 +149,9 @@ iframe,
 
 .shell-action-button {
   min-width: 34px;
-  min-height: 22px;
-  padding: 4px 8px;
-  font-size: 10px;
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: 14px;
 }
 
 .shell-action-button.icon-text {
@@ -162,7 +162,7 @@ iframe,
 
 #shell-frame {
   width: 100%;
-  height: calc(100% - 30px);
+  height: calc(100% - 38px);
   border: 0;
   display: block;
   background: transparent;

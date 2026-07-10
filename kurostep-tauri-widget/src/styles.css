@@ -96,9 +96,9 @@ select,
 }
 
 .mac-header {
-  height: 30px;
+  height: 38px;
   display: grid;
-  grid-template-columns: 48px 1fr 96px;
+  grid-template-columns: 50px 1fr 112px;
   align-items: center;
   gap: 8px;
   padding: 0 10px 0 16px;
@@ -116,10 +116,11 @@ select,
   justify-self: end;
   border: 0;
   border-radius: 999px;
-  padding: 4px 8px;
+  min-height: 28px;
+  padding: 4px 10px;
   background: rgb(255 253 248 / 70%);
   color: #756f67;
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 800;
   cursor: pointer;
   -webkit-app-region: no-drag;
@@ -152,13 +153,13 @@ select,
 .window-tools {
   display: flex;
   gap: 6px;
-  width: 30px;
+  width: 34px;
   -webkit-app-region: no-drag;
 }
 
 .window-tool-button {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border: 1px solid rgb(45 45 45 / 10%);
   border-radius: 8px;
   display: grid;
@@ -177,8 +178,8 @@ select,
 }
 
 .window-tool-button svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   fill: none;
   stroke: currentColor;
   stroke-width: 2.7;
@@ -192,7 +193,7 @@ select,
   gap: 5px;
   overflow: hidden;
   color: #8f8981;
-  font-size: 11px;
+  font-size: 14px;
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -213,8 +214,8 @@ select,
 }
 
 .app-mark img {
-  width: 13px;
-  height: 13px;
+  width: 16px;
+  height: 16px;
   opacity: 0.9;
   filter: drop-shadow(0 1px 2px rgb(26 26 26 / 12%));
 }
@@ -307,7 +308,7 @@ select,
 .settings-head p {
   margin: 0;
   color: #746e66;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
 }
 
@@ -327,14 +328,14 @@ select,
 
 .settings-card strong {
   color: var(--text-charcoal);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 900;
 }
 
 .settings-card span {
   overflow-wrap: anywhere;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -352,7 +353,7 @@ select,
 .setting-toggle-card p {
   margin-top: 4px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1.45;
 }
@@ -364,7 +365,7 @@ select,
   border-radius: 999px;
   background: rgb(255 255 255 / 80%);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 900;
   cursor: pointer;
 }
@@ -413,7 +414,7 @@ select,
 .auth-eyebrow {
   margin: 4px 0 -2px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 900;
   letter-spacing: 0.6px;
   text-transform: uppercase;
@@ -430,7 +431,7 @@ select,
 .auth-brand p {
   margin: 0;
   color: #746e66;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
 }
 
@@ -450,7 +451,7 @@ select,
   border-radius: 9px;
   background: transparent;
   color: #706a62;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 850;
   cursor: pointer;
 }
@@ -470,7 +471,7 @@ select,
   display: grid;
   gap: 5px;
   color: #5f5a53;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 850;
 }
 
@@ -487,7 +488,7 @@ select,
   padding: 9px 11px;
   background: rgb(255 253 248 / 72%);
   color: #706a62;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 750;
 }
 
@@ -509,7 +510,7 @@ select,
 .global-widget-controls .action-button {
   flex: 1 1 0;
   height: 28px;
-  font-size: 10px;
+  font-size: 14px;
 }
 
 .widget-stack {
@@ -554,7 +555,7 @@ select,
 .widget-group-head h2 {
   margin: 0;
   color: var(--text-charcoal);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 900;
   letter-spacing: 0;
 }
@@ -564,7 +565,7 @@ select,
   margin: 0;
   overflow: hidden;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 750;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -655,7 +656,7 @@ select,
 .section-title {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 750;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -669,7 +670,7 @@ select,
   padding: 0 9px;
   background-color: var(--surface);
   color: #5f5a53;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1;
   cursor: pointer;
@@ -716,7 +717,7 @@ select,
 .playlist-name {
   margin: 4px 0 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1.35;
 }
@@ -748,7 +749,7 @@ select,
   overflow: hidden;
   background: rgb(255 253 248 / 72%);
   color: #746e67;
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1.1;
   text-overflow: ellipsis;
@@ -836,7 +837,7 @@ select,
 
 .todo-text strong {
   overflow: hidden;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 850;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -846,7 +847,7 @@ select,
 .todo-text small {
   overflow: hidden;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -858,7 +859,7 @@ select,
   border-radius: 999px;
   padding: 3px 7px;
   color: #625d56;
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -923,7 +924,7 @@ select,
   display: grid;
   gap: 5px;
   color: #625d56;
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 850;
 }
 
@@ -947,7 +948,7 @@ select,
 .task-inline-form .form-input {
   min-height: 34px;
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .status-badges {
@@ -964,7 +965,7 @@ select,
   padding: 0 8px;
   background: transparent;
   color: #666;
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 650;
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
@@ -1092,7 +1093,7 @@ select,
   margin: 2px 0 0;
   overflow: hidden;
   color: #888;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1108,7 +1109,7 @@ select,
 .track-meta span {
   max-width: 100%;
   padding: 3px 6px;
-  font-size: 9px;
+  font-size: 14px;
 }
 
 .track-actions {
@@ -1133,7 +1134,7 @@ select,
   padding: 0 10px;
   background: #171717;
   color: var(--point-gold);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1;
   cursor: pointer;
@@ -1266,7 +1267,7 @@ select,
   border-radius: 999px;
   background: var(--point-gold);
   color: var(--cat-black);
-  font-size: 8px;
+  font-size: 14px;
   font-weight: 900;
   line-height: 11px;
   text-align: center;
@@ -1279,7 +1280,7 @@ select,
   gap: 8px;
   margin-top: 8px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 750;
   font-variant-numeric: tabular-nums;
 }
@@ -1365,7 +1366,7 @@ select,
 .volume-popover span {
   min-width: 26px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 14px;
   font-weight: 800;
   text-align: right;
 }
@@ -1421,7 +1422,7 @@ select,
 .audio-note {
   margin: 8px 0 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.35;
 }
 
@@ -1446,7 +1447,7 @@ select,
   display: block;
   min-width: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -1463,7 +1464,7 @@ select,
 .lyric-sync-controls span {
   min-width: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 850;
   line-height: 1.2;
 }
@@ -1475,7 +1476,7 @@ select,
   padding: 0 7px;
   background: rgb(255 253 248 / 88%);
   color: #5f5a53;
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 850;
   cursor: pointer;
 }
@@ -1508,7 +1509,7 @@ select,
   gap: 8px;
   min-width: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 850;
 }
 
@@ -1564,7 +1565,7 @@ select,
 .lyrics-line span,
 .lyrics-line-button span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
@@ -1574,7 +1575,7 @@ select,
   margin: 0;
   min-width: 0;
   color: #615c55;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 750;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -1611,7 +1612,7 @@ select,
   padding: 8px 9px;
   background-color: white;
   color: var(--text-charcoal);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.2;
 }
 
@@ -1636,7 +1637,7 @@ select,
 
 .playlist-import-panel strong {
   color: var(--text-charcoal);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.3;
 }
 
@@ -1644,7 +1645,7 @@ select,
 .playlist-import-panel label {
   margin: 0;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1.35;
 }
@@ -1695,7 +1696,7 @@ select,
   border-radius: 8px;
   padding: 3px 5px 3px 0;
   color: #555;
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
   transition: transform 0.2s ease, color 0.2s ease, background-color 0.2s ease;
 }
@@ -1785,7 +1786,7 @@ select,
 
 .playlist-track small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -1799,7 +1800,7 @@ select,
   margin: 0 0 7px;
   max-width: 100%;
   color: #5a5a5a;
-  font-size: 12px;
+  font-size: 14px;
   font-style: italic;
   font-weight: 650;
   line-height: 1.35;
@@ -1833,7 +1834,7 @@ select,
   min-width: 0;
   margin: 8px 0 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1.2;
 }
@@ -1841,7 +1842,7 @@ select,
 .memo-field span {
   display: block;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 800;
 }
 
@@ -1859,7 +1860,7 @@ select,
   background-color: white;
   box-shadow: inset 0 1px 2px rgb(0 0 0 / 2%);
   color: var(--text-charcoal);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -1882,7 +1883,7 @@ select,
   padding: 3px 7px;
   background: rgb(26 26 26 / 5%);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1.3;
   overflow: hidden;
@@ -1939,18 +1940,18 @@ select,
 
 .saved-lyric-piece strong {
   color: var(--text-charcoal);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .saved-lyric-piece small {
   color: #6b655d;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 700;
 }
 
 .saved-lyric-piece em {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 14px;
   font-style: normal;
   font-weight: 800;
 }

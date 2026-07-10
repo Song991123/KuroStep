@@ -76,15 +76,15 @@ fn estimate_lyrics_window_size(line: &str, translation: &str) -> (f64, f64) {
     let line_units = visual_units(line).max(10.0);
     let translation_units = visual_units(translation);
     let longest = line_units.max(translation_units);
-    let width = (longest * 13.5 + 64.0).clamp(260.0, 1180.0);
-    let height = if translation.trim().is_empty() { 58.0 } else { 84.0 };
+    let width = (longest * 15.5 + 88.0).clamp(280.0, 1480.0);
+    let height = if translation.trim().is_empty() { 62.0 } else { 92.0 };
     (width, height)
 }
 
 fn visual_units(value: &str) -> f64 {
     value
         .chars()
-        .map(|character| if character.is_ascii() { 0.72 } else { 1.08 })
+        .map(|character| if character.is_ascii() { 0.78 } else { 1.12 })
         .sum()
 }
 

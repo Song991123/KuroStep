@@ -53,14 +53,22 @@ document.addEventListener("keydown", blockDeveloperShortcut, true);
 
 window.__TAURI__?.event?.listen?.("lyrics:update", (event) => {
   const payload = event.payload ?? {};
+  const nextLine = payload.line || "가사 발자국을 기다리는 중이다냥.";
+  const nextTranslation = payload.translation || "";
 
-  lineElement.textContent = payload.line || "가사 발자국을 기다리는 중이다냥.";
+  if (lineElement.textContent !== nextLine) {
+    lineElement.textContent = nextLine;
+  }
 
-  if (payload.translation) {
-    translationElement.textContent = payload.translation;
+  if (nextTranslation) {
+    if (translationElement.textContent !== nextTranslation) {
+      translationElement.textContent = nextTranslation;
+    }
     translationElement.hidden = false;
   } else {
-    translationElement.textContent = "";
+    if (translationElement.textContent) {
+      translationElement.textContent = "";
+    }
     translationElement.hidden = true;
   }
 });
