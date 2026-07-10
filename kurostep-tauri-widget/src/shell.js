@@ -1,6 +1,6 @@
 const DEPLOYED_BASE_URL = "https://song991123.github.io/KuroStep/";
 const DEPLOYED_ORIGIN = new URL(DEPLOYED_BASE_URL).origin;
-const CONTENT_CACHE_VERSION = "20260710-v036";
+const CONTENT_CACHE_VERSION = "20260710-v037";
 const params = new URLSearchParams(window.location.search);
 const view = params.get("view") || "main";
 const shellWindow = document.querySelector("#shell-window");
@@ -108,14 +108,14 @@ function forwardLyricContextToContent(contextJson) {
       type: "current_lyric_context",
       contextJson: contextJson || "{}",
     },
-    trustedContentOrigin,
+    "*",
   );
 }
 
 function lyricContextStamp(contextJson) {
   try {
     const context = JSON.parse(contextJson || "{}");
-    return Number(context.sentAt || context.updatedAt || 0);
+    return Number(context.sentAt || context.at || context.updatedAt || 0);
   } catch {
     return 0;
   }

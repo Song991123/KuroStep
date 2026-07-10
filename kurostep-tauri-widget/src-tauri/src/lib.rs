@@ -183,7 +183,7 @@ fn paw_lyric_context_script(context_json: &str) -> String {
     type: "current_lyric_context",
     contextJson,
   }};
-  document.querySelector("#shell-frame")?.contentWindow?.postMessage(message, "https://song991123.github.io");
+  document.querySelector("#shell-frame")?.contentWindow?.postMessage(message, "*");
   window.dispatchEvent(new CustomEvent("kurostep:lyric-context", {{ detail: contextJson }}));
 }})();"##
     )
