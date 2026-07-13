@@ -524,6 +524,26 @@ function normalizeTrackDuration(seconds: number, stableSeconds = 0) {
   return nextDuration;
 }
 
+function isInstrumentalLyricMarker(text: string) {
+  const value = String(text || "").trim();
+  return Boolean(value) && /^[♫♪♬♩\s.·•-]+$/.test(value);
+}
+
+function getIntroClockGuardSeconds(source: LyricSource | null) {
+  const timedLines = [...(source?.lines || [])]
+    .filter((line) => Number.isFinite(Number(line.startTimeMs)))
+    .sort((a, b) => Number(a.startTimeMs || 0) - Number(b.startTimeMs || 0));
+  const firstLine = timedLines[0];
+  if (!firstLine || Number(firstLine.startTimeMs || 0) > 1000 || !isInstrumentalLyricMarker(firstLine.text)) {
+    return 0;
+  }
+  const firstVocalLine = timedLines.find((line) => !isInstrumentalLyricMarker(line.text) && Number(line.startTimeMs || 0) >= 3000);
+  if (!firstVocalLine) {
+    return 0;
+  }
+  return Math.max(0, Math.min(Number(firstVocalLine.startTimeMs) / 1000 - 0.4, 20));
+}
+
 function isLikelyYoutubeAdDuration(seconds: number, expectedSeconds = 0) {
   const nextDuration = Number(seconds);
   const expectedDuration = Number(expectedSeconds);
@@ -975,6 +995,7 @@ function MusicPlayerWidget({
   duration,
   volume,
   youtubeVisible,
+  introClockGuardSeconds,
   canRegisterLinks,
   pendingPlaylistImport,
   onTogglePlay,
@@ -1007,6 +1028,7 @@ function MusicPlayerWidget({
   duration: number;
   volume: number;
   youtubeVisible: boolean;
+  introClockGuardSeconds: number;
   canRegisterLinks: boolean;
   pendingPlaylistImport: PendingPlaylistImport | null;
   onTogglePlay: () => void;
@@ -1266,7 +1288,7 @@ function MusicPlayerWidget({
     } else {
       playerRef.current.pauseVideo?.();
     }
-  }, [isPlaying, videoId]);
+  }, [introClockGuardSeconds, isPlaying, videoId]);
 
   useEffect(() => {
     if (timerRef.current) {
@@ -1284,6 +1306,16 @@ function MusicPlayerWidget({
         stalledTickRef.current = 0;
         return;
       }
+      const manualSeekActive = Date.now() < manualSeekUntilRef.current;
+      if (!manualSeekActive && introClockGuardSeconds > 0 && current > 0 && current < introClockGuardSeconds) {
+        if (playbackPositionRef.current !== 0) {
+          playbackPositionRef.current = 0;
+          onPositionChange(0);
+        }
+        lastPlaybackTimeRef.current = 0;
+        stalledTickRef.current = 0;
+        return;
+      }
       const nextDuration = normalizeTrackDuration(
         Number.isFinite(rawDuration) && Number(rawDuration) > 0 ? Number(rawDuration) : displayedDurationRef.current || 0,
         displayedDurationRef.current,
@@ -1291,7 +1323,6 @@ function MusicPlayerWidget({
       const playerState = player?.getPlayerState?.();
       const previous = lastPlaybackTimeRef.current;
       const isActuallyPlaying = window.YT && playerState === window.YT.PlayerState.PLAYING;
-      const manualSeekActive = Date.now() < manualSeekUntilRef.current;
       const nearTrackEnd = nextDuration > 0 && previous >= nextDuration - 2 && current < 2;
       const jumpedBackUnexpectedly = isActuallyPlaying && previous > 3 && current + 2 < previous && !manualSeekActive && !nearTrackEnd;
       const stableCurrent = jumpedBackUnexpectedly ? previous : current;
@@ -3230,6 +3261,7 @@ export default function App() {
   }
 
   const visibleNotice = loading ? { kind: "notice" as const, message: "작업실 불러오는 중이냥" } : notice;
+  const introClockGuardSeconds = useMemo(() => getIntroClockGuardSeconds(lyricSource), [lyricSource]);
 
   if (shellView === "paw" && !auth) {
     return (
@@ -3326,6 +3358,7 @@ export default function App() {
           duration={trackDuration}
           volume={volume}
           youtubeVisible={youtubeVisible}
+          introClockGuardSeconds={introClockGuardSeconds}
           canRegisterLinks={Boolean(auth?.userId) && !loading}
           pendingPlaylistImport={pendingPlaylistImport}
           onTogglePlay={() => {
