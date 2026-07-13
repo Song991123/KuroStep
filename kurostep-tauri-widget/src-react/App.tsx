@@ -1729,7 +1729,7 @@ export default function App() {
   }, [translationCache]);
 
   function applyCurrentLyricContext(context: CurrentLyricContext) {
-    if (context.trackId && workspaceRef.current.currentTrack?.id && context.trackId !== workspaceRef.current.currentTrack.id) {
+    if (shellView === "main" && context.trackId && workspaceRef.current.currentTrack?.id && context.trackId !== workspaceRef.current.currentTrack.id) {
       return;
     }
     const contextAt = Number(context.at || 0);
