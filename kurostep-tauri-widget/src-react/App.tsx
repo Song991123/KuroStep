@@ -368,6 +368,10 @@ async function invokeNative(command: string, payload: Record<string, unknown> = 
   return null;
 }
 
+function minimizeCurrentWindow() {
+  void window.__TAURI__?.window?.getCurrentWindow?.()?.minimize?.();
+}
+
 function parseLyricSource(fetchResponse: LyricFetchResponse): LyricSource {
   const source = fetchResponse.syncedLyrics || fetchResponse.plainLyrics || "";
   const lines = source
@@ -618,7 +622,7 @@ function WidgetShell({
     <section className="widget-container">
       <header className="mac-header" id="window-drag-region" data-tauri-drag-region>
         <div className="window-tools">
-          <button className="window-tool-button" id="window-minimize" type="button" aria-label="최소화" title="최소화">
+          <button className="window-tool-button" id="window-minimize" type="button" aria-label="최소화" title="최소화" onClick={minimizeCurrentWindow}>
             <Icon name="minimize" />
           </button>
         </div>
@@ -1792,7 +1796,7 @@ export default function App() {
         applyCurrentLyricContext(event.data as CurrentLyricContext);
       };
     }
-    const shellRequestInterval = isTauriEmbeddedContent
+    const shellRequestInterval = (isTauriEmbeddedContent || isTauriApp)
       ? window.setInterval(() => {
           postShellMessage({ type: "request_lyric_context" });
           void invokeNative("get_current_lyric_context")

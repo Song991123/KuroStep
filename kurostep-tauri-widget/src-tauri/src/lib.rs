@@ -30,6 +30,9 @@ struct LyricContextState {
     current: Mutex<String>,
 }
 
+const DEPLOYED_WIDGET_URL: &str = "https://song991123.github.io/KuroStep/";
+const CONTENT_CACHE_VERSION: &str = "20260713-v042";
+
 #[tauri::command]
 fn set_lyrics_visible(
     app: tauri::AppHandle,
@@ -183,7 +186,12 @@ fn paw_lyric_context_script(context_json: &str) -> String {
     type: "current_lyric_context",
     contextJson,
   }};
-  document.querySelector("#shell-frame")?.contentWindow?.postMessage(message, "*");
+  const frame = document.querySelector("#shell-frame");
+  if (frame?.contentWindow) {{
+    frame.contentWindow.postMessage(message, "*");
+  }} else {{
+    window.postMessage(message, "*");
+  }}
   window.dispatchEvent(new CustomEvent("kurostep:lyric-context", {{ detail: contextJson }}));
 }})();"##
     )
@@ -203,7 +211,13 @@ fn get_or_create_paw_window(app: &tauri::AppHandle) -> Result<WebviewWindow, Str
         return Ok(paw);
     }
 
-    WebviewWindowBuilder::new(app, "paw", WebviewUrl::App("shell.html?view=paw".into()))
+    let paw_url: tauri::Url = format!(
+        "{DEPLOYED_WIDGET_URL}?view=paw&shell=tauri&v={CONTENT_CACHE_VERSION}"
+    )
+    .parse::<tauri::Url>()
+    .map_err(|error| error.to_string())?;
+
+    WebviewWindowBuilder::new(app, "paw", WebviewUrl::External(paw_url))
         .title("KuroStep Paw Notes")
         .inner_size(380.0, 520.0)
         .min_inner_size(360.0, 440.0)
