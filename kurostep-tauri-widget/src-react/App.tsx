@@ -30,7 +30,8 @@ import { extractYoutubeId, extractYoutubePlaylistId, fetchYoutubeMetadata } from
 const query = new URLSearchParams(window.location.search);
 const isEmbeddedContent = query.get("embedded") === "1";
 const shellView = query.get("view") || "main";
-const isTauriEmbeddedContent = isEmbeddedContent && query.get("shell") === "tauri";
+const isTauriShellContent = query.get("shell") === "tauri";
+const isTauriEmbeddedContent = isEmbeddedContent && isTauriShellContent;
 const isTauriApp =
   Boolean((window as Window & { __TAURI__?: unknown }).__TAURI__) ||
   window.location.protocol === "tauri:" ||
@@ -1796,7 +1797,7 @@ export default function App() {
         applyCurrentLyricContext(event.data as CurrentLyricContext);
       };
     }
-    const shellRequestInterval = (isTauriEmbeddedContent || isTauriApp)
+    const shellRequestInterval = (isTauriShellContent || isTauriApp)
       ? window.setInterval(() => {
           postShellMessage({ type: "request_lyric_context" });
           void invokeNative("get_current_lyric_context")
