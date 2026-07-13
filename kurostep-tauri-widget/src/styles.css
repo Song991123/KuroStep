@@ -1488,7 +1488,7 @@ select,
 
 .lyrics-full-panel {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -1510,11 +1510,11 @@ select,
 }
 
 .lyrics-full-list {
-  max-height: 216px;
+  max-height: 252px;
   display: grid;
-  gap: 3px;
+  gap: 4px;
   margin: 0;
-  padding: 4px;
+  padding: 5px;
   overflow: auto;
   list-style: none;
   scrollbar-width: none;
@@ -1529,7 +1529,7 @@ select,
 
 .lyrics-line {
   border-radius: 8px;
-  padding: 7px 8px;
+  padding: 0;
   color: #706a62;
 }
 
@@ -1537,32 +1537,38 @@ select,
   width: 100%;
   border: 0;
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 9px;
   align-items: start;
-  padding: 0;
+  border-radius: 8px;
+  padding: 8px 9px;
   background: transparent;
   color: inherit;
   text-align: left;
   cursor: pointer;
 }
 
-.lyrics-line-button:hover p {
+.lyrics-line-button:hover .lyrics-line-copy strong {
   color: var(--cat-black);
 }
 
-.lyrics-line span,
-.lyrics-line-button span {
+.lyrics-line-time {
   color: var(--muted);
   font-size: 14px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+  line-height: 1.35;
 }
 
-.lyrics-line p,
-.lyrics-line-button p {
-  margin: 0;
+.lyrics-line-copy {
+  display: grid;
+  gap: 3px;
   min-width: 0;
+}
+
+.lyrics-line-copy strong,
+.lyrics-line.empty p {
+  margin: 0;
   color: #615c55;
   font-size: 14px;
   font-weight: 750;
@@ -1570,16 +1576,29 @@ select,
   overflow-wrap: anywhere;
 }
 
+.lyrics-line-copy small {
+  color: #817a72;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .lyrics-line.active {
+  background: transparent;
+}
+
+.lyrics-line.active .lyrics-line-button {
   background: rgb(26 26 26 / 88%);
   box-shadow: 0 4px 12px rgb(0 0 0 / 12%);
 }
 
-.lyrics-line.active span {
+.lyrics-line.active .lyrics-line-time {
   color: var(--point-gold);
 }
 
-.lyrics-line.active p {
+.lyrics-line.active .lyrics-line-copy strong,
+.lyrics-line.active .lyrics-line-copy small {
   color: white;
 }
 

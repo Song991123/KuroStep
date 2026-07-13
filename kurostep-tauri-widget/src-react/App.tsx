@@ -133,6 +133,11 @@ function isSameLyricLine(left: SelectedLine | null | undefined, right: SelectedL
   return Boolean(leftKey && leftKey === lyricLineKey(right));
 }
 
+function translationCacheKey(trackId: number | null | undefined, line: SelectedLine | null | undefined) {
+  const lineKey = lyricLineKey(line);
+  return lineKey ? `${trackId || "trackless"}:${lineKey}` : "";
+}
+
 function makeLocalTranslation(line: SelectedLine, translatedText: string, memoText = ""): Translation {
   return {
     lyricLineRefId: line.id || null,
@@ -437,13 +442,32 @@ function chooseLineByPlaybackTime(lyric: Lyric | null, source: LyricSource | nul
   if (!refs.length && !sourceLines.length) return null;
 
   const positionMs = positionSeconds * 1000 + LYRIC_SYNC_LOOKAHEAD_MS + syncOffsetMs;
-  const timedRefs = refs.filter((line) => Number.isFinite(line.startTimeMs));
-  const timedSourceLines = sourceLines.filter((line) => Number.isFinite(line.startTimeMs));
+  const timedRefs = refs
+    .filter((line) => Number.isFinite(line.startTimeMs))
+    .sort((left, right) => Number(left.startTimeMs) - Number(right.startTimeMs));
+  const timedSourceLines = sourceLines
+    .filter((line) => Number.isFinite(line.startTimeMs))
+    .sort((left, right) => Number(left.startTimeMs) - Number(right.startTimeMs));
+  if (!timedRefs.length && !timedSourceLines.length) {
+    const fallbackSourceLine = sourceLines[0];
+    const fallbackRef = refs[0];
+    if (!fallbackSourceLine && !fallbackRef) return null;
+    return {
+      id: fallbackRef?.id || null,
+      lineIndex: fallbackRef?.lineIndex ?? fallbackSourceLine?.index ?? 0,
+      startTimeMs: fallbackRef?.startTimeMs ?? fallbackSourceLine?.startTimeMs ?? null,
+      text: fallbackSourceLine?.text || "",
+    };
+  }
+  const firstTimedLine = timedSourceLines[0] || timedRefs[0];
+  if (firstTimedLine && positionMs < Number(firstTimedLine.startTimeMs) - 150) {
+    return null;
+  }
   const sourceLine =
     timedSourceLines
       .filter((line) => Number(line.startTimeMs) <= positionMs)
       .sort((left, right) => Number(right.startTimeMs) - Number(left.startTimeMs))[0] ||
-    timedSourceLines[0];
+    null;
 
   if (sourceLine) {
     const ref = timedRefs.find((line) => Math.abs(Number(line.startTimeMs) - Number(sourceLine.startTimeMs)) <= 50);
@@ -459,8 +483,8 @@ function chooseLineByPlaybackTime(lyric: Lyric | null, source: LyricSource | nul
     timedRefs
       .filter((line) => Number(line.startTimeMs) <= positionMs)
       .sort((left, right) => Number(right.startTimeMs) - Number(left.startTimeMs))[0] ||
-    timedRefs[0] ||
-    refs[0];
+    null;
+  if (!ref) return null;
   const fallbackSourceLine = sourceLines.find((line) => line.index === ref?.lineIndex) || sourceLines[0];
   return {
     id: ref?.id || null,
@@ -1005,6 +1029,7 @@ function MusicPlayerWidget({
   const lastReportedDurationRef = useRef(0);
   const repeatModeRef = useRef<RepeatMode>(repeatMode);
   const isPlayingRef = useRef(isPlaying);
+  const manualSeekUntilRef = useRef(0);
   const videoId = getYoutubeVideoId(track);
   const displayedDuration = duration || track?.durationSeconds || 0;
   const playbackPositionRef = useRef(position);
@@ -1231,20 +1256,26 @@ function MusicPlayerWidget({
         displayedDurationRef.current,
       );
       const playerState = player?.getPlayerState?.();
-      playbackPositionRef.current = current;
-      onPositionChange(current);
+      const previous = lastPlaybackTimeRef.current;
+      const isActuallyPlaying = window.YT && playerState === window.YT.PlayerState.PLAYING;
+      const manualSeekActive = Date.now() < manualSeekUntilRef.current;
+      const nearTrackEnd = nextDuration > 0 && previous >= nextDuration - 2 && current < 2;
+      const jumpedBackUnexpectedly = isActuallyPlaying && previous > 3 && current + 2 < previous && !manualSeekActive && !nearTrackEnd;
+      const stableCurrent = jumpedBackUnexpectedly ? previous : current;
+
+      playbackPositionRef.current = stableCurrent;
+      onPositionChange(stableCurrent);
       if (nextDuration > 0) {
         reportDuration(nextDuration);
       }
 
-      const isProgressStuck = Math.abs(current - lastPlaybackTimeRef.current) < 0.15;
-      const isActuallyPlaying = window.YT && playerState === window.YT.PlayerState.PLAYING;
+      const isProgressStuck = Math.abs(stableCurrent - lastPlaybackTimeRef.current) < 0.15;
       if (isProgressStuck && !isActuallyPlaying) {
         stalledTickRef.current += 1;
       } else {
         stalledTickRef.current = 0;
       }
-      lastPlaybackTimeRef.current = current;
+      lastPlaybackTimeRef.current = stableCurrent;
 
       if (stalledTickRef.current >= 5) {
         stalledTickRef.current = 0;
@@ -1268,6 +1299,8 @@ function MusicPlayerWidget({
     const rect = event.currentTarget.getBoundingClientRect();
     const ratio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0;
     const seconds = displayedDuration * Math.min(Math.max(ratio, 0), 1);
+    manualSeekUntilRef.current = Date.now() + 1800;
+    lastPlaybackTimeRef.current = seconds;
     playerRef.current?.seekTo?.(seconds, true);
     onSeek(seconds);
   }
@@ -1275,6 +1308,8 @@ function MusicPlayerWidget({
   function skipBy(seconds: number) {
     const max = displayedDuration > 0 ? Math.max(displayedDuration - 1, 0) : 24 * 60 * 60;
     const nextSeconds = Math.min(Math.max(position + seconds, 0), max);
+    manualSeekUntilRef.current = Date.now() + 1800;
+    lastPlaybackTimeRef.current = nextSeconds;
     playerRef.current?.seekTo?.(nextSeconds, true);
     onSkip(seconds);
   }
@@ -1651,13 +1686,14 @@ function LyricsWidget({
         {lyricsExpanded && (
           <div className="lyrics-full-panel">
             <div className="lyrics-full-meta">
-              <span>{fullLines.length ? `${fullLines.length}줄` : "가사 대기 중"}</span>
-              <span>{selectedLine ? formatTimestamp(selectedLine.startTimeMs) : "싱크 준비"}</span>
+              <span>{fullLines.length ? `전체 ${fullLines.length}줄` : "가사 대기 중"}</span>
+              <span>{selectedLine ? `현재 ${formatTimestamp(selectedLine.startTimeMs)}` : "싱크 준비"}</span>
             </div>
             <ol className="lyrics-full-list" id="lyrics-full-list">
               {fullLines.length ? fullLines.map((line) => {
                 const isActive = line.index === selectedLine?.lineIndex;
                 const ref = lyricRefByLineIndex.get(line.index);
+                const activeLineTranslation = isActive ? translation?.translatedText || "" : "";
                 return (
                 <li className={`lyrics-line${isActive ? " active" : ""}`} data-line-index={line.index} key={line.index} ref={isActive ? activeLineRef : undefined}>
                   <button
@@ -1671,8 +1707,11 @@ function LyricsWidget({
                       text: line.text,
                     })}
                   >
-                    <span>{formatTimestamp(line.startTimeMs)}</span>
-                    <p>{line.text}</p>
+                    <span className="lyrics-line-time">{formatTimestamp(line.startTimeMs)}</span>
+                    <span className="lyrics-line-copy">
+                      <strong>{line.text}</strong>
+                      {activeLineTranslation && <small>{activeLineTranslation}</small>}
+                    </span>
                   </button>
                 </li>
                 );
@@ -2177,7 +2216,8 @@ export default function App() {
     }
     const lineSnapshot = selectedLine;
     const trackIdSnapshot = workspace.currentTrack?.id || null;
-    const key = String(lineSnapshot.id);
+    const key = translationCacheKey(trackIdSnapshot, lineSnapshot) || String(lineSnapshot.id);
+    const legacyKey = String(lineSnapshot.id);
     const lineStillCurrent = () =>
       workspaceRef.current.currentTrack?.id === trackIdSnapshot && isSameLyricLine(selectedLineRef.current, lineSnapshot);
     const applyTranslationForLine = (nextTranslation: Translation | null) => {
@@ -2188,20 +2228,22 @@ export default function App() {
     const localDraft = readLocalTranslationDraft(trackIdSnapshot, lineSnapshot);
     if (localDraft) {
       setTranslation(localDraft);
-      setTranslationCache((current) => ({ ...current, [key]: localDraft }));
+      setTranslationCache((current) => ({ ...current, [key]: localDraft, [legacyKey]: localDraft }));
       return;
     }
-    const cachedTranslation = translationCacheRef.current[key];
-    if (cachedTranslation) {
+    const cachedTranslation = translationCacheRef.current[key] || translationCacheRef.current[legacyKey];
+    if (isTranslationForLine(cachedTranslation, lineSnapshot)) {
       setTranslation(cachedTranslation);
       return;
     }
     if (containsHangul(lineSnapshot.text)) {
       const koreanDraft = makeLocalTranslation(lineSnapshot, lineSnapshot.text);
       setTranslation(koreanDraft);
-      setTranslationCache((current) => ({ ...current, [key]: koreanDraft }));
+      setTranslationCache((current) => ({ ...current, [key]: koreanDraft, [legacyKey]: koreanDraft }));
     } else {
-      setTranslation(null);
+      const pendingDraft = makeLocalTranslation(lineSnapshot, "", "");
+      setTranslation(pendingDraft);
+      setTranslationCache((current) => ({ ...current, [key]: pendingDraft, [legacyKey]: pendingDraft }));
     }
     if (pendingTranslationRef.current.has(key)) {
       return;
@@ -2216,7 +2258,7 @@ export default function App() {
         const localDraftBeforeSave = readLocalTranslationDraft(trackIdSnapshot, lineSnapshot);
         if (localDraftBeforeSave) {
           applyTranslationForLine(localDraftBeforeSave);
-          setTranslationCache((current) => ({ ...current, [key]: localDraftBeforeSave }));
+          setTranslationCache((current) => ({ ...current, [key]: localDraftBeforeSave, [legacyKey]: localDraftBeforeSave }));
           return;
         }
         if (savedKorean) {
@@ -2226,7 +2268,7 @@ export default function App() {
             memoText: normalizeMemoText(savedKorean.memoText),
           };
           applyTranslationForLine(normalized);
-          setTranslationCache((current) => ({ ...current, [key]: normalized }));
+          setTranslationCache((current) => ({ ...current, [key]: normalized, [legacyKey]: normalized }));
           return;
         }
         if (containsHangul(lineSnapshot.text)) {
@@ -2248,16 +2290,16 @@ export default function App() {
         const localDraftBeforeAutoDraft = readLocalTranslationDraft(trackIdSnapshot, lineSnapshot);
         if (localDraftBeforeAutoDraft) {
           applyTranslationForLine(localDraftBeforeAutoDraft);
-          setTranslationCache((current) => ({ ...current, [key]: localDraftBeforeAutoDraft }));
+          setTranslationCache((current) => ({ ...current, [key]: localDraftBeforeAutoDraft, [legacyKey]: localDraftBeforeAutoDraft }));
           return;
         }
         const normalized = { ...created, clientLineKey: lyricLineKey(lineSnapshot), memoText: normalizeMemoText(created.memoText) };
         applyTranslationForLine(normalized);
-        setTranslationCache((current) => ({ ...current, [key]: normalized }));
+        setTranslationCache((current) => ({ ...current, [key]: normalized, [legacyKey]: normalized }));
       })
       .catch((error) => {
         if (!cancelled && lineStillCurrent()) {
-          setTranslation(null);
+          setTranslation((current) => isTranslationForLine(current, lineSnapshot) ? current : null);
           if (!containsHangul(lineSnapshot.text)) {
             setNotice({ kind: "notice", message: "이 줄은 직접 번역 메모를 적어두면 된다냥." });
           }
@@ -2913,9 +2955,22 @@ export default function App() {
 
   async function saveMemoForLine(line: SelectedLine, translatedText: string, memoText: string, options: { showNotice?: boolean } = {}) {
     const showNotice = options.showNotice ?? true;
+    const cacheKey = translationCacheKey(workspaceRef.current.currentTrack?.id, line);
+    const legacyKey = line.id != null ? String(line.id) : cacheKey;
+    const localTranslation = makeLocalTranslation(
+      line,
+      translatedText || (containsHangul(line.text) ? line.text : ""),
+      memoText,
+    );
+    writeLocalTranslationDraft(workspaceRef.current.currentTrack?.id, line, localTranslation.translatedText, localTranslation.memoText || "");
+    window.localStorage.setItem("kurostep.translationMemo", normalizeMemoText(memoText));
     if (!auth?.userId || !line.id) {
-      setNotice({ kind: "notice", message: "아직 저장할 가사 줄이 없다냥." });
-      return null;
+      setTranslation(localTranslation);
+      setTranslationCache((current) => ({ ...current, [cacheKey]: localTranslation, [legacyKey]: localTranslation }));
+      if (showNotice) {
+        setNotice({ kind: "notice", message: "서버 줄 번호가 없어 로컬에 먼저 저장했다냥." });
+      }
+      return localTranslation;
     }
     try {
       const saved = await api<Translation>(`/api/lyric-line-refs/${line.id}/translations?userId=${auth.userId}`, {
@@ -2926,18 +2981,21 @@ export default function App() {
           memoText: normalizeMemoText(memoText),
         }),
       }, auth);
-      const normalized = { ...saved, memoText: normalizeMemoText(saved.memoText) };
+      const normalized = { ...saved, clientLineKey: lyricLineKey(line), memoText: normalizeMemoText(saved.memoText) };
       setTranslation(normalized);
-      setTranslationCache((current) => ({ ...current, [String(line.id)]: normalized }));
+      setTranslationCache((current) => ({ ...current, [cacheKey]: normalized, [legacyKey]: normalized }));
       writeLocalTranslationDraft(workspaceRef.current.currentTrack?.id, line, normalized.translatedText, normalized.memoText || "");
-      window.localStorage.setItem("kurostep.translationMemo", normalizeMemoText(memoText));
       if (showNotice) {
         setNotice({ kind: "notice", message: "번역 메모를 서버에 콕 저장했다냥." });
       }
-      return saved;
+      return normalized;
     } catch (error) {
-      setNotice({ kind: "error", message: (error as Error).message });
-      return null;
+      setTranslation(localTranslation);
+      setTranslationCache((current) => ({ ...current, [cacheKey]: localTranslation, [legacyKey]: localTranslation }));
+      if (showNotice) {
+        setNotice({ kind: "notice", message: "서버 저장은 실패했지만 이 기기에는 저장했다냥." });
+      }
+      return localTranslation;
     }
   }
 
@@ -2963,13 +3021,27 @@ export default function App() {
     );
     writeLocalTranslationDraft(workspace.currentTrack?.id, selectedLine, normalized.translatedText, normalized.memoText || "");
     setTranslation(normalized);
-    if (selectedLine.id != null) {
-      setTranslationCache((current) => ({ ...current, [String(selectedLine.id)]: normalized }));
-    }
+    const cacheKey = translationCacheKey(workspace.currentTrack?.id, selectedLine);
+    const legacyKey = selectedLine.id != null ? String(selectedLine.id) : cacheKey;
+    setTranslationCache((current) => ({ ...current, [cacheKey]: normalized, [legacyKey]: normalized }));
   }
 
   async function deleteMemo() {
     const activeTranslation = isTranslationForLine(translation, selectedLine) ? translation : null;
+    if (selectedLine?.text && (!activeTranslation?.id || activeTranslation.status === "LOCAL_DRAFT")) {
+      setTranslation(null);
+      removeLocalTranslationDraft(workspace.currentTrack?.id, selectedLine);
+      setTranslationCache((current) => {
+        const next = { ...current };
+        const cacheKey = translationCacheKey(workspace.currentTrack?.id, selectedLine);
+        if (cacheKey) delete next[cacheKey];
+        if (selectedLine.id != null) delete next[String(selectedLine.id)];
+        return next;
+      });
+      broadcastWorkspaceSync("lyric-memo-deleted");
+      setNotice({ kind: "notice", message: "이 기기에 저장한 번역 메모를 지웠다냥." });
+      return;
+    }
     if (!auth?.userId || !selectedLine?.id || !activeTranslation?.id) {
       setNotice({ kind: "notice", message: "아직 지울 번역 메모가 없다냥." });
       return;
@@ -2980,6 +3052,8 @@ export default function App() {
       removeLocalTranslationDraft(workspace.currentTrack?.id, selectedLine);
       setTranslationCache((current) => {
         const next = { ...current };
+        const cacheKey = translationCacheKey(workspace.currentTrack?.id, selectedLine);
+        delete next[cacheKey];
         delete next[String(selectedLine.id)];
         return next;
       });
