@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "KuroStep",
   "mainBinaryName": "KuroStep",
-  "version": "0.1.35",
+  "version": "0.1.36",
   "identifier": "com.song991123.kurostep",
   "build": {
     "beforeDevCommand": "",
@@ -49,7 +49,7 @@
       {
         "label": "paw",
         "title": "KuroStep Paw Notes",
-        "url": "https://song991123.github.io/KuroStep/?view=paw&shell=tauri&v=20260713-v045",
+        "url": "https://song991123.github.io/KuroStep/?view=paw&shell=tauri&v=20260713-v046",
         "width": 380,
         "height": 520,
         "minWidth": 360,

@@ -254,6 +254,12 @@ declare global {
       core?: {
         invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
       };
+      window?: {
+        getCurrentWindow?: () => {
+          minimize?: () => Promise<void>;
+          startDragging?: () => Promise<void>;
+        };
+      };
     };
   }
 }
@@ -371,6 +377,19 @@ async function invokeNative(command: string, payload: Record<string, unknown> = 
 
 function minimizeCurrentWindow() {
   void window.__TAURI__?.window?.getCurrentWindow?.()?.minimize?.();
+}
+
+function startCurrentWindowDrag() {
+  void window.__TAURI__?.window?.getCurrentWindow?.()?.startDragging?.();
+}
+
+function saveCurrentWindowPosition(label = shellView) {
+  if (!isTauriApp || isEmbeddedContent) return;
+  void invokeNative("save_current_window_position", { label }).catch(() => {});
+}
+
+function scheduleCurrentWindowPositionSave(label = shellView) {
+  window.setTimeout(() => saveCurrentWindowPosition(label), 350);
 }
 
 function parseLyricSource(fetchResponse: LyricFetchResponse): LyricSource {
@@ -621,7 +640,16 @@ function WidgetShell({
 
   return (
     <section className="widget-container">
-      <header className="mac-header" id="window-drag-region" data-tauri-drag-region>
+      <header
+        className="mac-header"
+        id="window-drag-region"
+        data-tauri-drag-region
+        onPointerDown={(event) => {
+          if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
+          startCurrentWindowDrag();
+          scheduleCurrentWindowPositionSave();
+        }}
+      >
         <div className="window-tools">
           <button className="window-tool-button" id="window-minimize" type="button" aria-label="최소화" title="최소화" onClick={minimizeCurrentWindow}>
             <Icon name="minimize" />
@@ -1681,6 +1709,25 @@ export default function App() {
     return () => {
       document.removeEventListener("contextmenu", blockContextMenu);
       document.removeEventListener("keydown", blockDeveloperShortcut, true);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isTauriApp || isEmbeddedContent) return;
+    const savePosition = () => saveCurrentWindowPosition(shellView);
+    const scheduleSave = () => scheduleCurrentWindowPositionSave(shellView);
+    const intervalId = window.setInterval(savePosition, 5000);
+    window.addEventListener("pointerup", scheduleSave, true);
+    window.addEventListener("blur", scheduleSave);
+    window.addEventListener("resize", scheduleSave);
+    window.addEventListener("beforeunload", savePosition);
+    savePosition();
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("pointerup", scheduleSave, true);
+      window.removeEventListener("blur", scheduleSave);
+      window.removeEventListener("resize", scheduleSave);
+      window.removeEventListener("beforeunload", savePosition);
     };
   }, []);
 

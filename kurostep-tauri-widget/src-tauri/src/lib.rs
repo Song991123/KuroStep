@@ -31,7 +31,7 @@ struct LyricContextState {
 }
 
 const DEPLOYED_WIDGET_URL: &str = "https://song991123.github.io/KuroStep/";
-const CONTENT_CACHE_VERSION: &str = "20260713-v045";
+const CONTENT_CACHE_VERSION: &str = "20260713-v046";
 
 #[tauri::command]
 fn set_lyrics_visible(
@@ -440,33 +440,95 @@ fn child_position_from_main(
     let main_size = main.outer_size().ok()?;
     let scale_factor = main.scale_factor().unwrap_or(1.0);
     let gap = (20.0 * scale_factor).round() as i32;
-    let raw = match label {
-        "paw" => PhysicalPosition {
-            x: main_position.x - width_px.ceil() as i32 - gap,
-            y: main_position.y + (42.0 * scale_factor).round() as i32,
-        },
-        "lyrics" => {
-            let above_y = main_position.y - height_px.ceil() as i32 - gap;
-            let below_y = main_position.y + main_size.height as i32 + gap;
+    let width = width_px.ceil() as i32;
+    let height = height_px.ceil() as i32;
+    let titlebar_offset = (42.0 * scale_factor).round() as i32;
+    let candidates = match label {
+        "paw" => vec![
+            PhysicalPosition {
+                x: main_position.x - width - gap,
+                y: main_position.y + titlebar_offset,
+            },
+            PhysicalPosition {
+                x: main_position.x + main_size.width as i32 + gap,
+                y: main_position.y + titlebar_offset,
+            },
             PhysicalPosition {
                 x: main_position.x,
-                y: if above_y >= monitor_position.y + gap {
-                    above_y
-                } else {
-                    below_y
-                },
-            }
-        }
+                y: main_position.y + main_size.height as i32 + gap,
+            },
+            PhysicalPosition {
+                x: main_position.x,
+                y: main_position.y - height - gap,
+            },
+        ],
+        "lyrics" => vec![
+            PhysicalPosition {
+                x: main_position.x,
+                y: main_position.y - height - gap,
+            },
+            PhysicalPosition {
+                x: main_position.x,
+                y: main_position.y + main_size.height as i32 + gap,
+            },
+            PhysicalPosition {
+                x: main_position.x - width - gap,
+                y: main_position.y,
+            },
+            PhysicalPosition {
+                x: main_position.x + main_size.width as i32 + gap,
+                y: main_position.y,
+            },
+        ],
         _ => return None,
     };
+    let fallback = *candidates.first()?;
 
-    Some(clamp_position(
-        raw,
+    first_non_overlapping_position(
+        app,
+        label,
+        &candidates,
         monitor_position,
         monitor_size,
         width_px,
         height_px,
-    ))
+        gap,
+    )
+    .or_else(|| {
+        Some(clamp_position(
+            fallback,
+            monitor_position,
+            monitor_size,
+            width_px,
+            height_px,
+        ))
+    })
+}
+
+fn first_non_overlapping_position(
+    app: &tauri::AppHandle,
+    label: &str,
+    candidates: &[PhysicalPosition<i32>],
+    monitor_position: &PhysicalPosition<i32>,
+    monitor_size: &tauri::PhysicalSize<u32>,
+    width_px: f64,
+    height_px: f64,
+    gap: i32,
+) -> Option<PhysicalPosition<i32>> {
+    candidates
+        .iter()
+        .map(|position| {
+            clamp_position(
+                *position,
+                monitor_position,
+                monitor_size,
+                width_px,
+                height_px,
+            )
+        })
+        .find(|position| {
+            !overlaps_visible_peer_window(app, label, *position, width_px, height_px, gap)
+        })
 }
 
 fn clamp_position(
