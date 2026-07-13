@@ -2060,20 +2060,26 @@ export default function App() {
   }, [warmTrackLyricCache]);
 
   useEffect(() => {
+    if (shellView !== "main") {
+      setTrackDuration(workspace.currentTrack?.durationSeconds || 0);
+      return;
+    }
     setPlaybackPosition(0);
     setTrackDuration(workspace.currentTrack?.durationSeconds || 0);
     setLyricSyncOffsetMs(readLyricSyncOffset(workspace.currentTrack));
     setSelectedLine(null);
     setTranslation(null);
     void loadTrackLyrics(workspace.currentTrack, authRef.current);
-  }, [workspace.currentTrack?.id, loadTrackLyrics]);
+  }, [workspace.currentTrack?.id, loadTrackLyrics, shellView]);
 
   useEffect(() => {
+    if (shellView !== "main") return;
     if (!auth?.accessToken || !workspace.currentTrack?.id || lyricSource?.lines?.length) return;
     void loadTrackLyrics(workspace.currentTrack, auth);
-  }, [auth?.accessToken, workspace.currentTrack?.id, lyricSource?.lines?.length, isPlaying, loadTrackLyrics]);
+  }, [auth?.accessToken, workspace.currentTrack?.id, lyricSource?.lines?.length, isPlaying, loadTrackLyrics, shellView]);
 
   useEffect(() => {
+    if (shellView !== "main") return;
     const nextLine = chooseLineByPlaybackTime(lyric, lyricSource, playbackPosition, lyricSyncOffsetMs);
     if (!nextLine) {
       return;
@@ -2081,7 +2087,7 @@ export default function App() {
     if (nextLine?.id !== selectedLine?.id || nextLine?.lineIndex !== selectedLine?.lineIndex) {
       setSelectedLine(nextLine);
     }
-  }, [playbackPosition, lyric, lyricSource, lyricSyncOffsetMs, selectedLine?.id, selectedLine?.lineIndex]);
+  }, [playbackPosition, lyric, lyricSource, lyricSyncOffsetMs, selectedLine?.id, selectedLine?.lineIndex, shellView]);
 
   useEffect(() => {
     if (shellView !== "main") {
