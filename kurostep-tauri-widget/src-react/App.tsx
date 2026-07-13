@@ -2086,7 +2086,7 @@ export default function App() {
     }
     void invokeNative("set_paw_visible", {
       visible: pawWidgetVisible,
-      reload: false,
+      reload: true,
       authJson: JSON.stringify(auth),
     }).catch(() => {});
   }, [auth, pawWidgetVisible]);
@@ -2118,7 +2118,7 @@ export default function App() {
     if (shellView !== "main" || !authRef.current) return;
     void invokeNative("set_paw_visible", {
       visible,
-      reload: false,
+      reload: true,
       authJson: JSON.stringify(authRef.current),
     }).catch((error) => {
       setNotice({ kind: "error", message: `작업 발자국 창을 못 열었다냥: ${(error as Error).message || error}` });
@@ -2538,7 +2538,7 @@ export default function App() {
         if (shellView === "main") {
           void invokeNative("set_paw_visible", {
             visible: pawWidgetVisible,
-            reload: false,
+            reload: true,
             authJson: JSON.stringify(nextAuth),
           }).catch(() => {});
         }
