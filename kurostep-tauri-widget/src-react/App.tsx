@@ -45,6 +45,7 @@ const REPEAT_MODES = ["off", "all", "one"] as const;
 const MAX_YOUTUBE_RECOVERY_ATTEMPTS = 2;
 const LONG_FORM_TRACK_SECONDS = 12 * 60;
 const LYRIC_FETCH_TIMEOUT_MS = 45000;
+const YOUTUBE_AD_DURATION_MAX_SECONDS = 90;
 
 if (isEmbeddedContent) {
   document.documentElement.classList.add("embedded-mode");
@@ -228,6 +229,7 @@ type YouTubePlayer = {
   getCurrentTime: () => number;
   getDuration: () => number;
   getPlayerState: () => number;
+  getVideoData?: () => { video_id?: string; title?: string };
   setVolume: (volume: number) => void;
 };
 
@@ -520,6 +522,17 @@ function normalizeTrackDuration(seconds: number, stableSeconds = 0) {
     return currentDuration;
   }
   return nextDuration;
+}
+
+function isLikelyYoutubeAdDuration(seconds: number, expectedSeconds = 0) {
+  const nextDuration = Number(seconds);
+  const expectedDuration = Number(expectedSeconds);
+  if (!Number.isFinite(nextDuration) || !Number.isFinite(expectedDuration)) return false;
+  if (nextDuration <= 0 || expectedDuration < 60) return false;
+  if (nextDuration <= YOUTUBE_AD_DURATION_MAX_SECONDS && expectedDuration - nextDuration > 20) {
+    return true;
+  }
+  return nextDuration < expectedDuration * 0.55;
 }
 
 function normalizeRepeatMode(mode: string | null | undefined): RepeatMode {
@@ -1061,7 +1074,17 @@ function MusicPlayerWidget({
     displayedDurationRef.current = displayedDuration;
   }, [displayedDuration]);
 
+  function isLikelyYoutubeAdPlayback(player: YouTubePlayer | null, seconds: number) {
+    const expectedDuration = displayedDurationRef.current || track?.durationSeconds || 0;
+    const activeVideoId = String(player?.getVideoData?.()?.video_id || "");
+    const isDifferentVideo = Boolean(activeVideoId && videoId && activeVideoId !== videoId);
+    return isDifferentVideo || isLikelyYoutubeAdDuration(seconds, expectedDuration);
+  }
+
   function reportDuration(seconds: number) {
+    if (isLikelyYoutubeAdPlayback(playerRef.current, seconds)) {
+      return;
+    }
     const nextDuration = normalizeTrackDuration(seconds, displayedDurationRef.current);
     if (nextDuration <= 0 || lastReportedDurationRef.current === nextDuration) {
       return;
@@ -1178,7 +1201,10 @@ function MusicPlayerWidget({
             },
             onStateChange: (event) => {
               if (!window.YT) return;
-              reportDuration(playerRef.current?.getDuration?.() || 0);
+              const rawDuration = playerRef.current?.getDuration?.() || 0;
+              if (!isLikelyYoutubeAdPlayback(playerRef.current, rawDuration)) {
+                reportDuration(rawDuration);
+              }
               if (event.data === window.YT.PlayerState.PLAYING) {
                 stalledTickRef.current = 0;
                 recoveryAttemptsRef.current = 0;
@@ -1225,7 +1251,10 @@ function MusicPlayerWidget({
   useEffect(() => {
     if (!playerReady || !videoId) return;
     const durationTimer = window.setInterval(() => {
-      reportDuration(playerRef.current?.getDuration?.() || 0);
+      const rawDuration = playerRef.current?.getDuration?.() || 0;
+      if (!isLikelyYoutubeAdPlayback(playerRef.current, rawDuration)) {
+        reportDuration(rawDuration);
+      }
     }, 500);
     return () => window.clearInterval(durationTimer);
   }, [playerReady, videoId]);
@@ -1251,6 +1280,10 @@ function MusicPlayerWidget({
       const rawCurrent = player?.getCurrentTime?.();
       const current = Number.isFinite(rawCurrent) ? Number(rawCurrent) : playbackPositionRef.current;
       const rawDuration = player?.getDuration?.();
+      if (isLikelyYoutubeAdPlayback(player || null, Number(rawDuration) || 0)) {
+        stalledTickRef.current = 0;
+        return;
+      }
       const nextDuration = normalizeTrackDuration(
         Number.isFinite(rawDuration) && Number(rawDuration) > 0 ? Number(rawDuration) : displayedDurationRef.current || 0,
         displayedDurationRef.current,

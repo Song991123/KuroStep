@@ -503,8 +503,10 @@ select,
   z-index: 12;
   display: flex;
   gap: 7px;
-  padding: 0 12px 9px;
-  background: linear-gradient(180deg, var(--bg-cream) 72%, rgb(247 245 240 / 0));
+  padding: 8px 12px 9px;
+  border-bottom: 1px solid rgb(224 220 211 / 72%);
+  background: var(--bg-cream);
+  box-shadow: 0 6px 12px rgb(247 245 240 / 86%);
 }
 
 .global-widget-controls .action-button {
