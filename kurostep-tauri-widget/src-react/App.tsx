@@ -215,6 +215,8 @@ function translationStatusLabel(status: string | null | undefined) {
 
 type YouTubePlayer = {
   cueVideoById: (options: { videoId: string; startSeconds?: number }) => void;
+  loadVideoById?: (options: { videoId: string; startSeconds?: number }) => void;
+  destroy?: () => void;
   playVideo: () => void;
   pauseVideo: () => void;
   seekTo: (seconds: number, allowSeekAhead: boolean) => void;
@@ -1055,7 +1057,12 @@ function MusicPlayerWidget({
 
     recoveryAttemptsRef.current += 1;
     setPlayerError("");
-    player.cueVideoById?.({ videoId, startSeconds: playbackPositionRef.current || 0 });
+    const startSeconds = playbackPositionRef.current || 0;
+    if (player.loadVideoById) {
+      player.loadVideoById({ videoId, startSeconds });
+    } else {
+      player.cueVideoById?.({ videoId, startSeconds });
+    }
     await new Promise((resolve) => window.setTimeout(resolve, reason === "stalled" ? 300 : 600));
     player.playVideo?.();
     await new Promise((resolve) => window.setTimeout(resolve, 1100));
@@ -1079,8 +1086,19 @@ function MusicPlayerWidget({
     recoveryAttemptsRef.current = 0;
     if (!videoId) {
       playerRef.current?.pauseVideo?.();
+      playerRef.current?.destroy?.();
+      playerRef.current = null;
       videoIdRef.current = "";
       return;
+    }
+
+    if (playerRef.current && videoIdRef.current && videoIdRef.current !== videoId) {
+      playerRef.current.destroy?.();
+      playerRef.current = null;
+      const playerContainer = document.getElementById("youtube-player");
+      if (playerContainer) {
+        playerContainer.innerHTML = "";
+      }
     }
 
     loadYoutubeIframeApi()
@@ -1090,8 +1108,12 @@ function MusicPlayerWidget({
           videoIdRef.current = videoId;
           lastReportedDurationRef.current = 0;
           setPlayerReady(true);
-          playerRef.current.cueVideoById({ videoId, startSeconds: 0 });
           onPositionChange(0);
+          if (isPlayingRef.current && playerRef.current.loadVideoById) {
+            playerRef.current.loadVideoById({ videoId, startSeconds: 0 });
+          } else {
+            playerRef.current.cueVideoById({ videoId, startSeconds: 0 });
+          }
           if (isPlaying) {
             window.setTimeout(() => playerRef.current?.playVideo?.(), 150);
           }
@@ -1113,9 +1135,18 @@ function MusicPlayerWidget({
           events: {
             onReady: (event) => {
               if (cancelled) return;
+              const latestVideoId = videoIdRef.current || videoId;
               setPlayerReady(true);
               event.target.setVolume?.(volume);
-              reportDuration(event.target.getDuration?.() || 0);
+              if (latestVideoId) {
+                const startSeconds = playbackPositionRef.current || 0;
+                if (isPlayingRef.current && event.target.loadVideoById) {
+                  event.target.loadVideoById({ videoId: latestVideoId, startSeconds });
+                } else {
+                  event.target.cueVideoById?.({ videoId: latestVideoId, startSeconds });
+                }
+              }
+              window.setTimeout(() => reportDuration(event.target.getDuration?.() || 0), 250);
               if (isPlaying) {
                 event.target.playVideo?.();
               }
