@@ -31,7 +31,7 @@ struct LyricContextState {
 }
 
 const DEPLOYED_WIDGET_URL: &str = "https://song991123.github.io/KuroStep/";
-const CONTENT_CACHE_VERSION: &str = "20260713-v046";
+const CONTENT_CACHE_VERSION: &str = "20260713-v047";
 
 #[tauri::command]
 fn set_lyrics_visible(
