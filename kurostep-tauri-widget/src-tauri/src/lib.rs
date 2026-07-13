@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fs, path::PathBuf, sync::Mutex};
+use std::{collections::HashMap, fs, path::PathBuf, sync::Mutex, thread, time::Duration};
 use tauri::{
     Emitter, LogicalSize, Manager, PhysicalPosition, Position, Size, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder,
@@ -31,7 +31,7 @@ struct LyricContextState {
 }
 
 const DEPLOYED_WIDGET_URL: &str = "https://song991123.github.io/KuroStep/";
-const CONTENT_CACHE_VERSION: &str = "20260713-v047";
+const CONTENT_CACHE_VERSION: &str = "20260713-v054";
 
 #[tauri::command]
 fn set_lyrics_visible(
@@ -75,9 +75,12 @@ fn set_lyrics_visible(
     let is_visible = lyrics.is_visible().map_err(|error| error.to_string())?;
 
     if visible && !is_visible {
-        restore_window_position(&app, &lyrics, "lyrics", width, height);
         lyrics.show().map_err(|error| error.to_string())?;
+        restore_window_position(&app, &lyrics, "lyrics", width, height);
+        restore_window_position_after_show(app.clone(), "lyrics", width, height);
         refocus_main_window(&app);
+    } else if visible {
+        restore_window_position(&app, &lyrics, "lyrics", width, height);
     } else if !visible && is_visible {
         lyrics.hide().map_err(|error| error.to_string())?;
     }
@@ -140,9 +143,12 @@ fn set_paw_visible(
     }
 
     if visible && !is_visible {
-        restore_window_position(&app, &paw, "paw", 380.0, 520.0);
         paw.show().map_err(|error| error.to_string())?;
+        restore_window_position(&app, &paw, "paw", 380.0, 520.0);
+        restore_window_position_after_show(app.clone(), "paw", 380.0, 520.0);
         refocus_main_window(&app);
+    } else if visible {
+        restore_window_position(&app, &paw, "paw", 380.0, 520.0);
     } else if !visible && is_visible {
         paw.hide().map_err(|error| error.to_string())?;
     }
@@ -270,6 +276,38 @@ fn restore_window_position(
     if let Some(position) = saved_or_default_position(app, window, label, width, height) {
         let _ = window.set_position(Position::Physical(position));
     }
+}
+
+fn restore_window_position_after_show(
+    app: tauri::AppHandle,
+    label: &'static str,
+    width: f64,
+    height: f64,
+) {
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(180));
+        if let Some(window) = app.get_webview_window(label) {
+            restore_window_position(&app, &window, label, width, height);
+        }
+    });
+}
+
+fn reconcile_child_window_positions_after_launch(app: tauri::AppHandle) {
+    thread::spawn(move || {
+        for _ in 0..20 {
+            thread::sleep(Duration::from_millis(500));
+            if let Some(paw) = app.get_webview_window("paw") {
+                if paw.is_visible().unwrap_or(false) {
+                    restore_window_position(&app, &paw, "paw", 380.0, 520.0);
+                }
+            }
+            if let Some(lyrics) = app.get_webview_window("lyrics") {
+                if lyrics.is_visible().unwrap_or(false) {
+                    restore_window_position(&app, &lyrics, "lyrics", 380.0, 62.0);
+                }
+            }
+        }
+    });
 }
 
 fn saved_or_default_position(
@@ -554,7 +592,7 @@ fn window_positions_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .app_config_dir()
         .map_err(|error| error.to_string())?;
     fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-    Ok(directory.join("window-positions-v5.json"))
+    Ok(directory.join("window-positions-v6.json"))
 }
 
 fn read_window_positions(app: &tauri::AppHandle) -> HashMap<String, WindowPoint> {
@@ -586,9 +624,16 @@ pub fn run() {
     tauri::Builder::default()
         .manage(LyricContextState::default())
         .setup(|app| {
+            if let Some(paw) = app.get_webview_window("paw") {
+                let _ = paw.hide();
+            }
+            if let Some(lyrics) = app.get_webview_window("lyrics") {
+                let _ = lyrics.hide();
+            }
             if let Some(main) = app.get_webview_window("main") {
                 restore_window_position(app.handle(), &main, "main", 380.0, 720.0);
             }
+            reconcile_child_window_positions_after_launch(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

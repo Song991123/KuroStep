@@ -43,13 +43,15 @@
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "visible": false,
-        "center": true,
+        "x": 987,
+        "y": 52,
+        "center": false,
         "shadow": false
       },
       {
         "label": "paw",
         "title": "KuroStep Paw Notes",
-        "url": "https://song991123.github.io/KuroStep/?view=paw&shell=tauri&v=20260713-v047",
+        "url": "https://song991123.github.io/KuroStep/?view=paw&shell=tauri&v=20260713-v054",
         "width": 380,
         "height": 520,
         "minWidth": 360,
@@ -60,7 +62,9 @@
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "visible": false,
-        "center": true,
+        "x": 587,
+        "y": 176,
+        "center": false,
         "shadow": false
       }
     ],
