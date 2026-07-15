@@ -1754,7 +1754,7 @@ function LyricsWidget({
     lyricRefs.forEach((lineRef) => refs.set(lineRef.lineIndex, lineRef));
     return refs;
   }, [lyricRefs]);
-  const lineText = selectedLine?.text || lyricLoadMessage || (currentTrack ? LYRIC_LOADING_MESSAGE : "아직 재생 중인 곡이 없다냥.");
+  const lineText = selectedLine?.text || lyricLoadMessage || (currentTrack ? (fullLines.length ? "재생하면 현재 가사를 따라간다냥." : LYRIC_LOADING_MESSAGE) : "아직 재생 중인 곡이 없다냥.");
 
   useEffect(() => {
     if (!lyricsExpanded || selectedLine?.lineIndex == null) return;
