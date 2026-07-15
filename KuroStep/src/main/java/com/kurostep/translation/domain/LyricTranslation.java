@@ -97,9 +97,17 @@ public class LyricTranslation extends BaseTimeEntity {
         this.translatedText = translatedText;
         this.memoText = memoText;
         this.status = TranslationStatus.EDITED;
+        this.provider = TranslationProviderType.MANUAL;
+    }
+
+    public boolean isEdited() {
+        return status == TranslationStatus.EDITED;
     }
 
     public void replaceDraft(String translatedText, String memoText, TranslationProviderType provider) {
+        if (isEdited()) {
+            return;
+        }
         this.translatedText = translatedText;
         this.memoText = memoText;
         this.provider = provider;
