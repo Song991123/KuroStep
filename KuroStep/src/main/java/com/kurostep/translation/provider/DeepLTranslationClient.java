@@ -82,16 +82,18 @@ public class DeepLTranslationClient {
     }
 
     private String formBody(String sourceText, String sourceLanguageCode, String targetLanguageCode) {
-        return "text=" + encode(sourceText)
-                + "&source_lang=" + encode(normalizeSource(sourceLanguageCode))
-                + "&target_lang=" + encode(normalizeTarget(targetLanguageCode));
+        StringBuilder body = new StringBuilder("text=").append(encode(sourceText));
+        normalizeSource(sourceLanguageCode)
+                .ifPresent(source -> body.append("&source_lang=").append(encode(source)));
+        body.append("&target_lang=").append(encode(normalizeTarget(targetLanguageCode)));
+        return body.toString();
     }
 
-    private String normalizeSource(String value) {
+    private Optional<String> normalizeSource(String value) {
         if (value == null || value.isBlank() || "auto".equalsIgnoreCase(value)) {
-            return "EN";
+            return Optional.empty();
         }
-        return value.trim().toUpperCase(Locale.ROOT);
+        return Optional.of(value.trim().toUpperCase(Locale.ROOT));
     }
 
     private String normalizeTarget(String value) {

@@ -2475,7 +2475,7 @@ export default function App() {
           method: "POST",
           body: JSON.stringify({
             sourceText: lineSnapshot.text,
-            sourceLanguageCode: "en",
+            sourceLanguageCode: "auto",
             targetLanguageCode: "ko",
             memoText: "",
           }),
