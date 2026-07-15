@@ -36,6 +36,14 @@ import {
   normalizeMemoText,
   translationFingerprint,
 } from "./lib/lyrics";
+import {
+  getNextPlaylistIndex,
+  nextRepeatMode,
+  normalizeRepeatMode,
+  repeatModeLabel,
+  repeatModeNotice,
+  type RepeatMode,
+} from "./lib/playback";
 import { extractYoutubeId, extractYoutubePlaylistId, fetchYoutubeMetadata } from "./lib/youtube";
 
 const query = new URLSearchParams(window.location.search);
@@ -50,7 +58,6 @@ const isTauriApp =
 const PLAYBACK_TICK_MS = 500;
 const LYRIC_SYNC_FINE_STEP_MS = 500;
 const LYRIC_SYNC_COARSE_STEP_MS = 5000;
-const REPEAT_MODES = ["off", "all", "one"] as const;
 const MAX_YOUTUBE_RECOVERY_ATTEMPTS = 2;
 const LONG_FORM_TRACK_SECONDS = 12 * 60;
 const LYRIC_FETCH_TIMEOUT_MS = 30000;
@@ -89,8 +96,6 @@ type Notice = {
   kind: NoticeKind;
   message: string;
 };
-
-type RepeatMode = typeof REPEAT_MODES[number];
 
 type PendingPlaylistImport = YouTubePlaylistPreview & {
   count: number;
@@ -471,27 +476,6 @@ function getIntroClockGuardSeconds(source: LyricSource | null) {
     return 0;
   }
   return Math.max(0, Math.min(Number(firstVocalLine.startTimeMs) / 1000 - 0.4, 3));
-}
-
-function normalizeRepeatMode(mode: string | null | undefined): RepeatMode {
-  return REPEAT_MODES.includes(mode as RepeatMode) ? mode as RepeatMode : "off";
-}
-
-function nextRepeatMode(mode: RepeatMode): RepeatMode {
-  const currentIndex = REPEAT_MODES.indexOf(mode);
-  return REPEAT_MODES[(currentIndex + 1) % REPEAT_MODES.length];
-}
-
-function repeatModeLabel(mode: RepeatMode) {
-  if (mode === "all") return "전체 반복";
-  if (mode === "one") return "한 곡 반복";
-  return "반복 꺼짐";
-}
-
-function repeatModeNotice(mode: RepeatMode) {
-  if (mode === "all") return "플레이리스트를 빙글빙글 반복한다냥.";
-  if (mode === "one") return "이 곡만 계속 따라 걷는다냥.";
-  return "반복 산책을 잠깐 접었다냥.";
 }
 
 function isLongFormOrNonSongTrack(track: Track | null) {
@@ -3254,13 +3238,7 @@ export default function App() {
       currentWorkspace.playlistTracks.findIndex((track) => track.playlistTrackId === currentWorkspace.currentTrack?.playlistTrackId),
       0,
     );
-    let nextIndex = currentIndex + offset;
-    if (nextIndex < 0) {
-      nextIndex = wrap ? currentWorkspace.playlistTracks.length - 1 : 0;
-    }
-    if (nextIndex >= currentWorkspace.playlistTracks.length) {
-      nextIndex = wrap ? 0 : currentWorkspace.playlistTracks.length - 1;
-    }
+    const nextIndex = getNextPlaylistIndex(currentWorkspace.playlistTracks.length, currentIndex, offset, wrap);
     const nextTrack = currentWorkspace.playlistTracks[nextIndex];
     if (!nextTrack || nextTrack.playlistTrackId === currentWorkspace.currentTrack.playlistTrackId) {
       if (!wrap) {

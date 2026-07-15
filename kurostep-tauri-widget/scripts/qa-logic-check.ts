@@ -8,6 +8,12 @@ import {
   lyricLineKey,
   translationFingerprint,
 } from "../src-react/lib/lyrics.ts";
+import {
+  getNextPlaylistIndex,
+  nextRepeatMode,
+  normalizeRepeatMode,
+  repeatModeLabel,
+} from "../src-react/lib/playback.ts";
 import type { Lyric, LyricSource, SelectedLine, Translation } from "../src-react/lib/api.ts";
 
 const source: LyricSource = {
@@ -53,5 +59,15 @@ const savedTranslation: Translation = {
 };
 assert.equal(isTranslationForLine(savedTranslation, line), true);
 assert.notEqual(translationFingerprint(savedTranslation), translationFingerprint({ ...savedTranslation, translatedText: "녹색, 녹색" }));
+
+assert.equal(normalizeRepeatMode("bad-value"), "off");
+assert.equal(nextRepeatMode("off"), "all");
+assert.equal(nextRepeatMode("all"), "one");
+assert.equal(nextRepeatMode("one"), "off");
+assert.equal(repeatModeLabel("one"), "한 곡 반복");
+assert.equal(getNextPlaylistIndex(3, 2, 1, false), 2, "normal mode should stop at the last track");
+assert.equal(getNextPlaylistIndex(3, 2, 1, true), 0, "repeat-all should wrap from last to first");
+assert.equal(getNextPlaylistIndex(3, 0, -1, true), 2, "repeat-all should wrap from first to last");
+assert.equal(getNextPlaylistIndex(1, 0, 1, true), 0, "single-track repeat-all should stay stable");
 
 console.log("qa:logic ok");

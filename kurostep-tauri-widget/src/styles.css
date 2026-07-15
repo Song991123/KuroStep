@@ -502,7 +502,8 @@ select,
   position: sticky;
   top: 0;
   z-index: 12;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 7px;
   padding: 8px 12px 9px;
   border-bottom: 1px solid rgb(224 220 211 / 72%);
@@ -511,9 +512,13 @@ select,
 }
 
 .global-widget-controls .action-button {
-  flex: 1 1 0;
-  height: 28px;
+  width: 100%;
+  min-height: 32px;
+  height: auto;
+  padding: 5px 7px;
   font-size: 14px;
+  line-height: 1.15;
+  white-space: normal;
 }
 
 .widget-stack {
