@@ -29,7 +29,6 @@ import {
   LYRIC_SYNC_LOOKAHEAD_MS,
   chooseLineByPlaybackTime,
   clampLyricSyncOffset,
-  isLikelyYoutubeAdDuration,
   isSameLyricLine,
   isTranslationForLine,
   lyricLineKey,
@@ -40,7 +39,9 @@ import {
 } from "./lib/lyrics";
 import {
   getNextPlaylistIndex,
+  isLikelyYoutubeAdPlaybackSnapshot,
   nextRepeatMode,
+  normalizeTrackDuration,
   normalizeRepeatMode,
   repeatModeLabel,
   repeatModeNotice,
@@ -69,7 +70,6 @@ const LYRIC_SYNC_COARSE_STEP_MS = 5000;
 const MAX_YOUTUBE_RECOVERY_ATTEMPTS = 2;
 const LONG_FORM_TRACK_SECONDS = 12 * 60;
 const LYRIC_FETCH_TIMEOUT_MS = 30000;
-const YOUTUBE_AD_DURATION_MAX_SECONDS = 90;
 const LYRIC_LOADING_MESSAGE = "처음 듣는 곡이면 가사 발자국을 굽는 중이다냥.";
 const LYRIC_EMPTY_MESSAGE = "맞는 싱크 가사를 아직 못 찾았다냥. 공식 MV/Topic 영상이면 제목과 아티스트 기준으로 다시 찾아볼게냥.";
 
@@ -211,10 +211,6 @@ type YouTubePlayer = {
   getVideoData?: () => { video_id?: string; title?: string };
   setVolume: (volume: number) => void;
 };
-
-function youtubeTitleLooksLikeAd(title: string | null | undefined) {
-  return /\b(advertisement|sponsored|commercial)\b|광고/.test(String(title || "").toLowerCase());
-}
 
 type YouTubeApi = {
   Player: new (
@@ -451,16 +447,6 @@ function formatDuration(seconds?: number) {
   const minutes = Math.floor(value / 60);
   const rest = value % 60;
   return `${minutes}:${String(rest).padStart(2, "0")}`;
-}
-
-function normalizeTrackDuration(seconds: number, stableSeconds = 0) {
-  const nextDuration = Math.round(Number(seconds) || 0);
-  const currentDuration = Math.round(Number(stableSeconds) || 0);
-  if (nextDuration <= 0) return 0;
-  if (currentDuration > 0 && Math.abs(currentDuration - nextDuration) <= 1) {
-    return currentDuration;
-  }
-  return nextDuration;
 }
 
 function isInstrumentalLyricMarker(text: string) {
@@ -1005,42 +991,16 @@ function MusicPlayerWidget({
 
   function isLikelyYoutubeAdPlayback(player: YouTubePlayer | null, seconds: number, currentSeconds = NaN) {
     const expectedDuration = displayedDurationRef.current || track?.durationSeconds || 0;
-    const currentPosition = Number(currentSeconds);
     const candidateDuration = Number(seconds);
     const videoData = player?.getVideoData?.();
-    const activeVideoId = String(videoData?.video_id || "");
-    const isDifferentVideo = Boolean(activeVideoId && videoId && activeVideoId !== videoId);
-    const titleLooksLikeAd = youtubeTitleLooksLikeAd(videoData?.title);
-    const durationLooksLikeAd = isLikelyYoutubeAdDuration(candidateDuration, expectedDuration);
-    const isUnknownShortClipDuringKnownTrack =
-      !activeVideoId &&
-      expectedDuration > YOUTUBE_AD_DURATION_MAX_SECONDS &&
-      Number.isFinite(candidateDuration) &&
-      candidateDuration > 0 &&
-      candidateDuration <= YOUTUBE_AD_DURATION_MAX_SECONDS &&
-      Number.isFinite(currentPosition) &&
-      currentPosition >= 0 &&
-      currentPosition <= YOUTUBE_AD_DURATION_MAX_SECONDS;
-    const isShortPreDurationClip =
-      !activeVideoId &&
-      expectedDuration <= 0 &&
-      Number.isFinite(candidateDuration) &&
-      candidateDuration > 0 &&
-      candidateDuration <= YOUTUBE_AD_DURATION_MAX_SECONDS;
-    const isPreDurationClockOnlyClip =
-      expectedDuration <= 0 &&
-      Number.isFinite(currentPosition) &&
-      currentPosition > 0 &&
-      currentPosition <= YOUTUBE_AD_DURATION_MAX_SECONDS &&
-      (!Number.isFinite(candidateDuration) || candidateDuration <= 0 || candidateDuration <= YOUTUBE_AD_DURATION_MAX_SECONDS);
-    return (
-      titleLooksLikeAd ||
-      isDifferentVideo ||
-      isUnknownShortClipDuringKnownTrack ||
-      isShortPreDurationClip ||
-      isPreDurationClockOnlyClip ||
-      durationLooksLikeAd
-    );
+    return isLikelyYoutubeAdPlaybackSnapshot({
+      activeVideoId: videoData?.video_id,
+      expectedVideoId: videoId,
+      title: videoData?.title,
+      candidateDurationSeconds: candidateDuration,
+      expectedDurationSeconds: expectedDuration,
+      currentSeconds,
+    });
   }
 
   function reportDuration(seconds: number) {

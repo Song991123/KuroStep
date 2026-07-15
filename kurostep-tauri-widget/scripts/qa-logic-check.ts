@@ -12,9 +12,12 @@ import {
 } from "../src-react/lib/lyrics.ts";
 import {
   getNextPlaylistIndex,
+  isLikelyYoutubeAdPlaybackSnapshot,
   nextRepeatMode,
+  normalizeTrackDuration,
   normalizeRepeatMode,
   repeatModeLabel,
+  youtubeTitleLooksLikeAd,
 } from "../src-react/lib/playback.ts";
 import type { Lyric, LyricSource, SelectedLine, Translation } from "../src-react/lib/api.ts";
 
@@ -48,6 +51,31 @@ assert.equal(isLikelyYoutubeAdDuration(15, 180), true, "short ad duration must n
 assert.equal(isLikelyYoutubeAdDuration(90, 240), true, "90-second ad duration must not replace a known longer song");
 assert.equal(isLikelyYoutubeAdDuration(100, 240), true, "substantially shorter ad-like duration must not replace a known song");
 assert.equal(isLikelyYoutubeAdDuration(179, 180), false, "normal song duration should be accepted");
+assert.equal(youtubeTitleLooksLikeAd("Advertisement"), true);
+assert.equal(youtubeTitleLooksLikeAd("공식 MV"), false);
+assert.equal(normalizeTrackDuration(180.4, 180), 180, "small duration jitter should keep the stable track duration");
+assert.equal(isLikelyYoutubeAdPlaybackSnapshot({
+  activeVideoId: "ad-video",
+  expectedVideoId: "song-video",
+  candidateDurationSeconds: 30,
+  expectedDurationSeconds: 180,
+  currentSeconds: 12,
+}), true, "a different active YouTube video should be treated as ad playback");
+assert.equal(isLikelyYoutubeAdPlaybackSnapshot({
+  activeVideoId: "",
+  expectedVideoId: "song-video",
+  candidateDurationSeconds: 45,
+  expectedDurationSeconds: 210,
+  currentSeconds: 20,
+}), true, "unknown short clip during a known track should not advance song playback");
+assert.equal(isLikelyYoutubeAdPlaybackSnapshot({
+  activeVideoId: "song-video",
+  expectedVideoId: "song-video",
+  title: "Official MV",
+  candidateDurationSeconds: 210,
+  expectedDurationSeconds: 210,
+  currentSeconds: 20,
+}), false, "matching official playback should advance song playback");
 
 const line: SelectedLine = { id: 101, lineIndex: 0, startTimeMs: 7360, text: "Green, green" };
 const sameLineWithoutServerId: SelectedLine = { lineIndex: 0, startTimeMs: 7360, text: "Green, green" };
