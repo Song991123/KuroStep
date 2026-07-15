@@ -1502,6 +1502,9 @@ select,
 }
 
 .lyrics-full-now {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   min-width: 0;
   display: grid;
   gap: 7px;
@@ -1561,18 +1564,29 @@ select,
   display: grid;
   gap: 7px;
   margin: 0;
-  padding: 10px;
+  padding: 10px 8px 10px 10px;
   overflow: auto;
   overscroll-behavior: contain;
   list-style: none;
-  scrollbar-width: none;
+  scrollbar-color: rgb(230 185 30 / 52%) rgb(26 26 26 / 6%);
+  scrollbar-width: thin;
   border: 1px solid rgb(26 26 26 / 8%);
   border-radius: 8px;
   background: rgb(255 253 248 / 88%);
 }
 
 .lyrics-full-list::-webkit-scrollbar {
-  display: none;
+  width: 8px;
+}
+
+.lyrics-full-list::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgb(26 26 26 / 6%);
+}
+
+.lyrics-full-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgb(230 185 30 / 52%);
 }
 
 .lyrics-line {
@@ -1662,6 +1676,10 @@ select,
   border-radius: 8px;
   background: rgb(230 185 30 / 16%);
   transform: translateY(-1px);
+}
+
+.lyrics-line[aria-current="true"]::before {
+  background: var(--point-gold);
 }
 
 .lyrics-line.active .lyrics-line-button {

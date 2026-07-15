@@ -198,5 +198,9 @@ for (const [name, css] of [
 assert.equal(/text-overflow:\s*ellipsis/.test(lyricsCss), false, "lyrics overlay must never ellipsize text");
 assert.equal(/-webkit-line-clamp|line-clamp/.test(lyricsCss), false, "lyrics overlay must not clamp lyric lines");
 assert.equal(/white-space:\s*nowrap/.test(lyricsCss), false, "lyrics overlay must wrap instead of clipping long lines");
+assert.match(appCss, /\.lyrics-full-now\s*\{[\s\S]*position:\s*sticky/, "expanded full lyrics should keep the current line visible while scrolling");
+assert.match(appCss, /\.lyrics-full-list\s*\{[\s\S]*scrollbar-width:\s*thin/, "expanded full lyrics should expose a visible scroll affordance");
+assert.equal(/\.lyrics-full-list::-webkit-scrollbar\s*\{[\s\S]*display:\s*none/.test(appCss), false, "expanded full lyrics must not hide its scrollbar");
+assert.match(appSource, /aria-current=\{isActive \? "true" : undefined\}/, "active full-lyrics row should expose aria-current");
 
 console.log("qa:logic ok");

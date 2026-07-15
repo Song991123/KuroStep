@@ -1675,7 +1675,13 @@ function LyricsWidget({
                 const ref = lyricRefByLineIndex.get(line.index);
                 const activeLineTranslation = isActive && hasVisibleTranslation(translation) ? translation?.translatedText || "" : "";
                 return (
-                <li className={`lyrics-line${isActive ? " active" : ""}`} data-line-index={line.index} key={line.index} ref={isActive ? activeLineRef : undefined}>
+                <li
+                  className={`lyrics-line${isActive ? " active" : ""}`}
+                  data-line-index={line.index}
+                  key={line.index}
+                  ref={isActive ? activeLineRef : undefined}
+                  aria-current={isActive ? "true" : undefined}
+                >
                   <button
                     className="lyrics-line-button"
                     type="button"
