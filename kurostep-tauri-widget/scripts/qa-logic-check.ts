@@ -164,6 +164,8 @@ assert.equal(shouldReplayCurrentTrackOnEnded("off", 1), false, "normal mode shou
 const tauriConfig = JSON.parse(readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8"));
 const capability = JSON.parse(readFileSync(new URL("../src-tauri/capabilities/default.json", import.meta.url), "utf8"));
 const appSource = readFileSync(new URL("../src-react/App.tsx", import.meta.url), "utf8");
+const buildInfoSource = readFileSync(new URL("../src-react/buildInfo.ts", import.meta.url), "utf8");
+const tauriSource = readFileSync(new URL("../src-tauri/src/lib.rs", import.meta.url), "utf8");
 const appCss = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const shellCss = readFileSync(new URL("../src/shell.css", import.meta.url), "utf8");
 const lyricsCss = readFileSync(new URL("../src/lyrics.css", import.meta.url), "utf8");
@@ -202,5 +204,8 @@ assert.match(appCss, /\.lyrics-full-now\s*\{[\s\S]*position:\s*sticky/, "expande
 assert.match(appCss, /\.lyrics-full-list\s*\{[\s\S]*scrollbar-width:\s*thin/, "expanded full lyrics should expose a visible scroll affordance");
 assert.equal(/\.lyrics-full-list::-webkit-scrollbar\s*\{[\s\S]*display:\s*none/.test(appCss), false, "expanded full lyrics must not hide its scrollbar");
 assert.match(appSource, /aria-current=\{isActive \? "true" : undefined\}/, "active full-lyrics row should expose aria-current");
+assert.match(buildInfoSource, /KUROSTEP_BUILD_COMMIT/, "React build should expose a build commit for installed-app QA");
+assert.match(appSource, /buildCommit:\s*KUROSTEP_BUILD_COMMIT/, "main view should report the React build commit to native status");
+assert.match(tauriSource, /build_commit:\s*Option<String>/, "native status should persist the React build commit");
 
 console.log("qa:logic ok");

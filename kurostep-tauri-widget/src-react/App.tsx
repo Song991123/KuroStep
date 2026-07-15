@@ -50,6 +50,7 @@ import {
   type RepeatMode,
 } from "./lib/playback";
 import { extractYoutubeId, extractYoutubePlaylistId, fetchYoutubeMetadata } from "./lib/youtube";
+import { KUROSTEP_BUILD_COMMIT, KUROSTEP_BUILD_TIME } from "./buildInfo";
 
 const hashQuery = window.location.hash.startsWith("#?")
   ? new URLSearchParams(window.location.hash.slice(2))
@@ -385,6 +386,8 @@ function reportClientStatus(stage: string, text = "") {
     stage,
     authenticated: Boolean(readJson<AuthSession | null>("kurostep.auth", null)?.accessToken),
     text: text.slice(0, 1000),
+    buildCommit: KUROSTEP_BUILD_COMMIT,
+    buildTime: KUROSTEP_BUILD_TIME,
   }).catch(() => {});
 }
 
