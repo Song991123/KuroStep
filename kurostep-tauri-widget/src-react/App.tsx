@@ -1627,6 +1627,7 @@ function LyricsWidget({
   const fullLines = lyricSource?.lines || [];
   const lyricRefs = lyric?.lines || [];
   const activeLineRef = useRef<HTMLLIElement | null>(null);
+  const fullListRef = useRef<HTMLOListElement | null>(null);
   const lyricRefByLineIndex = useMemo(() => {
     const refs = new Map<number, LyricRef>();
     lyricRefs.forEach((lineRef) => refs.set(lineRef.lineIndex, lineRef));
@@ -1636,7 +1637,16 @@ function LyricsWidget({
 
   useEffect(() => {
     if (!lyricsExpanded || selectedLine?.lineIndex == null) return;
-    activeLineRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    const list = fullListRef.current;
+    const activeLine = activeLineRef.current;
+    if (!list || !activeLine) return;
+    const listRect = list.getBoundingClientRect();
+    const activeRect = activeLine.getBoundingClientRect();
+    const safeTop = listRect.top + 32;
+    const safeBottom = listRect.bottom - 32;
+    if (activeRect.top < safeTop || activeRect.bottom > safeBottom) {
+      activeLine.scrollIntoView({ block: "nearest", behavior: "auto" });
+    }
   }, [lyricsExpanded, selectedLine?.lineIndex]);
 
   return (
@@ -1674,7 +1684,7 @@ function LyricsWidget({
               <span>{fullLines.length ? `전체 가사 ${fullLines.length}줄` : "가사 대기 중"}</span>
               <span>{selectedLine ? `싱크 위치 ${formatTimestamp(selectedLine.startTimeMs)}` : "싱크 준비 중"}</span>
             </div>
-            <ol className="lyrics-full-list" id="lyrics-full-list">
+            <ol className="lyrics-full-list" id="lyrics-full-list" ref={fullListRef}>
               {fullLines.length ? fullLines.map((line) => {
                 const isActive = line.index === selectedLine?.lineIndex;
                 const ref = lyricRefByLineIndex.get(line.index);
