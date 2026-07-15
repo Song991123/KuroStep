@@ -6,6 +6,7 @@ import {
   isSameLyricLine,
   isTranslationForLine,
   lyricLineKey,
+  shouldAutoTranslateLine,
   translationStatusLabel,
   translationFingerprint,
 } from "../src-react/lib/lyrics.ts";
@@ -64,6 +65,8 @@ assert.equal(translationStatusLabel("LOCAL_DRAFT"), "작성 중");
 assert.equal(translationStatusLabel("EDITED"), "저장됨", "server-edited memo should not look empty after saving");
 assert.equal(translationStatusLabel("SAVED"), "저장됨", "local saved memo should keep a stable saved label");
 assert.equal(translationStatusLabel("AUTO_DRAFT"), "");
+assert.equal(shouldAutoTranslateLine("Green, green"), true);
+assert.equal(shouldAutoTranslateLine("Outside, 한 밤에"), false, "mixed Korean lyric lines should not duplicate themselves as translations");
 
 assert.equal(normalizeRepeatMode("bad-value"), "off");
 assert.equal(nextRepeatMode("off"), "all");

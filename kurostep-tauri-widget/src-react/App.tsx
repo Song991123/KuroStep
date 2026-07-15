@@ -34,6 +34,7 @@ import {
   isTranslationForLine,
   lyricLineKey,
   normalizeMemoText,
+  shouldAutoTranslateLine,
   translationStatusLabel,
   translationFingerprint,
 } from "./lib/lyrics";
@@ -2328,13 +2329,7 @@ export default function App() {
       setTranslation(cachedTranslation);
       return;
     }
-    if (containsHangul(lineSnapshot.text)) {
-      const koreanDraft = makeLocalTranslation(lineSnapshot, lineSnapshot.text);
-      setTranslation(koreanDraft);
-      setTranslationCache((current) => ({ ...current, [key]: koreanDraft, [legacyKey]: koreanDraft }));
-    } else {
-      setTranslation(null);
-    }
+    setTranslation(null);
     if (pendingTranslationRef.current.has(key)) {
       return;
     }
@@ -2361,7 +2356,7 @@ export default function App() {
           setTranslationCache((current) => ({ ...current, [key]: normalized, [legacyKey]: normalized }));
           return;
         }
-        if (containsHangul(lineSnapshot.text)) {
+        if (!shouldAutoTranslateLine(lineSnapshot.text)) {
           return;
         }
         if (!autoTranslationEnabled) {

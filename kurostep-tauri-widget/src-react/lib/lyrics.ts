@@ -69,6 +69,10 @@ export function translationStatusLabel(status: string | null | undefined) {
   }
 }
 
+export function shouldAutoTranslateLine(text: string | null | undefined) {
+  return Boolean(String(text || "").trim()) && !/[\uac00-\ud7a3]/.test(String(text || ""));
+}
+
 export function chooseLineByPlaybackTime(
   lyric: Lyric | null,
   source: LyricSource | null,
