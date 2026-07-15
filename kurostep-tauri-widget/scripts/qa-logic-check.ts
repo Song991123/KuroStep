@@ -18,6 +18,7 @@ import {
   normalizeTrackDuration,
   normalizeRepeatMode,
   repeatModeLabel,
+  shouldReplayCurrentTrackOnEnded,
   youtubeTitleLooksLikeAd,
 } from "../src-react/lib/playback.ts";
 import type { Lyric, LyricSource, SelectedLine, Translation } from "../src-react/lib/api.ts";
@@ -122,6 +123,10 @@ assert.equal(getNextPlaylistIndex(3, 0, -1, true), 2, "repeat-all should wrap fr
 assert.equal(getNextPlaylistIndex(1, 0, 1, true), 0, "single-track repeat-all should stay stable");
 assert.equal(getNextPlaylistIndex(0, 0, 1, true), -1, "empty playlists should not select a ghost track");
 assert.equal(getNextPlaylistIndex(3, 10, 1, false), 2, "out-of-range current index should clamp before moving");
+assert.equal(shouldReplayCurrentTrackOnEnded("one", 5), true, "repeat-one should always replay the current track on ended");
+assert.equal(shouldReplayCurrentTrackOnEnded("all", 1), true, "repeat-all with a single-track playlist should replay instead of ending silently");
+assert.equal(shouldReplayCurrentTrackOnEnded("all", 2), false, "repeat-all with multiple tracks should advance to the next item");
+assert.equal(shouldReplayCurrentTrackOnEnded("off", 1), false, "normal mode should stop after a single track ends");
 
 const tauriConfig = JSON.parse(readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8"));
 const capability = JSON.parse(readFileSync(new URL("../src-tauri/capabilities/default.json", import.meta.url), "utf8"));
