@@ -220,6 +220,9 @@ assert.match(appCss, /\.lyrics-full-now\s*\{[\s\S]*position:\s*sticky/, "expande
 assert.match(appCss, /\.lyrics-full-list\s*\{[\s\S]*scrollbar-width:\s*thin/, "expanded full lyrics should expose a visible scroll affordance");
 assert.equal(/\.lyrics-full-list::-webkit-scrollbar\s*\{[\s\S]*display:\s*none/.test(appCss), false, "expanded full lyrics must not hide its scrollbar");
 assert.match(appSource, /aria-current=\{isActive \? "true" : undefined\}/, "active full-lyrics row should expose aria-current");
+assert.match(appSource, /fullListRef/, "expanded full lyrics should measure the scroll container before auto-following the active line");
+assert.match(appSource, /scrollIntoView\(\{ block: "nearest", behavior: "auto" \}\)/, "full lyrics should avoid smooth-scroll churn on every lyric tick");
+assert.equal(/scrollIntoView\(\{ block: "center", behavior: "smooth" \}\)/.test(appSource), false, "full lyrics must not constantly animate the list while the song plays");
 assert.match(buildInfoSource, /KUROSTEP_BUILD_COMMIT/, "React build should expose a build commit for installed-app QA");
 assert.match(appSource, /buildCommit:\s*KUROSTEP_BUILD_COMMIT/, "main view should report the React build commit to native status");
 assert.match(tauriSource, /build_commit:\s*Option<String>/, "native status should persist the React build commit");
