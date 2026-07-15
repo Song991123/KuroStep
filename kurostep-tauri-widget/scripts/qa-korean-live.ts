@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { chooseLineByPlaybackTime } from "../src-react/lib/lyrics.ts";
 
 const API_BASE_URL = process.env.KUROSTEP_QA_API_BASE_URL || "https://54-116-185-226.sslip.io";
 const TIMEOUT_MS = Number(process.env.KUROSTEP_QA_TIMEOUT_MS || 20000);
@@ -57,6 +58,12 @@ type LyricFetchResponse = {
   localCacheKey?: string;
   plainLyrics?: string;
   syncedLyrics?: string;
+};
+
+type SyncedLyricLine = {
+  index: number;
+  startTimeMs: number;
+  text: string;
 };
 
 type Translation = {
@@ -151,6 +158,36 @@ function isUsefulKoreanTranslation(sourceText: string, translatedText: string) {
   const source = sourceText.trim().toLowerCase();
   const translated = translatedText.trim().toLowerCase();
   return hasHangul(translatedText) && translated !== source && translated.length > 0;
+}
+
+function parseSyncedLyrics(raw: string): SyncedLyricLine[] {
+  return raw
+    .split(/\r?\n/)
+    .map((line, index) => {
+      const match = line.match(/^\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\](.*)$/);
+      if (!match) return null;
+      const minutes = Number(match[1]);
+      const seconds = Number(match[2]);
+      const millis = match[3] ? Number(match[3].padEnd(3, "0").slice(0, 3)) : 0;
+      const text = match[4].trim();
+      if (!Number.isFinite(minutes) || !Number.isFinite(seconds) || !text) return null;
+      return {
+        index,
+        startTimeMs: minutes * 60_000 + seconds * 1000 + millis,
+        text,
+      };
+    })
+    .filter((line): line is SyncedLyricLine => Boolean(line));
+}
+
+function assertStrictlySortedTimedLines(title: string, lines: Array<{ startTimeMs?: number | null }>) {
+  let previous = -1;
+  for (const [index, line] of lines.entries()) {
+    assert.equal(typeof line.startTimeMs, "number", `${title} line ${index} must include a numeric start time`);
+    const current = Number(line.startTimeMs);
+    assert.ok(current >= previous, `${title} lyric timestamps must be sorted: ${previous} -> ${current}`);
+    previous = current;
+  }
 }
 
 async function main() {
@@ -317,13 +354,33 @@ async function main() {
       auth,
     );
     const lines = fetched.lyric?.lines || [];
+    const sourceLines = parseSyncedLyrics(fetched.syncedLyrics || "");
     assert.ok(fetched.lyric, `${track.title} must return a lyric entity`);
     assert.equal(fetched.lyric?.synced, true, `${track.title} must return synced lyrics`);
     assert.ok(lines.length >= 3, `${track.title} must create multiple lyric line refs`);
+    assert.ok(sourceLines.length >= 3, `${track.title} must parse multiple synced lyric text lines`);
+    assert.ok(
+      Math.abs(sourceLines.length - lines.length) <= 1,
+      `${track.title} synced text lines and saved refs should stay aligned`,
+    );
     assert.ok((fetched.syncedLyrics || "").length > 20, `${track.title} must include synced lyric text`);
     assert.ok(
       lines.some((line) => typeof line.startTimeMs === "number" && line.startTimeMs >= 0),
       `${track.title} must include timed line refs`,
+    );
+    assertStrictlySortedTimedLines(track.title, lines);
+    assertStrictlySortedTimedLines(`${track.title} source`, sourceLines);
+
+    const middleSourceLine = sourceLines[Math.floor(sourceLines.length / 2)];
+    const selectedMiddleLine = chooseLineByPlaybackTime(
+      { id: fetched.lyric!.id, trackId: track.id, synced: true, lines },
+      { source: "LRCLIB", synced: true, lines: sourceLines },
+      middleSourceLine.startTimeMs / 1000,
+    );
+    assert.equal(
+      selectedMiddleLine?.text,
+      middleSourceLine.text,
+      `${track.title} synced lookup should select the lyric line for the current playback time`,
     );
 
     firstLineRef ||= lines.find((line) => typeof line.id === "number") || null;
@@ -333,6 +390,8 @@ async function main() {
       synced: Boolean(fetched.lyric?.synced),
       firstStartTimeMs: lines[0]?.startTimeMs ?? null,
       syncedLyricsLength: (fetched.syncedLyrics || "").length,
+      sampledLine: middleSourceLine.text,
+      sampledStartTimeMs: middleSourceLine.startTimeMs,
     });
   }
 
@@ -379,17 +438,12 @@ async function main() {
   ).then((translation) => ({
     ...translation,
     accepted: true,
-  })).catch((error) => ({
-    accepted: false,
-    error: String((error as Error).message || error),
   }));
 
-  if ("accepted" in autoDraft && autoDraft.accepted) {
-    assert.ok(
-      isUsefulKoreanTranslation(autoSourceText, autoDraft.translatedText),
-      `auto translation must be Korean and not source echo: ${autoDraft.translatedText}`,
-    );
-  }
+  assert.ok(
+    isUsefulKoreanTranslation(autoSourceText, autoDraft.translatedText),
+    `auto translation must be Korean and not source echo: ${autoDraft.translatedText}`,
+  );
 
   const summary = {
     ok: true,
