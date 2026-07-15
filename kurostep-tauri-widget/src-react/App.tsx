@@ -241,6 +241,10 @@ type YouTubePlayer = {
   setVolume: (volume: number) => void;
 };
 
+function youtubeTitleLooksLikeAd(title: string | null | undefined) {
+  return /\b(advertisement|sponsored|commercial)\b|광고/.test(String(title || "").toLowerCase());
+}
+
 type YouTubeApi = {
   Player: new (
     elementId: string,
@@ -1112,8 +1116,14 @@ function MusicPlayerWidget({
     const expectedDuration = displayedDurationRef.current || track?.durationSeconds || 0;
     const currentPosition = Number(currentSeconds);
     const candidateDuration = Number(seconds);
-    const activeVideoId = String(player?.getVideoData?.()?.video_id || "");
+    const videoData = player?.getVideoData?.();
+    const activeVideoId = String(videoData?.video_id || "");
+    const isVerifiedContentVideo = Boolean(activeVideoId && videoId && activeVideoId === videoId);
+    if (isVerifiedContentVideo && !youtubeTitleLooksLikeAd(videoData?.title)) {
+      return false;
+    }
     const isDifferentVideo = Boolean(activeVideoId && videoId && activeVideoId !== videoId);
+    const titleLooksLikeAd = youtubeTitleLooksLikeAd(videoData?.title);
     const isUnknownShortClipDuringKnownTrack =
       !activeVideoId &&
       expectedDuration > YOUTUBE_AD_DURATION_MAX_SECONDS &&
@@ -1124,6 +1134,7 @@ function MusicPlayerWidget({
       currentPosition >= 0 &&
       currentPosition <= YOUTUBE_AD_DURATION_MAX_SECONDS;
     const isShortPreDurationClip =
+      !activeVideoId &&
       expectedDuration <= 0 &&
       Number.isFinite(candidateDuration) &&
       candidateDuration > 0 &&
@@ -1134,7 +1145,7 @@ function MusicPlayerWidget({
       currentPosition > 0 &&
       currentPosition <= YOUTUBE_AD_DURATION_MAX_SECONDS &&
       (!Number.isFinite(candidateDuration) || candidateDuration <= 0 || candidateDuration <= YOUTUBE_AD_DURATION_MAX_SECONDS);
-    return isDifferentVideo || isUnknownShortClipDuringKnownTrack || isShortPreDurationClip || isPreDurationClockOnlyClip || isLikelyYoutubeAdDuration(seconds, expectedDuration);
+    return titleLooksLikeAd || isDifferentVideo || isUnknownShortClipDuringKnownTrack || isShortPreDurationClip || isPreDurationClockOnlyClip || isLikelyYoutubeAdDuration(seconds, expectedDuration);
   }
 
   function reportDuration(seconds: number) {
