@@ -213,6 +213,11 @@ assert.match(
   /const activeMemoTranslation = isTranslationForLine\(translation, selectedLine\) \? translation : null/,
   "memo widget must ignore stale translations from the previous lyric line",
 );
+assert.match(
+  appSource,
+  /setTranslation\(\(current\) => isTranslationForLine\(current, lineSnapshot\) \? current : null\);\s*if \(pendingTranslationRef\.current\.has\(key\)\)/,
+  "pending translation fetches must preserve the current line memo instead of blanking and flickering",
+);
 
 const requiredControlIds = [
   "window-minimize",
