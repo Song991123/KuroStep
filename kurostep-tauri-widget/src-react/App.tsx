@@ -139,34 +139,36 @@ function translationCacheKey(trackId: number | null | undefined, line: SelectedL
   return lineKey ? `${trackId || "trackless"}:${lineKey}` : "";
 }
 
-function makeLocalTranslation(line: SelectedLine, translatedText: string, memoText = ""): Translation {
+function makeLocalTranslation(line: SelectedLine, translatedText: string, memoText = "", status = "LOCAL_DRAFT"): Translation {
   return {
     lyricLineRefId: line.id || null,
     clientLineKey: lyricLineKey(line),
     languageCode: "ko",
     translatedText,
     memoText: normalizeMemoText(memoText),
-    status: "LOCAL_DRAFT",
+    status,
   };
 }
 
 function readLocalTranslationDraft(trackId: number | null | undefined, line: SelectedLine | null | undefined) {
   const key = lyricDraftKey(trackId, line);
   if (!key || !line?.text) return null;
-  const draft = readJson<{ translatedText?: string; memoText?: string } | null>(key, null);
+  const draft = readJson<{ translatedText?: string; memoText?: string; status?: string } | null>(key, null);
   if (!draft) return null;
   const translatedText = String(draft.translatedText || "");
   const memoText = normalizeMemoText(draft.memoText);
   if (!translatedText && !memoText) return null;
-  return makeLocalTranslation(line, translatedText || (containsHangul(line.text) ? line.text : ""), memoText);
+  const status = draft.status === "SAVED" ? "SAVED" : "LOCAL_DRAFT";
+  return makeLocalTranslation(line, translatedText || (containsHangul(line.text) ? line.text : ""), memoText, status);
 }
 
-function writeLocalTranslationDraft(trackId: number | null | undefined, line: SelectedLine | null | undefined, translatedText: string, memoText: string) {
+function writeLocalTranslationDraft(trackId: number | null | undefined, line: SelectedLine | null | undefined, translatedText: string, memoText: string, status = "LOCAL_DRAFT") {
   const key = lyricDraftKey(trackId, line);
   if (!key) return;
   const draft = {
     translatedText,
     memoText: normalizeMemoText(memoText),
+    status,
     savedAt: new Date().toISOString(),
   };
   writeJson(key, draft);
@@ -209,7 +211,7 @@ function isTranslationForLine(translation: Translation | null | undefined, line:
 function translationStatusLabel(status: string | null | undefined) {
   switch (status) {
     case "AUTO_DRAFT":
-      return "자동 초안";
+      return "";
     case "LOCAL_DRAFT":
       return "작성 중";
     case "SAVED":
@@ -1644,6 +1646,7 @@ function LyricMemoWidget({
   const [translatedText, setTranslatedText] = useState("");
   const [memoText, setMemoText] = useState("");
   const lineKey = lyricLineKey(selectedLine);
+  const statusLabel = translationStatusLabel(translation?.status);
   const draftDirtyRef = useRef(false);
 
   useEffect(() => {
@@ -1689,7 +1692,7 @@ function LyricMemoWidget({
           <div className="memo-actions">
             <button className="action-button primary compact" id="save-memo" type="button" onClick={() => onSaveMemo(translatedText, memoText)}>메모 저장</button>
             <button className="action-button compact danger" id="delete-memo" type="button" onClick={deleteMemo}>메모 삭제</button>
-            <span className="memo-save-state" id="memo-save-state">{translationStatusLabel(translation?.status)}</span>
+            <span className={`memo-save-state${statusLabel ? "" : " empty"}`} id="memo-save-state" aria-live="polite">{statusLabel}</span>
           </div>
         </>
       ) : <p className="state-message">곡을 재생하면 현재 가사와 한국어 메모를 만질 수 있다냥.</p>}
@@ -3060,10 +3063,15 @@ export default function App() {
           memoText: normalizeMemoText(memoText),
         }),
       }, auth);
-      const normalized = { ...saved, clientLineKey: lyricLineKey(line), memoText: normalizeMemoText(saved.memoText) };
+      const normalized = {
+        ...saved,
+        status: "SAVED",
+        clientLineKey: lyricLineKey(line),
+        memoText: normalizeMemoText(saved.memoText),
+      };
       setTranslation(normalized);
       setTranslationCache((current) => ({ ...current, [cacheKey]: normalized, [legacyKey]: normalized }));
-      writeLocalTranslationDraft(workspaceRef.current.currentTrack?.id, line, normalized.translatedText, normalized.memoText || "");
+      writeLocalTranslationDraft(workspaceRef.current.currentTrack?.id, line, normalized.translatedText, normalized.memoText || "", "SAVED");
       if (showNotice) {
         setNotice({ kind: "notice", message: "번역 메모를 서버에 콕 저장했다냥." });
       }
