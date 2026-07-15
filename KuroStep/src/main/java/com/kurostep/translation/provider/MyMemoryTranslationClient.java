@@ -7,6 +7,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -66,12 +67,10 @@ public class MyMemoryTranslationClient implements TranslationProviderClient {
             }
 
             JsonNode root = objectMapper.readTree(response.body());
-            for (String candidate : translationCandidates(root)) {
-                if (isUsefulTranslation(candidate, sourceText, targetLanguageCode)) {
-                    return Optional.of(candidate.trim());
-                }
-            }
-            return Optional.empty();
+            return translationCandidates(root, sourceText).stream()
+                    .filter(candidate -> isUsefulTranslation(candidate.text(), sourceText, targetLanguageCode))
+                    .max(Comparator.comparingDouble(candidate -> scoreCandidate(candidate, sourceText)))
+                    .map(candidate -> candidate.text().trim());
         } catch (IOException | InterruptedException | IllegalArgumentException e) {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
@@ -81,12 +80,12 @@ public class MyMemoryTranslationClient implements TranslationProviderClient {
         }
     }
 
-    private List<String> translationCandidates(JsonNode root) {
-        List<String> candidates = new ArrayList<>();
+    private List<TranslationCandidate> translationCandidates(JsonNode root, String sourceText) {
+        List<TranslationCandidate> candidates = new ArrayList<>();
         JsonNode responseData = root == null ? null : root.get("responseData");
         JsonNode translatedText = responseData == null ? null : responseData.get("translatedText");
         if (translatedText != null && !translatedText.isNull()) {
-            candidates.add(translatedText.asString());
+            candidates.add(new TranslationCandidate(translatedText.asString(), sourceText, numberValue(responseData.get("match"), 0.0), 0.0, false));
         }
 
         JsonNode matches = root == null ? null : root.get("matches");
@@ -94,11 +93,62 @@ public class MyMemoryTranslationClient implements TranslationProviderClient {
             for (JsonNode match : matches) {
                 JsonNode translation = match.get("translation");
                 if (translation != null && !translation.isNull()) {
-                    candidates.add(translation.asString());
+                    candidates.add(new TranslationCandidate(
+                            translation.asString(),
+                            stringValue(match.get("segment")),
+                            numberValue(match.get("match"), 0.0),
+                            numberValue(match.get("quality"), 0.0),
+                            "neural".equalsIgnoreCase(stringValue(match.get("model")))
+                    ));
                 }
             }
         }
         return candidates;
+    }
+
+    private double scoreCandidate(TranslationCandidate candidate, String sourceText) {
+        String source = normalizeComparable(sourceText);
+        String segment = normalizeComparable(candidate.segment());
+        double score = candidate.match() * 100.0 + Math.min(candidate.quality(), 100.0) * 0.25;
+        if (!segment.isBlank()) {
+            if (segment.equals(source)) {
+                score += 80.0;
+            } else if (source.contains(segment) || segment.contains(source)) {
+                score += 10.0;
+            } else {
+                score -= 15.0;
+            }
+        }
+        if (candidate.machineTranslated()) {
+            score += 20.0;
+        }
+        return score;
+    }
+
+    private String normalizeComparable(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value
+                .replaceAll("[^\\p{L}\\p{N}]+", " ")
+                .trim()
+                .replaceAll("\\s+", " ")
+                .toLowerCase();
+    }
+
+    private String stringValue(JsonNode node) {
+        return node == null || node.isNull() ? "" : node.asString();
+    }
+
+    private double numberValue(JsonNode node, double defaultValue) {
+        if (node == null || node.isNull()) {
+            return defaultValue;
+        }
+        try {
+            return Double.parseDouble(node.asString());
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
     }
 
     private boolean isUsefulTranslation(String value, String sourceText, String targetLanguageCode) {
@@ -123,5 +173,14 @@ public class MyMemoryTranslationClient implements TranslationProviderClient {
             return defaultValue;
         }
         return value.trim().toLowerCase();
+    }
+
+    private record TranslationCandidate(
+            String text,
+            String segment,
+            double match,
+            double quality,
+            boolean machineTranslated
+    ) {
     }
 }

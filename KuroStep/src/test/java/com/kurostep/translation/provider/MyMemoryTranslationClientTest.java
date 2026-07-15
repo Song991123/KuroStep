@@ -57,6 +57,23 @@ class MyMemoryTranslationClientTest {
     }
 
     @Test
+    void translatePrefersExactMachineCandidateOverMisleadingPartialResponse() throws Exception {
+        MyMemoryTranslationClient client = clientWithResponse("""
+                {
+                  "responseData": {"translatedText": "필수", "match": 0.86},
+                  "matches": [
+                    {"segment": "You should", "translation": "필수", "quality": "74", "match": 0.86},
+                    {"segment": "You should come", "translation": "오셔야 합니다", "quality": 70, "match": 0.85, "model": "neural"}
+                  ]
+                }
+                """);
+
+        TranslationProviderResult result = client.translate("You should come", "en", "ko");
+
+        assertThat(result.translatedText()).isEqualTo("오셔야 합니다");
+    }
+
+    @Test
     void translateRejectsSourceTextAndNonHangulNoiseForKoreanDraft() throws Exception {
         MyMemoryTranslationClient client = clientWithResponse("""
                 {
