@@ -25,6 +25,17 @@ import {
   type Translation,
   type YouTubePlaylistPreview,
 } from "./lib/api";
+import {
+  LYRIC_SYNC_LOOKAHEAD_MS,
+  chooseLineByPlaybackTime,
+  clampLyricSyncOffset,
+  isLikelyYoutubeAdDuration,
+  isSameLyricLine,
+  isTranslationForLine,
+  lyricLineKey,
+  normalizeMemoText,
+  translationFingerprint,
+} from "./lib/lyrics";
 import { extractYoutubeId, extractYoutubePlaylistId, fetchYoutubeMetadata } from "./lib/youtube";
 
 const query = new URLSearchParams(window.location.search);
@@ -37,10 +48,8 @@ const isTauriApp =
   window.location.protocol === "tauri:" ||
   window.location.hostname === "tauri.localhost";
 const PLAYBACK_TICK_MS = 500;
-const LYRIC_SYNC_LOOKAHEAD_MS = 350;
 const LYRIC_SYNC_FINE_STEP_MS = 500;
 const LYRIC_SYNC_COARSE_STEP_MS = 5000;
-const MAX_LYRIC_SYNC_OFFSET_MS = 30000;
 const REPEAT_MODES = ["off", "all", "one"] as const;
 const MAX_YOUTUBE_RECOVERY_ATTEMPTS = 2;
 const LONG_FORM_TRACK_SECONDS = 12 * 60;
@@ -113,29 +122,10 @@ function containsHangul(text: string) {
   return /[가-힣]/.test(text);
 }
 
-function normalizeMemoText(text: string | null | undefined) {
-  const value = String(text || "");
-  if (value.trim() === "작업 중 떠오른 번역 느낌을 살짝 적어둘게냥.") {
-    return "";
-  }
-  return value;
-}
-
 function lyricDraftKey(trackId: number | null | undefined, line: SelectedLine | null | undefined) {
   if (!line?.text) return "";
   const lineKey = lyricLineKey(line);
   return lineKey ? `kurostep.translationDraft.${trackId || "trackless"}.${lineKey}` : "";
-}
-
-function lyricLineKey(line: SelectedLine | null | undefined) {
-  if (!line?.text) return "";
-  if (line.id != null) return `id-${line.id}`;
-  return `idx-${line.lineIndex}-${line.startTimeMs ?? "na"}-${line.text}`;
-}
-
-function isSameLyricLine(left: SelectedLine | null | undefined, right: SelectedLine | null | undefined) {
-  const leftKey = lyricLineKey(left);
-  return Boolean(leftKey && leftKey === lyricLineKey(right));
 }
 
 function translationCacheKey(trackId: number | null | undefined, line: SelectedLine | null | undefined) {
@@ -185,31 +175,10 @@ function removeLocalTranslationDraft(trackId: number | null | undefined, line: S
   }
 }
 
-function clampLyricSyncOffset(value: number) {
-  return Math.min(Math.max(Math.round(Number(value) || 0), -MAX_LYRIC_SYNC_OFFSET_MS), MAX_LYRIC_SYNC_OFFSET_MS);
-}
-
 function formatLyricSyncOffset(value: number) {
   if (!value) return "기본";
   const seconds = (Math.abs(value) / 1000).toFixed(1).replace(/\.0$/, "");
   return value > 0 ? `앞당김 ${seconds}초` : `늦춤 ${seconds}초`;
-}
-
-function isTranslationForLine(translation: Translation | null | undefined, line: SelectedLine | null | undefined) {
-  if (!translation || !line?.text) return false;
-  if (translation.clientLineKey) {
-    return translation.clientLineKey === lyricLineKey(line);
-  }
-  if (translation.lyricLineRefId != null && line.id != null) {
-    return Number(translation.lyricLineRefId) === Number(line.id);
-  }
-  if (translation.status === "LOCAL_DRAFT") {
-    if (translation.lyricLineRefId != null && line.id != null) {
-      return Number(translation.lyricLineRefId) === Number(line.id);
-    }
-    return line.id == null && translation.translatedText === line.text;
-  }
-  return false;
 }
 
 function translationStatusLabel(status: string | null | undefined) {
@@ -227,18 +196,6 @@ function translationStatusLabel(status: string | null | undefined) {
 
 function hasVisibleTranslation(translation: Translation | null | undefined) {
   return Boolean(translation?.translatedText?.trim());
-}
-
-function translationFingerprint(translation: Translation | null | undefined) {
-  if (!translation) return "";
-  return [
-    translation.id || "",
-    translation.clientLineKey || "",
-    translation.lyricLineRefId || "",
-    translation.status || "",
-    translation.translatedText || "",
-    normalizeMemoText(translation.memoText),
-  ].join("|");
 }
 
 type YouTubePlayer = {
@@ -468,64 +425,6 @@ function hasUsefulLyricSource(source: LyricSource | null | undefined) {
   return Boolean(source?.lines?.some((line) => line.text?.trim() && !isInstrumentalLyricMarker(line.text)));
 }
 
-function chooseLineByPlaybackTime(lyric: Lyric | null, source: LyricSource | null, positionSeconds: number, syncOffsetMs = 0): SelectedLine | null {
-  const refs = lyric?.lines || [];
-  const sourceLines = source?.lines || [];
-  if (!refs.length && !sourceLines.length) return null;
-
-  const positionMs = positionSeconds * 1000 + LYRIC_SYNC_LOOKAHEAD_MS + syncOffsetMs;
-  const timedRefs = refs
-    .filter((line) => Number.isFinite(line.startTimeMs))
-    .sort((left, right) => Number(left.startTimeMs) - Number(right.startTimeMs));
-  const timedSourceLines = sourceLines
-    .filter((line) => Number.isFinite(line.startTimeMs))
-    .sort((left, right) => Number(left.startTimeMs) - Number(right.startTimeMs));
-  if (!timedRefs.length && !timedSourceLines.length) {
-    const fallbackSourceLine = sourceLines[0];
-    const fallbackRef = refs[0];
-    if (!fallbackSourceLine && !fallbackRef) return null;
-    return {
-      id: fallbackRef?.id || null,
-      lineIndex: fallbackRef?.lineIndex ?? fallbackSourceLine?.index ?? 0,
-      startTimeMs: fallbackRef?.startTimeMs ?? fallbackSourceLine?.startTimeMs ?? null,
-      text: fallbackSourceLine?.text || "",
-    };
-  }
-  const firstTimedLine = timedSourceLines[0] || timedRefs[0];
-  if (firstTimedLine && positionMs < Number(firstTimedLine.startTimeMs) - 150) {
-    return null;
-  }
-  const sourceLine =
-    timedSourceLines
-      .filter((line) => Number(line.startTimeMs) <= positionMs)
-      .sort((left, right) => Number(right.startTimeMs) - Number(left.startTimeMs))[0] ||
-    null;
-
-  if (sourceLine) {
-    const ref = timedRefs.find((line) => Math.abs(Number(line.startTimeMs) - Number(sourceLine.startTimeMs)) <= 50);
-    return {
-      id: ref?.id || null,
-      lineIndex: sourceLine.index,
-      startTimeMs: sourceLine.startTimeMs,
-      text: sourceLine.text || "",
-    };
-  }
-
-  const ref =
-    timedRefs
-      .filter((line) => Number(line.startTimeMs) <= positionMs)
-      .sort((left, right) => Number(right.startTimeMs) - Number(left.startTimeMs))[0] ||
-    null;
-  if (!ref) return null;
-  const fallbackSourceLine = sourceLines.find((line) => line.index === ref?.lineIndex) || sourceLines[0];
-  return {
-    id: ref?.id || null,
-    lineIndex: ref?.lineIndex ?? fallbackSourceLine?.index ?? 0,
-    startTimeMs: ref?.startTimeMs ?? fallbackSourceLine?.startTimeMs ?? null,
-    text: fallbackSourceLine?.text || "",
-  };
-}
-
 function statusLabel(status: TaskStatus) {
   return {
     TODO: "할 일",
@@ -572,17 +471,6 @@ function getIntroClockGuardSeconds(source: LyricSource | null) {
     return 0;
   }
   return Math.max(0, Math.min(Number(firstVocalLine.startTimeMs) / 1000 - 0.4, 3));
-}
-
-function isLikelyYoutubeAdDuration(seconds: number, expectedSeconds = 0) {
-  const nextDuration = Number(seconds);
-  const expectedDuration = Number(expectedSeconds);
-  if (!Number.isFinite(nextDuration) || !Number.isFinite(expectedDuration)) return false;
-  if (nextDuration <= 0 || expectedDuration < 60) return false;
-  if (nextDuration <= YOUTUBE_AD_DURATION_MAX_SECONDS && expectedDuration - nextDuration > 20) {
-    return true;
-  }
-  return nextDuration < expectedDuration * 0.55;
 }
 
 function normalizeRepeatMode(mode: string | null | undefined): RepeatMode {
