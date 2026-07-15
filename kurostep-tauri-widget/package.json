@@ -9,6 +9,7 @@
     "tauri": "tauri",
     "dev:react": "vite --host 127.0.0.1",
     "build:react": "vite build",
+    "build:desktop-assets": "KUROSTEP_DESKTOP_BUILD=1 vite build && rm -rf dist-react/assets-local && cp src/lyrics.html src/lyrics.css src/lyrics.js dist-react/ && cp -R src/assets dist-react/assets-local",
     "qa:logic": "node --experimental-strip-types scripts/qa-logic-check.ts",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"

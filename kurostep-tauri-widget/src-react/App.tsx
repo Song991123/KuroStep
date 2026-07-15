@@ -48,10 +48,16 @@ import {
 } from "./lib/playback";
 import { extractYoutubeId, extractYoutubePlaylistId, fetchYoutubeMetadata } from "./lib/youtube";
 
-const query = new URLSearchParams(window.location.search);
-const isEmbeddedContent = query.get("embedded") === "1";
-const shellView = query.get("view") || "main";
-const isTauriShellContent = query.get("shell") === "tauri";
+const hashQuery = window.location.hash.startsWith("#?")
+  ? new URLSearchParams(window.location.hash.slice(2))
+  : new URLSearchParams();
+const searchQuery = new URLSearchParams(window.location.search);
+function routeParam(name: string) {
+  return searchQuery.get(name) || hashQuery.get(name);
+}
+const isEmbeddedContent = routeParam("embedded") === "1";
+const shellView = routeParam("view") || "main";
+const isTauriShellContent = routeParam("shell") === "tauri";
 const isTauriEmbeddedContent = isEmbeddedContent && isTauriShellContent;
 const isTauriApp =
   Boolean((window as Window & { __TAURI__?: unknown }).__TAURI__) ||

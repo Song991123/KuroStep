@@ -2,9 +2,10 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 const assetVersion = "v037";
+const isDesktopBuild = process.env.KUROSTEP_DESKTOP_BUILD === "1";
 
 export default defineConfig({
-  base: "/KuroStep/",
+  base: isDesktopBuild ? "./" : "/KuroStep/",
   plugins: [react()],
   build: {
     outDir: "dist-react",

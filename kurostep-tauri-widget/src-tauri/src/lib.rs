@@ -30,9 +30,6 @@ struct LyricContextState {
     current: Mutex<String>,
 }
 
-const DEPLOYED_WIDGET_URL: &str = "https://song991123.github.io/KuroStep/";
-const CONTENT_CACHE_VERSION: &str = "20260716-v066";
-
 #[tauri::command]
 fn set_lyrics_visible(
     app: tauri::AppHandle,
@@ -75,6 +72,7 @@ fn set_lyrics_visible(
     let is_visible = lyrics.is_visible().map_err(|error| error.to_string())?;
 
     if visible && !is_visible {
+        let _ = lyrics.set_visible_on_all_workspaces(true);
         lyrics.show().map_err(|error| error.to_string())?;
         restore_window_position(&app, &lyrics, "lyrics", width, height);
         restore_window_position_after_show(app.clone(), "lyrics", width, height);
@@ -164,6 +162,7 @@ fn set_paw_visible(
     }
 
     if visible && !is_visible {
+        let _ = paw.set_visible_on_all_workspaces(true);
         paw.show().map_err(|error| error.to_string())?;
         restore_window_position(&app, &paw, "paw", 380.0, 520.0);
         restore_window_position_after_show(app.clone(), "paw", 380.0, 520.0);
@@ -238,25 +237,43 @@ fn get_or_create_paw_window(app: &tauri::AppHandle) -> Result<WebviewWindow, Str
         return Ok(paw);
     }
 
-    let paw_url: tauri::Url = format!(
-        "{DEPLOYED_WIDGET_URL}?view=paw&shell=tauri&v={CONTENT_CACHE_VERSION}"
-    )
-    .parse::<tauri::Url>()
-    .map_err(|error| error.to_string())?;
-
-    WebviewWindowBuilder::new(app, "paw", WebviewUrl::External(paw_url))
+    WebviewWindowBuilder::new(app, "paw", WebviewUrl::App("index.html#?view=paw&shell=tauri".into()))
         .title("KuroStep Paw Notes")
         .inner_size(380.0, 520.0)
         .min_inner_size(360.0, 440.0)
         .resizable(false)
         .decorations(false)
-        .transparent(true)
+        .transparent(false)
         .always_on_top(true)
         .skip_taskbar(true)
+        .visible_on_all_workspaces(true)
         .center()
         .shadow(false)
         .devtools(false)
         .visible(false)
+        .build()
+        .map_err(|error| error.to_string())
+}
+
+fn get_or_create_main_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
+    if let Some(main) = app.get_webview_window("main") {
+        return Ok(main);
+    }
+
+    WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+        .title("KuroStep")
+        .inner_size(380.0, 720.0)
+        .min_inner_size(360.0, 660.0)
+        .resizable(false)
+        .decorations(false)
+        .transparent(false)
+        .always_on_top(true)
+        .skip_taskbar(false)
+        .visible_on_all_workspaces(true)
+        .center()
+        .shadow(false)
+        .devtools(false)
+        .visible(true)
         .build()
         .map_err(|error| error.to_string())
 }
@@ -266,6 +283,27 @@ fn refocus_main_window(app: &tauri::AppHandle) {
         let _ = main.show();
         let _ = main.set_focus();
     }
+}
+
+fn ensure_main_window_after_launch(app: tauri::AppHandle) {
+    thread::spawn(move || {
+        for attempt in 0..10 {
+            thread::sleep(Duration::from_millis(250));
+            let Ok(main) = get_or_create_main_window(&app) else {
+                continue;
+            };
+            let _ = main.set_size(Size::Logical(LogicalSize {
+                width: 380.0,
+                height: 720.0,
+            }));
+            restore_window_position(&app, &main, "main", 380.0, 720.0);
+            let _ = main.set_visible_on_all_workspaces(true);
+            let _ = main.show();
+            if attempt == 0 {
+                let _ = main.set_focus();
+            }
+        }
+    });
 }
 
 #[tauri::command]
@@ -694,16 +732,21 @@ pub fn run() {
     tauri::Builder::default()
         .manage(LyricContextState::default())
         .setup(|app| {
+            let app_handle = app.handle().clone();
+            if let Ok(main) = get_or_create_main_window(&app_handle) {
+                let _ = main.show();
+                let _ = main.set_visible_on_all_workspaces(true);
+                restore_window_position(&app_handle, &main, "main", 380.0, 720.0);
+                let _ = main.set_focus();
+            }
             if let Some(paw) = app.get_webview_window("paw") {
                 let _ = paw.hide();
             }
             if let Some(lyrics) = app.get_webview_window("lyrics") {
                 let _ = lyrics.hide();
             }
-            if let Some(main) = app.get_webview_window("main") {
-                restore_window_position(app.handle(), &main, "main", 380.0, 720.0);
-            }
-            reconcile_child_window_positions_after_launch(app.handle().clone());
+            ensure_main_window_after_launch(app_handle.clone());
+            reconcile_child_window_positions_after_launch(app_handle);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
