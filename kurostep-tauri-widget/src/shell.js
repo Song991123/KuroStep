@@ -54,7 +54,7 @@ function syncShellAuthToContent() {
       lyricsVisible: readShellFlag("kurostep.lyricsOverlayVisible", true),
       autoTranslationEnabled: readShellFlag("kurostep.autoTranslationEnabled", true),
     },
-    trustedContentOrigin,
+    "*",
   );
   return true;
 }

@@ -4,7 +4,7 @@
   "description": "Default permissions for the KuroStep desktop widget",
   "windows": ["main", "lyrics", "paw"],
   "remote": {
-    "urls": ["https://song991123.github.io/KuroStep/", "https://song991123.github.io/KuroStep/lyrics.html", "https://song991123.github.io/KuroStep/paw.html"]
+    "urls": ["https://song991123.github.io/KuroStep/", "https://song991123.github.io/KuroStep/*"]
   },
   "permissions": [
     "core:default",
