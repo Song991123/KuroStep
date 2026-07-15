@@ -6,6 +6,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,12 +46,12 @@ public class MyMemoryTranslationClient implements TranslationProviderClient {
                 .encode()
                 .toUriString();
 
-        String translatedText = fetchTranslatedText(uri).orElse(sourceText);
+        String translatedText = fetchTranslatedText(uri, sourceText, target).orElse(sourceText);
 
         return new TranslationProviderResult(translatedText, TranslationProviderType.MYMEMORY);
     }
 
-    private Optional<String> fetchTranslatedText(String uri) {
+    private Optional<String> fetchTranslatedText(String uri, String sourceText, String targetLanguageCode) {
         try {
             HttpRequest request = HttpRequest.newBuilder(URI.create(uri))
                     .header("User-Agent", "KuroStep/0.0.1")
@@ -63,17 +65,12 @@ public class MyMemoryTranslationClient implements TranslationProviderClient {
             }
 
             JsonNode root = objectMapper.readTree(response.body());
-            JsonNode responseData = root == null ? null : root.get("responseData");
-            JsonNode translatedText = responseData == null ? null : responseData.get("translatedText");
-            if (translatedText == null || translatedText.isNull()) {
-                return Optional.empty();
+            for (String candidate : translationCandidates(root)) {
+                if (isUsefulTranslation(candidate, sourceText, targetLanguageCode)) {
+                    return Optional.of(candidate.trim());
+                }
             }
-
-            String value = translatedText.asString();
-            if (value == null || value.isBlank() || value.startsWith("INVALID LANGUAGE PAIR")) {
-                return Optional.empty();
-            }
-            return Optional.of(value);
+            return Optional.empty();
         } catch (IOException | InterruptedException | IllegalArgumentException e) {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
@@ -81,6 +78,43 @@ public class MyMemoryTranslationClient implements TranslationProviderClient {
             log.warn("MyMemory request failed. uri={}", uri, e);
             return Optional.empty();
         }
+    }
+
+    private List<String> translationCandidates(JsonNode root) {
+        List<String> candidates = new ArrayList<>();
+        JsonNode responseData = root == null ? null : root.get("responseData");
+        JsonNode translatedText = responseData == null ? null : responseData.get("translatedText");
+        if (translatedText != null && !translatedText.isNull()) {
+            candidates.add(translatedText.asString());
+        }
+
+        JsonNode matches = root == null ? null : root.get("matches");
+        if (matches != null && matches.isArray()) {
+            for (JsonNode match : matches) {
+                JsonNode translation = match.get("translation");
+                if (translation != null && !translation.isNull()) {
+                    candidates.add(translation.asString());
+                }
+            }
+        }
+        return candidates;
+    }
+
+    private boolean isUsefulTranslation(String value, String sourceText, String targetLanguageCode) {
+        if (value == null || value.isBlank() || value.startsWith("INVALID LANGUAGE PAIR")) {
+            return false;
+        }
+        if (value.trim().equalsIgnoreCase(sourceText == null ? "" : sourceText.trim())) {
+            return false;
+        }
+        if ("ko".equalsIgnoreCase(targetLanguageCode) && !containsHangul(value)) {
+            return false;
+        }
+        return true;
+    }
+
+    private boolean containsHangul(String value) {
+        return value != null && value.codePoints().anyMatch(codePoint -> codePoint >= 0xAC00 && codePoint <= 0xD7A3);
     }
 
     private String normalize(String value, String defaultValue) {

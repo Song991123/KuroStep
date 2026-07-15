@@ -6,6 +6,7 @@ import {
   isSameLyricLine,
   isTranslationForLine,
   lyricLineKey,
+  translationStatusLabel,
   translationFingerprint,
 } from "../src-react/lib/lyrics.ts";
 import {
@@ -59,6 +60,10 @@ const savedTranslation: Translation = {
 };
 assert.equal(isTranslationForLine(savedTranslation, line), true);
 assert.notEqual(translationFingerprint(savedTranslation), translationFingerprint({ ...savedTranslation, translatedText: "녹색, 녹색" }));
+assert.equal(translationStatusLabel("LOCAL_DRAFT"), "작성 중");
+assert.equal(translationStatusLabel("EDITED"), "저장됨", "server-edited memo should not look empty after saving");
+assert.equal(translationStatusLabel("SAVED"), "저장됨", "local saved memo should keep a stable saved label");
+assert.equal(translationStatusLabel("AUTO_DRAFT"), "");
 
 assert.equal(normalizeRepeatMode("bad-value"), "off");
 assert.equal(nextRepeatMode("off"), "all");

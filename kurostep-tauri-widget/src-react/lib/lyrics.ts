@@ -55,6 +55,20 @@ export function translationFingerprint(translation: Translation | null | undefin
   ].join("|");
 }
 
+export function translationStatusLabel(status: string | null | undefined) {
+  switch (status) {
+    case "AUTO_DRAFT":
+      return "";
+    case "LOCAL_DRAFT":
+      return "작성 중";
+    case "EDITED":
+    case "SAVED":
+      return "저장됨";
+    default:
+      return "";
+  }
+}
+
 export function chooseLineByPlaybackTime(
   lyric: Lyric | null,
   source: LyricSource | null,

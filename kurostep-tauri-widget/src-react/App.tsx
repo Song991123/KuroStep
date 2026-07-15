@@ -34,6 +34,7 @@ import {
   isTranslationForLine,
   lyricLineKey,
   normalizeMemoText,
+  translationStatusLabel,
   translationFingerprint,
 } from "./lib/lyrics";
 import {
@@ -184,19 +185,6 @@ function formatLyricSyncOffset(value: number) {
   if (!value) return "기본";
   const seconds = (Math.abs(value) / 1000).toFixed(1).replace(/\.0$/, "");
   return value > 0 ? `앞당김 ${seconds}초` : `늦춤 ${seconds}초`;
-}
-
-function translationStatusLabel(status: string | null | undefined) {
-  switch (status) {
-    case "AUTO_DRAFT":
-      return "";
-    case "LOCAL_DRAFT":
-      return "작성 중";
-    case "SAVED":
-      return "저장됨";
-    default:
-      return "";
-  }
 }
 
 function hasVisibleTranslation(translation: Translation | null | undefined) {
