@@ -160,7 +160,7 @@ function readLocalTranslationDraft(trackId: number | null | undefined, line: Sel
   const memoText = normalizeMemoText(draft.memoText);
   if (!translatedText && !memoText) return null;
   const status = draft.status === "SAVED" ? "SAVED" : "LOCAL_DRAFT";
-  return makeLocalTranslation(line, translatedText || (containsHangul(line.text) ? line.text : ""), memoText, status);
+  return makeLocalTranslation(line, translatedText, memoText, status);
 }
 
 function writeLocalTranslationDraft(trackId: number | null | undefined, line: SelectedLine | null | undefined, translatedText: string, memoText: string, status = "LOCAL_DRAFT") {
@@ -1556,7 +1556,7 @@ function LyricMemoWidget({
   const memoFocusedRef = useRef(false);
 
   useEffect(() => {
-    setTranslatedText(translation?.translatedText || (selectedLine?.text && containsHangul(selectedLine.text) ? selectedLine.text : ""));
+    setTranslatedText(translation?.translatedText || "");
     setMemoText(normalizeMemoText(translation?.memoText));
     draftDirtyRef.current = false;
   }, [lineKey, selectedLine?.text]);
@@ -1565,7 +1565,7 @@ function LyricMemoWidget({
     if (draftDirtyRef.current) return;
     if (memoFocusedRef.current) return;
     if (!translation) return;
-    setTranslatedText(translation?.translatedText || (selectedLine?.text && containsHangul(selectedLine.text) ? selectedLine.text : ""));
+    setTranslatedText(translation?.translatedText || "");
     setMemoText(normalizeMemoText(translation?.memoText));
   }, [translation?.id, translation?.translatedText, translation?.memoText, lineKey, selectedLine?.text]);
 
@@ -1583,7 +1583,7 @@ function LyricMemoWidget({
 
   function deleteMemo() {
     draftDirtyRef.current = false;
-    setTranslatedText(selectedLine?.text && containsHangul(selectedLine.text) ? selectedLine.text : "");
+    setTranslatedText("");
     setMemoText("");
     onDeleteMemo();
   }
@@ -3056,18 +3056,20 @@ export default function App() {
     const showNotice = options.showNotice ?? true;
     const cacheKey = translationCacheKey(workspaceRef.current.currentTrack?.id, line);
     const legacyKey = line.id != null ? String(line.id) : cacheKey;
+    const translationTextForSave = translatedText.trim();
     const localTranslation = makeLocalTranslation(
       line,
-      translatedText || (containsHangul(line.text) ? line.text : ""),
+      translationTextForSave,
       memoText,
+      "SAVED",
     );
-    writeLocalTranslationDraft(workspaceRef.current.currentTrack?.id, line, localTranslation.translatedText, localTranslation.memoText || "");
+    writeLocalTranslationDraft(workspaceRef.current.currentTrack?.id, line, localTranslation.translatedText, localTranslation.memoText || "", "SAVED");
     window.localStorage.setItem("kurostep.translationMemo", normalizeMemoText(memoText));
-    if (!auth?.userId || !line.id) {
+    if (!translationTextForSave || !auth?.userId || !line.id) {
       setTranslation(localTranslation);
       setTranslationCache((current) => ({ ...current, [cacheKey]: localTranslation, [legacyKey]: localTranslation }));
       if (showNotice) {
-        setNotice({ kind: "notice", message: "서버 줄 번호가 없어 로컬에 먼저 저장했다냥." });
+        setNotice({ kind: "notice", message: translationTextForSave ? "서버 줄 번호가 없어 로컬에 먼저 저장했다냥." : "번역문 없이 작업 메모만 이 기기에 저장했다냥." });
       }
       return localTranslation;
     }
@@ -3076,7 +3078,7 @@ export default function App() {
         method: "POST",
         body: JSON.stringify({
           languageCode: "ko",
-          translatedText: translatedText || line.text,
+          translatedText: translationTextForSave,
           memoText: normalizeMemoText(memoText),
         }),
       }, auth);
@@ -3120,7 +3122,7 @@ export default function App() {
     }
     const normalized = makeLocalTranslation(
       selectedLine,
-      translatedText || (containsHangul(selectedLine.text) ? selectedLine.text : ""),
+      translatedText,
       memoText,
     );
     writeLocalTranslationDraft(workspace.currentTrack?.id, selectedLine, normalized.translatedText, normalized.memoText || "");
@@ -3177,9 +3179,8 @@ export default function App() {
     const activeTranslation = isTranslationForLine(translation, selectedLine) ? translation : null;
     const memoFallback = normalizeMemoText(activeTranslation?.memoText) || normalizeMemoText(window.localStorage.getItem("kurostep.translationMemo")) || "저장한 가사 조각";
     const translatedDraft = activeTranslation?.translatedText || "";
-    const serverTranslatedText = translatedDraft || selectedLine.text;
-    const savedTranslation = selectedLine.id && auth?.userId
-      ? await saveMemoForLine(selectedLine, serverTranslatedText, memoFallback, { showNotice: false })
+    const savedTranslation = selectedLine.id && auth?.userId && translatedDraft.trim()
+      ? await saveMemoForLine(selectedLine, translatedDraft, memoFallback, { showNotice: false })
       : null;
     const translationForPiece = savedTranslation || activeTranslation;
 
