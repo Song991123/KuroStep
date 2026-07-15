@@ -1,6 +1,6 @@
 const DEPLOYED_BASE_URL = "https://song991123.github.io/KuroStep/";
 const DEPLOYED_ORIGIN = new URL(DEPLOYED_BASE_URL).origin;
-const CONTENT_CACHE_VERSION = "20260716-v064";
+const CONTENT_CACHE_VERSION = "20260716-v065";
 const params = new URLSearchParams(window.location.search);
 const view = params.get("view") || "main";
 const shellWindow = document.querySelector("#shell-window");
@@ -148,7 +148,9 @@ function blockDeveloperShortcut(event) {
   const key = event.key.toLowerCase();
   const isMacDevtools = event.metaKey && event.altKey && ["i", "j", "c"].includes(key);
   const isWinDevtools = event.ctrlKey && event.shiftKey && ["i", "j", "c"].includes(key);
-  if (event.key === "F12" || isMacDevtools || isWinDevtools) {
+  const isBroadInspectorShortcut =
+    (event.metaKey || event.ctrlKey) && event.shiftKey && ["i", "j", "c", "k"].includes(key);
+  if (event.key === "F12" || isMacDevtools || isWinDevtools || isBroadInspectorShortcut) {
     event.preventDefault();
     event.stopPropagation();
   }

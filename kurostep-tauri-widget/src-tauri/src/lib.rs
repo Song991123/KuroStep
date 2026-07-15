@@ -31,7 +31,7 @@ struct LyricContextState {
 }
 
 const DEPLOYED_WIDGET_URL: &str = "https://song991123.github.io/KuroStep/";
-const CONTENT_CACHE_VERSION: &str = "20260716-v064";
+const CONTENT_CACHE_VERSION: &str = "20260716-v065";
 
 #[tauri::command]
 fn set_lyrics_visible(
@@ -238,6 +238,7 @@ fn get_or_create_paw_window(app: &tauri::AppHandle) -> Result<WebviewWindow, Str
         .skip_taskbar(true)
         .center()
         .shadow(false)
+        .devtools(false)
         .visible(false)
         .build()
         .map_err(|error| error.to_string())

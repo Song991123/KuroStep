@@ -57,7 +57,9 @@ function blockDeveloperShortcut(event: KeyboardEvent) {
   const key = event.key.toLowerCase();
   const isMacDevtools = event.metaKey && event.altKey && ["i", "j", "c"].includes(key);
   const isWinDevtools = event.ctrlKey && event.shiftKey && ["i", "j", "c"].includes(key);
-  if (event.key === "F12" || isMacDevtools || isWinDevtools) {
+  const isBroadInspectorShortcut =
+    (event.metaKey || event.ctrlKey) && event.shiftKey && ["i", "j", "c", "k"].includes(key);
+  if (event.key === "F12" || isMacDevtools || isWinDevtools || isBroadInspectorShortcut) {
     event.preventDefault();
     event.stopPropagation();
   }
