@@ -122,7 +122,7 @@ fn estimate_lyrics_window_size(line: &str, translation: &str) -> (f64, f64) {
     let line_units = visual_units(line).max(10.0);
     let translation_units = visual_units(translation);
     let longest = line_units.max(translation_units);
-    let width = (longest * 20.0 + 160.0).clamp(360.0, 1480.0);
+    let width = (longest * 18.0 + 72.0).clamp(220.0, 1480.0);
     let line_rows = wrapped_overlay_rows(line_units, width).clamp(1, 2);
     let translation_rows = if translation.trim().is_empty() {
         0
@@ -144,7 +144,7 @@ fn wrapped_overlay_rows(units: f64, width: f64) -> u32 {
     if units <= 0.0 {
         return 0;
     }
-    let usable_units = ((width - 132.0) / 18.0).max(10.0);
+    let usable_units = ((width - 56.0) / 18.0).max(10.0);
     (units / usable_units).ceil().max(1.0) as u32
 }
 
@@ -1124,7 +1124,8 @@ mod tests {
             "팀이랑 부딪히러 와도 돼, 밤새 계속 움직여도 돼",
         );
 
-        assert!(short_width >= 360.0);
+        assert!(short_width >= 220.0);
+        assert!(short_width < 300.0);
         assert!(short_height >= 76.0);
         assert!(long_width > short_width);
         assert!(long_height > short_height);
