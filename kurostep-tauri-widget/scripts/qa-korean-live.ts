@@ -1,0 +1,354 @@
+import assert from "node:assert/strict";
+
+const API_BASE_URL = process.env.KUROSTEP_QA_API_BASE_URL || "https://54-116-185-226.sslip.io";
+const TIMEOUT_MS = Number(process.env.KUROSTEP_QA_TIMEOUT_MS || 20000);
+
+type AuthSession = {
+  userId: number;
+  email: string;
+  nickname?: string;
+  accessToken: string;
+};
+
+type Track = {
+  id: number;
+  title: string;
+  artist?: string;
+  sourceType: string;
+  sourceUrl?: string;
+  sourceId?: string;
+  durationSeconds?: number;
+};
+
+type CreatorTask = {
+  id: number;
+  title: string;
+  taskDate: string;
+  playlistId?: number | null;
+  currentPlaylistTrackId?: number | null;
+};
+
+type Playlist = {
+  id: number;
+  name: string;
+};
+
+type PlaylistTrack = {
+  playlistTrackId: number;
+  trackId: number;
+  title?: string;
+  artist?: string;
+  sortOrder?: number;
+};
+
+type LyricLineRef = {
+  id: number;
+  lineIndex: number;
+  startTimeMs?: number | null;
+};
+
+type LyricFetchResponse = {
+  lyric?: {
+    id: number;
+    trackId: number;
+    synced: boolean;
+    lines?: LyricLineRef[];
+  } | null;
+  localCacheKey?: string;
+  plainLyrics?: string;
+  syncedLyrics?: string;
+};
+
+type Translation = {
+  id?: number;
+  lyricLineRefId?: number | null;
+  languageCode: string;
+  translatedText: string;
+  memoText?: string;
+  status?: string;
+  provider?: string;
+};
+
+const samples = [
+  {
+    title: "LEMONADE",
+    artist: "aespa",
+    sourceUrl: "https://youtu.be/83C3TZ4Zm_o",
+    sourceId: "83C3TZ4Zm_o",
+    durationSeconds: 186,
+  },
+  {
+    title: "REDRED",
+    artist: "CORTIS",
+    sourceUrl: "https://youtu.be/U6BDbXIah-Y",
+    sourceId: "U6BDbXIah-Y",
+    durationSeconds: 180,
+  },
+];
+
+function todayIso() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+async function api<T>(path: string, options: RequestInit = {}, auth?: AuthSession): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const headers = new Headers(options.headers);
+  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (auth?.accessToken) headers.set("Authorization", `Bearer ${auth.accessToken}`);
+
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    const body = text ? safeJson(text) : null;
+    if (!response.ok) {
+      const message = typeof body === "object" && body && "message" in body
+        ? String((body as { message: unknown }).message)
+        : text || `HTTP ${response.status}`;
+      throw new Error(`${response.status} ${message}`);
+    }
+    return body as T;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function safeJson(text: string) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function hasHangul(text: string) {
+  return /[가-힣]/.test(text);
+}
+
+function isUsefulKoreanTranslation(sourceText: string, translatedText: string) {
+  const source = sourceText.trim().toLowerCase();
+  const translated = translatedText.trim().toLowerCase();
+  return hasHangul(translatedText) && translated !== source && translated.length > 0;
+}
+
+async function main() {
+  const runId = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+  const email = `codex-live-${runId}@kurostep.qa`;
+  const password = `KuroStep-${runId}`;
+  const nickname = `코덱스QA-${runId.slice(-6)}`;
+  const date = todayIso();
+
+  const auth = await api<AuthSession>("/api/auth/signup", {
+    method: "POST",
+    body: JSON.stringify({ email, password, nickname }),
+  });
+  assert.equal(typeof auth.accessToken, "string", "signup must return an access token");
+  assert.ok(auth.userId > 0, "signup must return a user id");
+
+  const me = await api<AuthSession>("/api/auth/me", {}, auth);
+  assert.equal(me.userId, auth.userId, "token must resolve to the same user");
+
+  const task = await api<CreatorTask>(`/api/tasks?userId=${auth.userId}`, {
+    method: "POST",
+    body: JSON.stringify({
+      title: "라이브 QA 작업 발자국",
+      description: "마우스 없이 API로 생성한 0.1 QA 작업",
+      taskDate: date,
+    }),
+  }, auth);
+  assert.equal(task.taskDate, date, "created task must be dated today");
+
+  const playlist = await api<Playlist>(`/api/playlists?userId=${auth.userId}`, {
+    method: "POST",
+    body: JSON.stringify({
+      name: "한국곡 라이브 QA",
+      description: "KuroStep API smoke test playlist",
+    }),
+  }, auth);
+  assert.ok(playlist.id > 0, "playlist must be created");
+
+  const tracks: Track[] = [];
+  for (const sample of samples) {
+    const track = await api<Track>("/api/tracks", {
+      method: "POST",
+      body: JSON.stringify({
+        title: sample.title,
+        artist: sample.artist,
+        sourceType: "YOUTUBE",
+        sourceUrl: sample.sourceUrl,
+        sourceId: sample.sourceId,
+        durationSeconds: sample.durationSeconds,
+      }),
+    }, auth);
+    assert.equal(track.title, sample.title, `${sample.title} track title must round-trip`);
+    assert.equal(track.artist, sample.artist, `${sample.title} artist must round-trip`);
+    tracks.push(track);
+  }
+
+  const playlistTracks: PlaylistTrack[] = [];
+  for (const track of tracks) {
+    playlistTracks.push(await api<PlaylistTrack>(
+      `/api/playlists/${playlist.id}/tracks/${track.id}?userId=${auth.userId}`,
+      { method: "POST" },
+      auth,
+    ));
+  }
+  assert.equal(playlistTracks.length, samples.length, "all sample tracks must be added to the playlist");
+
+  const connectedTask = await api<CreatorTask>(
+    `/api/tasks/${task.id}/playlist/${playlist.id}?userId=${auth.userId}`,
+    { method: "PATCH" },
+    auth,
+  );
+  assert.equal(connectedTask.playlistId, playlist.id, "task must connect to playlist immediately");
+
+  const currentTrack = playlistTracks[0];
+  const currentTask = await api<CreatorTask>(
+    `/api/tasks/${task.id}/current-playlist-track/${currentTrack.playlistTrackId}?userId=${auth.userId}`,
+    { method: "PATCH" },
+    auth,
+  );
+  assert.equal(
+    currentTask.currentPlaylistTrackId,
+    currentTrack.playlistTrackId,
+    "current playlist track must be saved immediately",
+  );
+
+  const reordered = await api<PlaylistTrack[]>(
+    `/api/playlists/${playlist.id}/tracks/reorder?userId=${auth.userId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        playlistTrackIds: playlistTracks.map((track) => track.playlistTrackId).reverse(),
+      }),
+    },
+    auth,
+  );
+  assert.equal(reordered.length, playlistTracks.length, "reorder must keep the same playlist track count");
+
+  const lyricResults: Array<{
+    title: string;
+    lineCount: number;
+    synced: boolean;
+    firstStartTimeMs: number | null;
+    syncedLyricsLength: number;
+  }> = [];
+  let firstLineRef: LyricLineRef | null = null;
+
+  for (const track of tracks) {
+    const fetched = await api<LyricFetchResponse>(
+      `/api/tracks/${track.id}/lyrics/fetch`,
+      { method: "POST" },
+      auth,
+    );
+    const lines = fetched.lyric?.lines || [];
+    assert.ok(fetched.lyric, `${track.title} must return a lyric entity`);
+    assert.equal(fetched.lyric?.synced, true, `${track.title} must return synced lyrics`);
+    assert.ok(lines.length >= 3, `${track.title} must create multiple lyric line refs`);
+    assert.ok((fetched.syncedLyrics || "").length > 20, `${track.title} must include synced lyric text`);
+    assert.ok(
+      lines.some((line) => typeof line.startTimeMs === "number" && line.startTimeMs >= 0),
+      `${track.title} must include timed line refs`,
+    );
+
+    firstLineRef ||= lines.find((line) => typeof line.id === "number") || null;
+    lyricResults.push({
+      title: track.title,
+      lineCount: lines.length,
+      synced: Boolean(fetched.lyric?.synced),
+      firstStartTimeMs: lines[0]?.startTimeMs ?? null,
+      syncedLyricsLength: (fetched.syncedLyrics || "").length,
+    });
+  }
+
+  assert.ok(firstLineRef?.id, "at least one synced line ref must be available for memo QA");
+
+  const manual = await api<Translation>(
+    `/api/lyric-line-refs/${firstLineRef.id}/translations?userId=${auth.userId}`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        languageCode: "ko",
+        translatedText: "QA 저장 번역",
+        memoText: "QA 메모 저장 확인",
+      }),
+    },
+    auth,
+  );
+  assert.equal(manual.translatedText, "QA 저장 번역", "manual translation text must be saved");
+  assert.equal(manual.memoText, "QA 메모 저장 확인", "manual memo text must be saved");
+
+  const saved = await api<Translation[]>(
+    `/api/lyric-line-refs/${firstLineRef.id}/translations?userId=${auth.userId}`,
+    {},
+    auth,
+  );
+  assert.ok(
+    saved.some((translation) => translation.translatedText === "QA 저장 번역" && translation.memoText === "QA 메모 저장 확인"),
+    "saved manual memo must be readable without flicker-prone empty replacement",
+  );
+
+  const autoSourceText = "Green, green";
+  const autoDraft = await api<Translation>(
+    `/api/lyric-line-refs/${firstLineRef.id}/translations/auto-draft?userId=${auth.userId}`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        sourceText: autoSourceText,
+        sourceLanguageCode: "en",
+        targetLanguageCode: "ko",
+        memoText: "자동 번역 품질 QA",
+      }),
+    },
+    auth,
+  ).then((translation) => ({
+    ...translation,
+    accepted: true,
+  })).catch((error) => ({
+    accepted: false,
+    error: String((error as Error).message || error),
+  }));
+
+  if ("accepted" in autoDraft && autoDraft.accepted) {
+    assert.ok(
+      isUsefulKoreanTranslation(autoSourceText, autoDraft.translatedText),
+      `auto translation must be Korean and not source echo: ${autoDraft.translatedText}`,
+    );
+  }
+
+  const summary = {
+    ok: true,
+    apiBaseUrl: API_BASE_URL,
+    qaUserId: auth.userId,
+    taskId: task.id,
+    playlistId: playlist.id,
+    currentPlaylistTrackId: currentTask.currentPlaylistTrackId,
+    tracks: tracks.map((track) => ({
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+    })),
+    lyrics: lyricResults,
+    manualMemo: {
+      lineRefId: firstLineRef.id,
+      saved: true,
+    },
+    autoTranslation: autoDraft,
+  };
+
+  console.log(JSON.stringify(summary, null, 2));
+}
+
+main().catch((error) => {
+  console.error("qa:korean-live failed");
+  console.error(error);
+  process.exitCode = 1;
+});
