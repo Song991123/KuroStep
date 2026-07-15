@@ -1,5 +1,12 @@
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fs, path::PathBuf, sync::Mutex, thread, time::Duration};
+use std::{
+    collections::HashMap,
+    fs,
+    path::PathBuf,
+    sync::Mutex,
+    thread,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use tauri::{
     Emitter, LogicalSize, Manager, PhysicalPosition, Position, Size, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder,
@@ -9,6 +16,27 @@ use tauri::{
 struct LyricPayload {
     line: String,
     translation: String,
+}
+
+#[derive(Serialize)]
+struct ClientStatus {
+    view: String,
+    stage: String,
+    authenticated: bool,
+    text: String,
+    timestamp_ms: u128,
+    windows: Vec<WindowStatus>,
+    overlaps: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct WindowStatus {
+    label: String,
+    visible: bool,
+    x: Option<i32>,
+    y: Option<i32>,
+    width: Option<i32>,
+    height: Option<i32>,
 }
 
 #[derive(Clone, Copy, Deserialize, Serialize)]
@@ -49,9 +77,7 @@ fn set_lyrics_visible(
     } else {
         normalize_overlay_text(&translation)
     };
-    let lyrics = app
-        .get_webview_window("lyrics")
-        .ok_or_else(|| "lyrics window not found".to_string())?;
+    let lyrics = get_or_create_lyrics_window(&app)?;
 
     let (width, height) = estimate_lyrics_window_size(&display_line, &display_translation);
 
@@ -255,6 +281,29 @@ fn get_or_create_paw_window(app: &tauri::AppHandle) -> Result<WebviewWindow, Str
         .map_err(|error| error.to_string())
 }
 
+fn get_or_create_lyrics_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
+    if let Some(lyrics) = app.get_webview_window("lyrics") {
+        return Ok(lyrics);
+    }
+
+    WebviewWindowBuilder::new(app, "lyrics", WebviewUrl::App("lyrics.html".into()))
+        .title("KuroStep Lyrics")
+        .inner_size(360.0, 84.0)
+        .min_inner_size(180.0, 58.0)
+        .resizable(false)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .visible_on_all_workspaces(true)
+        .position(987.0, 52.0)
+        .shadow(false)
+        .devtools(false)
+        .visible(false)
+        .build()
+        .map_err(|error| error.to_string())
+}
+
 fn get_or_create_main_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
     if let Some(main) = app.get_webview_window("main") {
         return Ok(main);
@@ -348,6 +397,7 @@ fn restore_window_position_after_show(
         thread::sleep(Duration::from_millis(180));
         if let Some(window) = app.get_webview_window(label) {
             restore_window_position(&app, &window, label, width, height);
+            correct_visible_child_window_position(&app, &window, label);
         }
     });
 }
@@ -359,15 +409,198 @@ fn reconcile_child_window_positions_after_launch(app: tauri::AppHandle) {
             if let Some(paw) = app.get_webview_window("paw") {
                 if paw.is_visible().unwrap_or(false) {
                     restore_window_position(&app, &paw, "paw", 380.0, 520.0);
+                    correct_visible_child_window_position(&app, &paw, "paw");
                 }
             }
             if let Some(lyrics) = app.get_webview_window("lyrics") {
                 if lyrics.is_visible().unwrap_or(false) {
-                    restore_window_position(&app, &lyrics, "lyrics", 380.0, 62.0);
+                    let size = lyrics.outer_size().ok();
+                    let width = size.map(|value| value.width as f64).unwrap_or(380.0);
+                    let height = size.map(|value| value.height as f64).unwrap_or(84.0);
+                    restore_window_position(&app, &lyrics, "lyrics", width, height);
+                    correct_visible_child_window_position(&app, &lyrics, "lyrics");
                 }
             }
         }
     });
+}
+
+fn correct_visible_child_window_position(
+    app: &tauri::AppHandle,
+    window: &WebviewWindow,
+    label: &str,
+) {
+    if label == "main" || !window.is_visible().unwrap_or(false) {
+        return;
+    }
+    let Some(rect) = current_window_rect(window) else {
+        return;
+    };
+    if !overlaps_visible_peer_rect(app, label, rect, 12) {
+        return;
+    }
+
+    let Some(monitor) = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| app.primary_monitor().ok().flatten())
+    else {
+        return;
+    };
+    let monitor_position = *monitor.position();
+    let monitor_size = *monitor.size();
+    let gap = 24;
+    let candidates = physical_child_candidates(app, label, rect.width, rect.height, gap);
+    let mut candidates = candidates;
+    candidates.extend(physical_monitor_edge_candidates(
+        label,
+        &monitor_position,
+        &monitor_size,
+        rect.width,
+        rect.height,
+        gap,
+    ));
+
+    let Some(next) = candidates
+        .iter()
+        .map(|position| {
+            clamp_physical_position(
+                *position,
+                &monitor_position,
+                &monitor_size,
+                rect.width,
+                rect.height,
+            )
+        })
+        .find(|position| {
+            let candidate = WindowRect {
+                x: position.x,
+                y: position.y,
+                width: rect.width,
+                height: rect.height,
+            };
+            !overlaps_visible_peer_rect(app, label, candidate, 12)
+        })
+    else {
+        return;
+    };
+
+    let _ = window.set_position(Position::Physical(next));
+    let mut positions = read_window_positions(app);
+    positions.insert(
+        label.to_string(),
+        WindowPoint {
+            x: next.x,
+            y: next.y,
+        },
+    );
+    let _ = write_window_positions(app, &positions);
+}
+
+fn physical_child_candidates(
+    app: &tauri::AppHandle,
+    label: &str,
+    width: i32,
+    height: i32,
+    gap: i32,
+) -> Vec<PhysicalPosition<i32>> {
+    let Some(main) = app.get_webview_window("main") else {
+        return Vec::new();
+    };
+    let Some(main_rect) = current_window_rect(&main) else {
+        return Vec::new();
+    };
+    let titlebar_offset = 84;
+    match label {
+        "paw" => vec![
+            PhysicalPosition {
+                x: main_rect.x - width - gap,
+                y: main_rect.y + titlebar_offset,
+            },
+            PhysicalPosition {
+                x: main_rect.x + main_rect.width + gap,
+                y: main_rect.y + titlebar_offset,
+            },
+            PhysicalPosition {
+                x: main_rect.x,
+                y: main_rect.y + main_rect.height + gap,
+            },
+            PhysicalPosition {
+                x: main_rect.x,
+                y: main_rect.y - height - gap,
+            },
+        ],
+        "lyrics" => vec![
+            PhysicalPosition {
+                x: main_rect.x,
+                y: main_rect.y - height - gap,
+            },
+            PhysicalPosition {
+                x: main_rect.x,
+                y: main_rect.y + main_rect.height + gap,
+            },
+            PhysicalPosition {
+                x: main_rect.x - width - gap,
+                y: main_rect.y,
+            },
+            PhysicalPosition {
+                x: main_rect.x + main_rect.width + gap,
+                y: main_rect.y,
+            },
+        ],
+        _ => Vec::new(),
+    }
+}
+
+fn physical_monitor_edge_candidates(
+    label: &str,
+    monitor_position: &PhysicalPosition<i32>,
+    monitor_size: &tauri::PhysicalSize<u32>,
+    width: i32,
+    height: i32,
+    gap: i32,
+) -> Vec<PhysicalPosition<i32>> {
+    let margin = gap.max(24);
+    let left = monitor_position.x + margin;
+    let top = monitor_position.y + margin;
+    let right = monitor_position.x + monitor_size.width as i32 - width - margin;
+    let bottom = monitor_position.y + monitor_size.height as i32 - height - margin;
+    let center_x = monitor_position.x + ((monitor_size.width as i32 - width) / 2);
+    let center_y = monitor_position.y + ((monitor_size.height as i32 - height) / 2);
+
+    match label {
+        "lyrics" => vec![
+            PhysicalPosition { x: center_x, y: top },
+            PhysicalPosition { x: center_x, y: bottom },
+            PhysicalPosition { x: left, y: top },
+            PhysicalPosition { x: right, y: top },
+        ],
+        "paw" => vec![
+            PhysicalPosition { x: left, y: center_y },
+            PhysicalPosition { x: right, y: center_y },
+            PhysicalPosition { x: left, y: bottom },
+            PhysicalPosition { x: right, y: bottom },
+        ],
+        _ => Vec::new(),
+    }
+}
+
+fn clamp_physical_position(
+    raw: PhysicalPosition<i32>,
+    monitor_position: &PhysicalPosition<i32>,
+    monitor_size: &tauri::PhysicalSize<u32>,
+    width: i32,
+    height: i32,
+) -> PhysicalPosition<i32> {
+    let min_x = monitor_position.x + 8;
+    let min_y = monitor_position.y + 8;
+    let max_x = monitor_position.x + monitor_size.width as i32 - width - 8;
+    let max_y = monitor_position.y + monitor_size.height as i32 - height - 8;
+    PhysicalPosition {
+        x: raw.x.clamp(min_x, max_x.max(min_x)),
+        y: raw.y.clamp(min_y, max_y.max(min_y)),
+    }
 }
 
 fn saved_or_default_position(
@@ -504,6 +737,21 @@ fn overlaps_visible_peer_window(
         height: height.ceil() as i32,
     };
 
+    ["main", "paw", "lyrics"]
+        .iter()
+        .filter(|peer_label| **peer_label != label)
+        .filter_map(|peer_label| app.get_webview_window(peer_label))
+        .filter(|peer| peer.is_visible().unwrap_or(false))
+        .filter_map(|peer| current_window_rect(&peer))
+        .any(|peer_rect| rectangles_touch_or_overlap(candidate, peer_rect, gap))
+}
+
+fn overlaps_visible_peer_rect(
+    app: &tauri::AppHandle,
+    label: &str,
+    candidate: WindowRect,
+    gap: i32,
+) -> bool {
     ["main", "paw", "lyrics"]
         .iter()
         .filter(|peer_label| **peer_label != label)
@@ -703,6 +951,101 @@ fn window_positions_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(directory.join("window-positions-v6.json"))
 }
 
+fn client_status_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let directory = app
+        .path()
+        .app_config_dir()
+        .map_err(|error| error.to_string())?;
+    fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    Ok(directory.join("client-status-v1.json"))
+}
+
+fn snapshot_windows(app: &tauri::AppHandle) -> Vec<WindowStatus> {
+    ["main", "paw", "lyrics"]
+        .iter()
+        .map(|label| {
+            if let Some(window) = app.get_webview_window(label) {
+                let visible = window.is_visible().unwrap_or(false);
+                let rect = current_window_rect(&window);
+                WindowStatus {
+                    label: (*label).to_string(),
+                    visible,
+                    x: rect.map(|value| value.x),
+                    y: rect.map(|value| value.y),
+                    width: rect.map(|value| value.width),
+                    height: rect.map(|value| value.height),
+                }
+            } else {
+                WindowStatus {
+                    label: (*label).to_string(),
+                    visible: false,
+                    x: None,
+                    y: None,
+                    width: None,
+                    height: None,
+                }
+            }
+        })
+        .collect()
+}
+
+fn visible_window_overlaps(app: &tauri::AppHandle) -> Vec<String> {
+    let mut items = Vec::new();
+    let labels = ["main", "paw", "lyrics"];
+    for (index, left_label) in labels.iter().enumerate() {
+        let Some(left) = app.get_webview_window(left_label) else {
+            continue;
+        };
+        if !left.is_visible().unwrap_or(false) {
+            continue;
+        }
+        let Some(left_rect) = current_window_rect(&left) else {
+            continue;
+        };
+        for right_label in labels.iter().skip(index + 1) {
+            let Some(right) = app.get_webview_window(right_label) else {
+                continue;
+            };
+            if !right.is_visible().unwrap_or(false) {
+                continue;
+            }
+            let Some(right_rect) = current_window_rect(&right) else {
+                continue;
+            };
+            if rectangles_touch_or_overlap(left_rect, right_rect, 12) {
+                items.push(format!("{left_label}:{right_label}"));
+            }
+        }
+    }
+    items
+}
+
+#[tauri::command]
+fn report_client_status(
+    app: tauri::AppHandle,
+    view: String,
+    stage: String,
+    authenticated: bool,
+    text: String,
+) -> Result<(), String> {
+    let timestamp_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis();
+    let status = ClientStatus {
+        view,
+        stage,
+        authenticated,
+        text,
+        timestamp_ms,
+        windows: snapshot_windows(&app),
+        overlaps: visible_window_overlaps(&app),
+    };
+    let path = client_status_path(&app)?;
+    let raw = serde_json::to_string_pretty(&status).map_err(|error| error.to_string())?;
+    fs::write(path, raw).map_err(|error| error.to_string())
+}
+
 fn read_window_positions(app: &tauri::AppHandle) -> HashMap<String, WindowPoint> {
     let Ok(path) = window_positions_path(app) else {
         return HashMap::new();
@@ -732,6 +1075,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(LyricContextState::default())
         .setup(|app| {
+            let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
             let app_handle = app.handle().clone();
             if let Ok(main) = get_or_create_main_window(&app_handle) {
                 let _ = main.show();
@@ -755,6 +1099,7 @@ pub fn run() {
             sync_paw_lyric_context,
             get_current_lyric_context,
             save_current_window_position,
+            report_client_status,
             exit_app
         ])
         .run(tauri::generate_context!())

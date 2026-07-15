@@ -380,6 +380,16 @@ function saveCurrentWindowPosition(label = shellView) {
   void invokeNative("save_current_window_position", { label }).catch(() => {});
 }
 
+function reportClientStatus(stage: string, text = "") {
+  if (!isTauriApp || isEmbeddedContent) return;
+  void invokeNative("report_client_status", {
+    view: shellView,
+    stage,
+    authenticated: Boolean(readJson<AuthSession | null>("kurostep.auth", null)?.accessToken),
+    text: text.slice(0, 1000),
+  }).catch(() => {});
+}
+
 function scheduleCurrentWindowPositionSave(label = shellView) {
   window.setTimeout(() => saveCurrentWindowPosition(label), 350);
 }
@@ -1777,17 +1787,42 @@ export default function App() {
   const lastSyncedDurationRef = useRef<Record<number, number>>({});
   const workspaceSyncChannelRef = useRef<BroadcastChannel | null>(null);
   const activeTranslation = isTranslationForLine(translation, selectedLine) ? translation : null;
+  const pawWidgetVisibleRef = useRef(pawWidgetVisible);
+  const lyricsOverlayVisibleRef = useRef(lyricsOverlayVisible);
+  const activeTranslationRef = useRef<Translation | null>(activeTranslation);
 
   useEffect(() => {
     if (!isEmbeddedContent && !isTauriApp) return;
     const blockContextMenu = (event: MouseEvent) => event.preventDefault();
+    const reportError = (event: ErrorEvent) => {
+      reportClientStatus("client-error", `${event.message || "unknown error"} ${event.filename || ""}:${event.lineno || 0}`);
+    };
+    const reportUnhandledRejection = (event: PromiseRejectionEvent) => {
+      reportClientStatus("client-unhandled-rejection", String((event.reason as Error)?.message || event.reason || "unknown rejection"));
+    };
     document.addEventListener("contextmenu", blockContextMenu);
     document.addEventListener("keydown", blockDeveloperShortcut, true);
+    window.addEventListener("error", reportError);
+    window.addEventListener("unhandledrejection", reportUnhandledRejection);
+    reportClientStatus("client-mounted", document.body.innerText || document.title || "mounted");
     return () => {
       document.removeEventListener("contextmenu", blockContextMenu);
       document.removeEventListener("keydown", blockDeveloperShortcut, true);
+      window.removeEventListener("error", reportError);
+      window.removeEventListener("unhandledrejection", reportUnhandledRejection);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isTauriApp || isEmbeddedContent) return;
+    const timer = window.setTimeout(() => {
+      reportClientStatus(
+        auth ? "render-authenticated" : "render-auth",
+        document.body.innerText || document.title || "",
+      );
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [auth?.accessToken, loading, settingsOpen, workspace.currentTrack?.id, selectedLine?.text]);
 
   useEffect(() => {
     if (!isTauriApp || isEmbeddedContent) return;
@@ -1824,6 +1859,18 @@ export default function App() {
   }, [auth, pawWidgetVisible, lyricsOverlayVisible, autoTranslationEnabled]);
 
   useEffect(() => {
+    pawWidgetVisibleRef.current = pawWidgetVisible;
+  }, [pawWidgetVisible]);
+
+  useEffect(() => {
+    lyricsOverlayVisibleRef.current = lyricsOverlayVisible;
+  }, [lyricsOverlayVisible]);
+
+  useEffect(() => {
+    activeTranslationRef.current = activeTranslation;
+  }, [activeTranslation]);
+
+  useEffect(() => {
     function syncAuthFromStorage(event: StorageEvent) {
       if (event.key !== "kurostep.auth") return;
       setAuth(readJson<AuthSession | null>("kurostep.auth", null));
@@ -1840,6 +1887,36 @@ export default function App() {
 
   function readCurrentLyricContext() {
     return readJson<CurrentLyricContext>("kurostep.currentLyricContext", {});
+  }
+
+  function currentLyricContextJson() {
+    return JSON.stringify({
+      trackId: workspaceRef.current.currentTrack?.id || null,
+      line: selectedLineRef.current || null,
+      translation: activeTranslationRef.current || null,
+      at: Date.now(),
+    });
+  }
+
+  async function syncNativeChildWindows(options: { reloadPaw?: boolean } = {}) {
+    if (shellView !== "main") return;
+    const session = authRef.current;
+    if (!session?.accessToken) return;
+    const contextJson = currentLyricContextJson();
+    await Promise.allSettled([
+      invokeNative("set_paw_visible", {
+        visible: pawWidgetVisibleRef.current,
+        reload: Boolean(options.reloadPaw),
+        authJson: JSON.stringify(session),
+      }),
+      invokeNative("set_lyrics_visible", {
+        visible: lyricsOverlayVisibleRef.current,
+        line: selectedLineRef.current?.text || "",
+        translation: activeTranslationRef.current?.translatedText || "",
+        contextJson,
+      }),
+    ]);
+    reportClientStatus("native-child-sync", document.body.innerText || document.title || "");
   }
 
   useEffect(() => {
@@ -2119,6 +2196,35 @@ export default function App() {
     });
   }, [auth, lyricsOverlayVisible, workspace.currentTrack?.id, selectedLine, activeTranslation]);
 
+  useEffect(() => {
+    if (shellView !== "main" || !auth?.accessToken) {
+      return;
+    }
+
+    let cancelled = false;
+    let attempt = 0;
+    let intervalId: number | undefined;
+
+    const runSync = () => {
+      if (cancelled) return;
+      void syncNativeChildWindows({ reloadPaw: attempt === 0 }).catch(() => {});
+      attempt += 1;
+      if (attempt >= 10 && intervalId) {
+        window.clearInterval(intervalId);
+      }
+    };
+
+    runSync();
+    intervalId = window.setInterval(runSync, 650);
+
+    return () => {
+      cancelled = true;
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
+    };
+  }, [auth?.accessToken, pawWidgetVisible, lyricsOverlayVisible]);
+
   function requestPawWidgetVisible(visible: boolean) {
     writeJson("kurostep.pawWidgetVisible", visible);
     setPawWidgetVisible(visible);
@@ -2303,7 +2409,20 @@ export default function App() {
       return;
     }
     if (nextLine?.id !== selectedLine?.id || nextLine?.lineIndex !== selectedLine?.lineIndex) {
+      const trackId = workspaceRef.current.currentTrack?.id || null;
+      const cacheKey = translationCacheKey(trackId, nextLine);
+      const cachedTranslation =
+        readLocalTranslationDraft(trackId, nextLine) ||
+        translationCacheRef.current[cacheKey] ||
+        (nextLine.id != null ? translationCacheRef.current[String(nextLine.id)] : null) ||
+        null;
       setSelectedLine(nextLine);
+      setTranslation((current) => {
+        if (isTranslationForLine(cachedTranslation, nextLine)) {
+          return cachedTranslation;
+        }
+        return isTranslationForLine(current, nextLine) ? current : null;
+      });
     }
   }, [playbackPosition, lyric, lyricSource, lyricSyncOffsetMs, selectedLine?.id, selectedLine?.lineIndex, shellView]);
 

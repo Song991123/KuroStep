@@ -39,10 +39,14 @@ assert.equal(chooseLineByPlaybackTime(lyric, source, 0), null, "first lyric shou
 assert.equal(chooseLineByPlaybackTime(lyric, source, 7.1)?.text, "Green, green");
 assert.equal(chooseLineByPlaybackTime(lyric, source, 22.3)?.text, "mess with the team");
 assert.equal(chooseLineByPlaybackTime(lyric, source, 1.8, 5600)?.text, "Green, green");
+assert.equal(chooseLineByPlaybackTime(lyric, source, 8.0, -3000), null, "negative sync offset must not flash an early lyric");
+assert.equal(chooseLineByPlaybackTime(lyric, source, 9.8, 0)?.text, "You should come", "lookahead should select the next line close to its timestamp");
 assert.equal(clampLyricSyncOffset(40000), 30000);
 assert.equal(clampLyricSyncOffset(-40000), -30000);
 
 assert.equal(isLikelyYoutubeAdDuration(15, 180), true, "short ad duration must not replace song duration");
+assert.equal(isLikelyYoutubeAdDuration(90, 240), true, "90-second ad duration must not replace a known longer song");
+assert.equal(isLikelyYoutubeAdDuration(100, 240), true, "substantially shorter ad-like duration must not replace a known song");
 assert.equal(isLikelyYoutubeAdDuration(179, 180), false, "normal song duration should be accepted");
 
 const line: SelectedLine = { id: 101, lineIndex: 0, startTimeMs: 7360, text: "Green, green" };
