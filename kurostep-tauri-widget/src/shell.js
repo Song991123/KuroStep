@@ -13,6 +13,8 @@ let pawPopup = null;
 let positionSaveTimer = null;
 let latestLyricContextJson = "{}";
 let latestLyricContextStamp = 0;
+let authHydrationTimer = null;
+let authHydrationConfirmed = false;
 
 function readShellFlag(key, fallback = true) {
   try {
@@ -39,7 +41,7 @@ function readShellAuthJson() {
 function syncShellAuthToContent() {
   const authJson = readShellAuthJson();
   if (!authJson) {
-    return;
+    return false;
   }
   authenticated = true;
   renderActions();
@@ -54,6 +56,21 @@ function syncShellAuthToContent() {
     },
     trustedContentOrigin,
   );
+  return true;
+}
+
+function startShellAuthHydration() {
+  window.clearInterval(authHydrationTimer);
+  authHydrationConfirmed = false;
+  let attempts = 0;
+  syncShellAuthToContent();
+  authHydrationTimer = window.setInterval(() => {
+    attempts += 1;
+    if (authHydrationConfirmed || attempts >= 20 || !syncShellAuthToContent()) {
+      window.clearInterval(authHydrationTimer);
+      authHydrationTimer = null;
+    }
+  }, 500);
 }
 
 if (view === "paw") {
@@ -245,8 +262,7 @@ if (view === "paw") {
 }
 
 shellFrame.addEventListener("load", () => {
-  syncShellAuthToContent();
-  window.setTimeout(syncShellAuthToContent, 250);
+  startShellAuthHydration();
 });
 
 function scheduleWindowPositionSave() {
@@ -307,6 +323,11 @@ async function handleNativeMessage(message, replyTarget = null, replyOrigin = "*
 
   if (message.type === "auth_state") {
     authenticated = Boolean(message.authenticated);
+    if (authenticated && authHydrationTimer) {
+      authHydrationConfirmed = true;
+      window.clearInterval(authHydrationTimer);
+      authHydrationTimer = null;
+    }
     if (message.authJson) {
       window.localStorage.setItem("kurostep.auth", message.authJson);
     } else if (message.clearAuth) {
