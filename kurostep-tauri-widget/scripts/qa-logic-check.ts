@@ -125,6 +125,7 @@ assert.equal(getNextPlaylistIndex(3, 10, 1, false), 2, "out-of-range current ind
 
 const tauriConfig = JSON.parse(readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8"));
 const capability = JSON.parse(readFileSync(new URL("../src-tauri/capabilities/default.json", import.meta.url), "utf8"));
+const appSource = readFileSync(new URL("../src-react/App.tsx", import.meta.url), "utf8");
 
 assert.ok(
   tauriConfig.app.windows.every((windowConfig: { devtools?: boolean }) => windowConfig.devtools === false),
@@ -133,6 +134,12 @@ assert.ok(
 assert.ok(
   capability.permissions.includes("core:webview:deny-internal-toggle-devtools"),
   "Tauri IPC must deny internal devtools toggling",
+);
+assert.match(appSource, /autoTranslationEnabledRef/, "auto translation toggle must use a live ref for late async guards");
+assert.match(
+  appSource,
+  /cancelled \|\| !lineStillCurrent\(\) \|\| !autoTranslationEnabledRef\.current/,
+  "late auto-translation responses must not apply after the user turns automatic translation off",
 );
 
 console.log("qa:logic ok");
