@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   chooseLineByPlaybackTime,
   clampLyricSyncOffset,
@@ -121,5 +122,17 @@ assert.equal(getNextPlaylistIndex(3, 0, -1, true), 2, "repeat-all should wrap fr
 assert.equal(getNextPlaylistIndex(1, 0, 1, true), 0, "single-track repeat-all should stay stable");
 assert.equal(getNextPlaylistIndex(0, 0, 1, true), -1, "empty playlists should not select a ghost track");
 assert.equal(getNextPlaylistIndex(3, 10, 1, false), 2, "out-of-range current index should clamp before moving");
+
+const tauriConfig = JSON.parse(readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8"));
+const capability = JSON.parse(readFileSync(new URL("../src-tauri/capabilities/default.json", import.meta.url), "utf8"));
+
+assert.ok(
+  tauriConfig.app.windows.every((windowConfig: { devtools?: boolean }) => windowConfig.devtools === false),
+  "all Tauri windows must keep devtools disabled",
+);
+assert.ok(
+  capability.permissions.includes("core:webview:deny-internal-toggle-devtools"),
+  "Tauri IPC must deny internal devtools toggling",
+);
 
 console.log("qa:logic ok");
