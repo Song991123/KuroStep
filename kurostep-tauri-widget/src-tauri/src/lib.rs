@@ -120,21 +120,21 @@ fn estimate_lyrics_window_size(line: &str, translation: &str) -> (f64, f64) {
     let line_units = visual_units(line).max(10.0);
     let translation_units = visual_units(translation);
     let longest = line_units.max(translation_units);
-    let width = (longest * 18.0 + 132.0).clamp(360.0, 1280.0);
-    let line_rows = wrapped_overlay_rows(line_units, width).max(1);
+    let width = (longest * 20.0 + 160.0).clamp(360.0, 1480.0);
+    let line_rows = wrapped_overlay_rows(line_units, width).clamp(1, 2);
     let translation_rows = if translation.trim().is_empty() {
         0
     } else {
-        wrapped_overlay_rows(translation_units, width).max(1)
+        wrapped_overlay_rows(translation_units, width).clamp(1, 2)
     };
-    let height = (42.0
+    let height = (44.0
         + f64::from(line_rows) * 31.0
         + if translation_rows > 0 {
             6.0 + f64::from(translation_rows) * 25.0
         } else {
             0.0
         })
-    .clamp(76.0, 240.0);
+    .clamp(78.0, 168.0);
     (width, height)
 }
 
@@ -1129,8 +1129,8 @@ mod tests {
         let repeated = "really ".repeat(220);
         let (width, height) = estimate_lyrics_window_size(&repeated, "");
 
-        assert_eq!(width, 1280.0);
+        assert_eq!(width, 1480.0);
         assert!(height > 76.0);
-        assert!(height <= 240.0);
+        assert!(height <= 168.0);
     }
 }

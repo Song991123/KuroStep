@@ -51,8 +51,18 @@ assert.equal(isLikelyYoutubeAdDuration(179, 180), false, "normal song duration s
 
 const line: SelectedLine = { id: 101, lineIndex: 0, startTimeMs: 7360, text: "Green, green" };
 const sameLineWithoutServerId: SelectedLine = { lineIndex: 0, startTimeMs: 7360, text: "Green, green" };
+const idlessLine: SelectedLine = { id: null, lineIndex: 8, startTimeMs: 20290, text: "That's red, red" };
+const idlessDraft: Translation = {
+  clientLineKey: lyricLineKey(idlessLine),
+  languageCode: "ko",
+  translatedText: "빨강, 빨강",
+  memoText: "서버 줄 번호 없이 로컬 저장",
+  status: "LOCAL_DRAFT",
+};
 assert.equal(lyricLineKey(line), "id-101");
 assert.equal(isSameLyricLine(sameLineWithoutServerId, { ...sameLineWithoutServerId }), true);
+assert.equal(isTranslationForLine(idlessDraft, idlessLine), true, "id-less lyric lines must keep local memo drafts stable");
+assert.equal(isTranslationForLine(idlessDraft, { ...idlessLine, lineIndex: 9 }), false, "id-less memo drafts must not leak into a different line");
 
 const savedTranslation: Translation = {
   id: 33,
@@ -81,5 +91,7 @@ assert.equal(getNextPlaylistIndex(3, 2, 1, false), 2, "normal mode should stop a
 assert.equal(getNextPlaylistIndex(3, 2, 1, true), 0, "repeat-all should wrap from last to first");
 assert.equal(getNextPlaylistIndex(3, 0, -1, true), 2, "repeat-all should wrap from first to last");
 assert.equal(getNextPlaylistIndex(1, 0, 1, true), 0, "single-track repeat-all should stay stable");
+assert.equal(getNextPlaylistIndex(0, 0, 1, true), -1, "empty playlists should not select a ghost track");
+assert.equal(getNextPlaylistIndex(3, 10, 1, false), 2, "out-of-range current index should clamp before moving");
 
 console.log("qa:logic ok");

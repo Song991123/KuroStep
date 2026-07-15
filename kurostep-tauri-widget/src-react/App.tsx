@@ -2430,14 +2430,14 @@ export default function App() {
     if (shellView !== "main") {
       return;
     }
-    if (!auth?.userId || !selectedLine?.id || !selectedLine.text) {
+    if (!selectedLine?.text) {
       setTranslation(null);
       return;
     }
     const lineSnapshot = selectedLine;
     const trackIdSnapshot = workspace.currentTrack?.id || null;
     const key = translationCacheKey(trackIdSnapshot, lineSnapshot) || String(lineSnapshot.id);
-    const legacyKey = String(lineSnapshot.id);
+    const legacyKey = lineSnapshot.id != null ? String(lineSnapshot.id) : key;
     const lineStillCurrent = () =>
       workspaceRef.current.currentTrack?.id === trackIdSnapshot && isSameLyricLine(selectedLineRef.current, lineSnapshot);
     const applyTranslationForLine = (nextTranslation: Translation | null) => {
@@ -2454,6 +2454,10 @@ export default function App() {
     const cachedTranslation = translationCacheRef.current[key] || translationCacheRef.current[legacyKey];
     if (isTranslationForLine(cachedTranslation, lineSnapshot)) {
       setTranslation(cachedTranslation);
+      return;
+    }
+    if (!auth?.userId || !lineSnapshot.id) {
+      setTranslation((current) => isTranslationForLine(current, lineSnapshot) ? current : null);
       return;
     }
     setTranslation(null);
@@ -3181,8 +3185,17 @@ export default function App() {
 
   async function saveMemoForLine(line: SelectedLine, translatedText: string, memoText: string, options: { showNotice?: boolean } = {}) {
     const showNotice = options.showNotice ?? true;
-    const cacheKey = translationCacheKey(workspaceRef.current.currentTrack?.id, line);
+    const trackIdSnapshot = workspaceRef.current.currentTrack?.id || null;
+    const cacheKey = translationCacheKey(trackIdSnapshot, line);
     const legacyKey = line.id != null ? String(line.id) : cacheKey;
+    const lineStillCurrent = () =>
+      workspaceRef.current.currentTrack?.id === trackIdSnapshot && isSameLyricLine(selectedLineRef.current, line);
+    const applySavedTranslation = (nextTranslation: Translation) => {
+      if (lineStillCurrent()) {
+        setTranslation(nextTranslation);
+      }
+      setTranslationCache((current) => ({ ...current, [cacheKey]: nextTranslation, [legacyKey]: nextTranslation }));
+    };
     const translationTextForSave = translatedText.trim();
     const localTranslation = makeLocalTranslation(
       line,
@@ -3190,11 +3203,10 @@ export default function App() {
       memoText,
       "SAVED",
     );
-    writeLocalTranslationDraft(workspaceRef.current.currentTrack?.id, line, localTranslation.translatedText, localTranslation.memoText || "", "SAVED");
+    writeLocalTranslationDraft(trackIdSnapshot, line, localTranslation.translatedText, localTranslation.memoText || "", "SAVED");
     window.localStorage.setItem("kurostep.translationMemo", normalizeMemoText(memoText));
     if (!translationTextForSave || !auth?.userId || !line.id) {
-      setTranslation(localTranslation);
-      setTranslationCache((current) => ({ ...current, [cacheKey]: localTranslation, [legacyKey]: localTranslation }));
+      applySavedTranslation(localTranslation);
       if (showNotice) {
         setNotice({ kind: "notice", message: translationTextForSave ? "서버 줄 번호가 없어 로컬에 먼저 저장했다냥." : "번역문 없이 작업 메모만 이 기기에 저장했다냥." });
       }
@@ -3215,16 +3227,14 @@ export default function App() {
         clientLineKey: lyricLineKey(line),
         memoText: normalizeMemoText(saved.memoText),
       };
-      setTranslation(normalized);
-      setTranslationCache((current) => ({ ...current, [cacheKey]: normalized, [legacyKey]: normalized }));
-      writeLocalTranslationDraft(workspaceRef.current.currentTrack?.id, line, normalized.translatedText, normalized.memoText || "", "SAVED");
+      applySavedTranslation(normalized);
+      writeLocalTranslationDraft(trackIdSnapshot, line, normalized.translatedText, normalized.memoText || "", "SAVED");
       if (showNotice) {
         setNotice({ kind: "notice", message: "번역 메모를 서버에 콕 저장했다냥." });
       }
       return normalized;
     } catch (error) {
-      setTranslation(localTranslation);
-      setTranslationCache((current) => ({ ...current, [cacheKey]: localTranslation, [legacyKey]: localTranslation }));
+      applySavedTranslation(localTranslation);
       if (showNotice) {
         setNotice({ kind: "notice", message: "서버 저장은 실패했지만 이 기기에는 저장했다냥." });
       }
