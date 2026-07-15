@@ -1343,13 +1343,14 @@ function MusicPlayerWidget({
           </div>
         </div>
         <div className="player-controls" aria-label="작업용 플레이어 컨트롤">
-          <button className="icon-button" type="button" title="이전 곡" aria-label="이전 곡" disabled={!tracks.length} onClick={() => onMoveTrack(-1, isPlaying)}><Icon name="previous" /></button>
-          <button className="icon-button" type="button" title="10초 뒤로" aria-label="10초 뒤로" disabled={!track} onClick={() => skipBy(-10)}><Icon name="rewind" /></button>
-          <button className="icon-button main" type="button" title={isPlaying ? "일시정지" : "재생"} aria-label={isPlaying ? "일시정지" : "재생"} disabled={!track} onClick={onTogglePlay}><Icon name={isPlaying ? "pause" : "play"} /></button>
-          <button className="icon-button" type="button" title="10초 앞으로" aria-label="10초 앞으로" disabled={!track} onClick={() => skipBy(10)}><Icon name="forward" /></button>
-          <button className="icon-button" type="button" title="다음 곡" aria-label="다음 곡" disabled={!tracks.length} onClick={() => onMoveTrack(1, isPlaying)}><Icon name="next" /></button>
+          <button className="icon-button" id="player-previous-track" type="button" title="이전 곡" aria-label="이전 곡" disabled={!tracks.length} onClick={() => onMoveTrack(-1, isPlaying)}><Icon name="previous" /></button>
+          <button className="icon-button" id="player-rewind-10" type="button" title="10초 뒤로" aria-label="10초 뒤로" disabled={!track} onClick={() => skipBy(-10)}><Icon name="rewind" /></button>
+          <button className="icon-button main" id="player-toggle-play" type="button" title={isPlaying ? "일시정지" : "재생"} aria-label={isPlaying ? "일시정지" : "재생"} disabled={!track} onClick={onTogglePlay}><Icon name={isPlaying ? "pause" : "play"} /></button>
+          <button className="icon-button" id="player-forward-10" type="button" title="10초 앞으로" aria-label="10초 앞으로" disabled={!track} onClick={() => skipBy(10)}><Icon name="forward" /></button>
+          <button className="icon-button" id="player-next-track" type="button" title="다음 곡" aria-label="다음 곡" disabled={!tracks.length} onClick={() => onMoveTrack(1, isPlaying)}><Icon name="next" /></button>
           <button
             className={`icon-button repeat${repeatMode !== "off" ? " active" : ""}${repeatMode === "one" ? " repeat-one" : ""}`}
+            id="player-repeat-mode"
             type="button"
             title={repeatModeLabel(repeatMode)}
             aria-label={repeatModeLabel(repeatMode)}
@@ -1391,7 +1392,7 @@ function MusicPlayerWidget({
           submitLink();
         }}>
           <input className="form-input wide" value={url} onChange={(event) => setUrl(event.target.value)} type="url" placeholder="영상 또는 플레이리스트 링크를 붙여넣어줘냥" aria-label="유튜브 링크" />
-          <button className="action-button primary" type="button" disabled={!canRegisterLinks} onClick={() => void submitLink()}>
+          <button className="action-button primary" id="youtube-link-submit" type="button" disabled={!canRegisterLinks} onClick={() => void submitLink()}>
             {canRegisterLinks ? "링크 불러오기" : "준비 중"}
           </button>
         </form>
@@ -1411,8 +1412,8 @@ function MusicPlayerWidget({
               />
             </label>
             <div className="inline-actions">
-              <button className="action-button primary" type="button" onClick={onConfirmPlaylistImport}>담기</button>
-              <button className="action-button compact" type="button" onClick={onCancelPlaylistImport}>취소</button>
+              <button className="action-button primary" id="playlist-import-confirm" type="button" onClick={onConfirmPlaylistImport}>담기</button>
+              <button className="action-button compact" id="playlist-import-cancel" type="button" onClick={onCancelPlaylistImport}>취소</button>
             </div>
           </div>
         )}
@@ -1457,8 +1458,8 @@ function MusicPlayerWidget({
         </ol>
         {pageCount > 1 && (
           <div className="playlist-pager">
-            <button className="action-button compact" type="button" disabled={page <= 1} onClick={() => onPage(page - 1)}>이전</button>
-            <button className="action-button compact" type="button" disabled={page >= pageCount} onClick={() => onPage(page + 1)}>다음</button>
+            <button className="action-button compact" id="playlist-page-prev" type="button" disabled={page <= 1} onClick={() => onPage(page - 1)}>이전</button>
+            <button className="action-button compact" id="playlist-page-next" type="button" disabled={page >= pageCount} onClick={() => onPage(page + 1)}>다음</button>
           </div>
         )}
       </section>
@@ -1667,11 +1668,11 @@ function LyricsWidget({
         {currentTrack && (
           <div className="lyric-sync-controls" aria-label="가사 싱크 보정">
             <span>싱크 {formatLyricSyncOffset(lyricSyncOffsetMs)}</span>
-            <button className="mini-sync-button" type="button" onClick={() => onAdjustSync(-LYRIC_SYNC_COARSE_STEP_MS)}>5초 늦게</button>
-            <button className="mini-sync-button" type="button" onClick={() => onAdjustSync(-LYRIC_SYNC_FINE_STEP_MS)}>0.5초 늦게</button>
-            <button className="mini-sync-button" type="button" onClick={() => onAdjustSync(LYRIC_SYNC_FINE_STEP_MS)}>0.5초 빨리</button>
-            <button className="mini-sync-button" type="button" onClick={() => onAdjustSync(LYRIC_SYNC_COARSE_STEP_MS)}>5초 빨리</button>
-            <button className="mini-sync-button" type="button" onClick={onResetSync}>초기화</button>
+            <button className="mini-sync-button" id="lyrics-sync-late-5s" type="button" onClick={() => onAdjustSync(-LYRIC_SYNC_COARSE_STEP_MS)}>5초 늦게</button>
+            <button className="mini-sync-button" id="lyrics-sync-late-500ms" type="button" onClick={() => onAdjustSync(-LYRIC_SYNC_FINE_STEP_MS)}>0.5초 늦게</button>
+            <button className="mini-sync-button" id="lyrics-sync-early-500ms" type="button" onClick={() => onAdjustSync(LYRIC_SYNC_FINE_STEP_MS)}>0.5초 빨리</button>
+            <button className="mini-sync-button" id="lyrics-sync-early-5s" type="button" onClick={() => onAdjustSync(LYRIC_SYNC_COARSE_STEP_MS)}>5초 빨리</button>
+            <button className="mini-sync-button" id="lyrics-sync-reset" type="button" onClick={onResetSync}>초기화</button>
           </div>
         )}
         {lyricsExpanded && (
