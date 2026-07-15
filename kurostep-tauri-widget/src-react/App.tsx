@@ -2495,7 +2495,7 @@ export default function App() {
       setTranslation((current) => isTranslationForLine(current, lineSnapshot) ? current : null);
       return;
     }
-    setTranslation(null);
+    setTranslation((current) => isTranslationForLine(current, lineSnapshot) ? current : null);
     if (pendingTranslationRef.current.has(key)) {
       return;
     }
