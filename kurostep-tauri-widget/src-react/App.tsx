@@ -34,6 +34,7 @@ import {
   lyricLineKey,
   normalizeMemoText,
   shouldAutoTranslateLine,
+  stableTranslationForLine,
   translationStatusLabel,
   translationFingerprint,
 } from "./lib/lyrics";
@@ -1919,7 +1920,7 @@ export default function App() {
       lastAppliedLyricContextAtRef.current = contextAt;
     }
     const localDraft = readLocalTranslationDraft(context.trackId, nextLine);
-    const nextTranslation = localDraft || (isTranslationForLine(context.translation, nextLine) ? context.translation || null : null);
+    const nextTranslation = stableTranslationForLine(nextLine, [localDraft, context.translation]);
     const nextStamp = [
       context.trackId || "",
       lyricLineKey(nextLine),
@@ -1932,7 +1933,7 @@ export default function App() {
     lastAppliedLyricContextStampRef.current = nextStamp;
     setSelectedLine((current) => (isSameLyricLine(current, nextLine) ? current : nextLine));
     setTranslation((current) => {
-      const stableTranslation = nextTranslation || (isTranslationForLine(current, nextLine) ? current : null);
+      const stableTranslation = stableTranslationForLine(nextLine, [nextTranslation, current]);
       return translationFingerprint(stableTranslation) === translationFingerprint(current) ? current : stableTranslation;
     });
   }
@@ -2382,17 +2383,15 @@ export default function App() {
     if (nextLine?.id !== selectedLine?.id || nextLine?.lineIndex !== selectedLine?.lineIndex) {
       const trackId = workspaceRef.current.currentTrack?.id || null;
       const cacheKey = translationCacheKey(trackId, nextLine);
-      const cachedTranslation =
-        readLocalTranslationDraft(trackId, nextLine) ||
-        translationCacheRef.current[cacheKey] ||
-        (nextLine.id != null ? translationCacheRef.current[String(nextLine.id)] : null) ||
-        null;
+      const cachedTranslation = stableTranslationForLine(nextLine, [
+        readLocalTranslationDraft(trackId, nextLine),
+        translationCacheRef.current[cacheKey],
+        nextLine.id != null ? translationCacheRef.current[String(nextLine.id)] : null,
+      ]);
       setSelectedLine(nextLine);
       setTranslation((current) => {
-        if (isTranslationForLine(cachedTranslation, nextLine)) {
-          return cachedTranslation;
-        }
-        return isTranslationForLine(current, nextLine) ? current : null;
+        const stableTranslation = stableTranslationForLine(nextLine, [cachedTranslation, current]);
+        return translationFingerprint(stableTranslation) === translationFingerprint(current) ? current : stableTranslation;
       });
     }
   }, [playbackPosition, lyric, lyricSource, lyricSyncOffsetMs, selectedLine?.id, selectedLine?.lineIndex, shellView]);

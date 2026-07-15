@@ -8,6 +8,7 @@ import {
   isTranslationForLine,
   lyricLineKey,
   shouldAutoTranslateLine,
+  stableTranslationForLine,
   translationStatusLabel,
   translationFingerprint,
 } from "../src-react/lib/lyrics.ts";
@@ -120,6 +121,23 @@ const savedTranslation: Translation = {
 };
 assert.equal(isTranslationForLine(savedTranslation, line), true);
 assert.notEqual(translationFingerprint(savedTranslation), translationFingerprint({ ...savedTranslation, translatedText: "녹색, 녹색" }));
+const localOverride: Translation = {
+  clientLineKey: "id-101",
+  languageCode: "ko",
+  translatedText: "사용자가 고친 번역",
+  memoText: "로컬 메모",
+  status: "LOCAL_DRAFT",
+};
+assert.equal(
+  stableTranslationForLine(line, [localOverride, savedTranslation])?.translatedText,
+  "사용자가 고친 번역",
+  "local memo drafts must win over saved/auto translations to avoid flicker",
+);
+assert.equal(
+  stableTranslationForLine(line, [null, { ...savedTranslation, clientLineKey: "idx-9-0-other" }, savedTranslation])?.translatedText,
+  "초록, 초록",
+  "translation selection must skip candidates that belong to a different line",
+);
 assert.equal(translationStatusLabel("LOCAL_DRAFT"), "작성 중");
 assert.equal(translationStatusLabel("EDITED"), "저장됨", "server-edited memo should not look empty after saving");
 assert.equal(translationStatusLabel("SAVED"), "저장됨", "local saved memo should keep a stable saved label");

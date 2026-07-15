@@ -55,6 +55,14 @@ export function translationFingerprint(translation: Translation | null | undefin
   ].join("|");
 }
 
+export function stableTranslationForLine(
+  line: SelectedLine | null | undefined,
+  candidates: Array<Translation | null | undefined>,
+) {
+  if (!line?.text) return null;
+  return candidates.find((candidate) => isTranslationForLine(candidate, line)) || null;
+}
+
 export function translationStatusLabel(status: string | null | undefined) {
   switch (status) {
     case "AUTO_DRAFT":
