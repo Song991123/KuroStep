@@ -86,7 +86,23 @@ assert.equal(isLikelyYoutubeAdPlaybackSnapshot({
   candidateDurationSeconds: 0,
   expectedDurationSeconds: 0,
   currentSeconds: 8,
-}), false, "matching official playback can advance before duration only when no known song length exists");
+}), true, "matching playback must not advance before YouTube reports a trusted duration");
+assert.equal(isLikelyYoutubeAdPlaybackSnapshot({
+  activeVideoId: "song-video",
+  expectedVideoId: "song-video",
+  title: "Official MV",
+  candidateDurationSeconds: 30,
+  expectedDurationSeconds: 0,
+  currentSeconds: 12,
+}), true, "short matching pre-roll clips must not advance the song clock before duration is known");
+assert.equal(isLikelyYoutubeAdPlaybackSnapshot({
+  activeVideoId: "song-video",
+  expectedVideoId: "song-video",
+  title: "Official MV",
+  candidateDurationSeconds: 180,
+  expectedDurationSeconds: 0,
+  currentSeconds: 2,
+}), false, "matching playback can advance once YouTube reports a trusted song-like duration");
 assert.equal(isLikelyYoutubeAdPlaybackSnapshot({
   activeVideoId: "song-video",
   expectedVideoId: "song-video",
@@ -252,6 +268,16 @@ for (const id of [
     `${id} button must expose an accessible name`,
   );
 }
+assert.match(appSource, /function seekByKeyboard/, "progress slider should support keyboard seeking");
+assert.match(appSource, /event\.key === "ArrowLeft"[\s\S]*skipBy\(-5\)/, "progress slider ArrowLeft should seek backward");
+assert.match(appSource, /event\.key === "ArrowRight"[\s\S]*skipBy\(5\)/, "progress slider ArrowRight should seek forward");
+assert.match(appSource, /event\.key === "PageDown"[\s\S]*skipBy\(-30\)/, "progress slider PageDown should seek backward by a larger step");
+assert.match(appSource, /event\.key === "PageUp"[\s\S]*skipBy\(30\)/, "progress slider PageUp should seek forward by a larger step");
+assert.match(appSource, /event\.key === "Home"[\s\S]*seekToPosition\(0\)/, "progress slider Home should seek to the beginning");
+assert.match(appSource, /event\.key === "End"[\s\S]*seekToPosition\(displayedDuration\)/, "progress slider End should seek to the end");
+assert.match(appSource, /id="progress-track"[\s\S]*aria-valuemin=\{0\}[\s\S]*aria-valuemax=/, "progress slider should expose aria value bounds");
+assert.match(appSource, /id="progress-track"[\s\S]*aria-valuenow=/, "progress slider should expose the current playback value");
+assert.match(appSource, /id="progress-track"[\s\S]*aria-valuetext=/, "progress slider should expose human-readable playback position");
 
 for (const [name, css] of [
   ["styles.css", appCss],

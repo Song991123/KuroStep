@@ -112,6 +112,19 @@ export function isLikelyYoutubeAdPlaybackSnapshot(snapshot: YoutubePlaybackSnaps
     currentPosition > 0 &&
     currentPosition <= YOUTUBE_AD_DURATION_MAX_SECONDS &&
     (!Number.isFinite(candidateDuration) || candidateDuration <= 0 || candidateDuration <= YOUTUBE_AD_DURATION_MAX_SECONDS);
+  const isUntrustedMatchingPreDurationClip =
+    isExpectedVideoActive &&
+    expectedDuration <= 0 &&
+    Number.isFinite(currentPosition) &&
+    currentPosition > 0 &&
+    currentPosition <= YOUTUBE_AD_DURATION_MAX_SECONDS &&
+    (!Number.isFinite(candidateDuration) || candidateDuration <= 0 || candidateDuration <= YOUTUBE_AD_DURATION_MAX_SECONDS);
+  const isMatchingShortClipBeforeKnownDuration =
+    isExpectedVideoActive &&
+    expectedDuration <= 0 &&
+    Number.isFinite(candidateDuration) &&
+    candidateDuration > 0 &&
+    candidateDuration <= YOUTUBE_AD_DURATION_MAX_SECONDS;
   const isUntrustedPreDurationClockDuringKnownTrack =
     expectedDuration > YOUTUBE_AD_DURATION_MAX_SECONDS &&
     (!Number.isFinite(candidateDuration) || candidateDuration <= 0) &&
@@ -125,6 +138,8 @@ export function isLikelyYoutubeAdPlaybackSnapshot(snapshot: YoutubePlaybackSnaps
     isUnknownShortClipDuringKnownTrack ||
     isShortPreDurationClip ||
     isPreDurationClockOnlyClip ||
+    isUntrustedMatchingPreDurationClip ||
+    isMatchingShortClipBeforeKnownDuration ||
     isUntrustedPreDurationClockDuringKnownTrack ||
     durationLooksLikeAd
   );
