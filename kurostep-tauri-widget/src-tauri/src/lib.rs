@@ -24,6 +24,8 @@ struct ClientStatus {
     stage: String,
     authenticated: bool,
     text: String,
+    build_commit: Option<String>,
+    build_time: Option<String>,
     timestamp_ms: u128,
     windows: Vec<WindowStatus>,
     overlaps: Vec<String>,
@@ -1027,6 +1029,8 @@ fn report_client_status(
     stage: String,
     authenticated: bool,
     text: String,
+    build_commit: Option<String>,
+    build_time: Option<String>,
 ) -> Result<(), String> {
     let timestamp_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1037,6 +1041,8 @@ fn report_client_status(
         stage,
         authenticated,
         text,
+        build_commit,
+        build_time,
         timestamp_ms,
         windows: snapshot_windows(&app),
         overlaps: visible_window_overlaps(&app),

@@ -17,6 +17,8 @@ type ClientStatus = {
   stage: string;
   authenticated: boolean;
   text: string;
+  build_commit?: string | null;
+  build_time?: string | null;
   timestamp_ms: number;
   windows: WindowStatus[];
   overlaps: string[];
@@ -35,6 +37,8 @@ const lyricsToggleOn = text.includes("가사 오버레이 ON");
 assert.ok(ageMs >= 0 && ageMs <= maxAgeMs, `native status must be fresh (${ageMs}ms old)`);
 assert.equal(status.view, "main", "native status should be reported from the main player view");
 assert.equal(status.authenticated, true, "installed app should keep the user logged in for smoke QA");
+assert.ok(status.build_commit && status.build_commit !== "unknown", "native status must include the installed React build commit");
+assert.ok(status.build_time && status.build_time !== "unknown", "native status must include the installed React build time");
 assert.equal(status.overlaps.length, 0, `visible native windows must not overlap: ${status.overlaps.join(", ")}`);
 
 const main = windowsByLabel.get("main");
@@ -53,6 +57,10 @@ console.log(JSON.stringify({
   statusPath,
   ageMs,
   stage: status.stage,
+  build: {
+    commit: status.build_commit,
+    time: status.build_time,
+  },
   authenticated: status.authenticated,
   toggles: {
     paw: pawToggleOn ? "ON" : "unknown/off",
