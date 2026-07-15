@@ -1490,7 +1490,7 @@ select,
 
 .lyrics-full-panel {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -1512,11 +1512,11 @@ select,
 }
 
 .lyrics-full-list {
-  max-height: 252px;
+  max-height: 340px;
   display: grid;
-  gap: 4px;
+  gap: 6px;
   margin: 0;
-  padding: 5px;
+  padding: 7px;
   overflow: auto;
   list-style: none;
   scrollbar-width: none;
@@ -1539,11 +1539,11 @@ select,
   width: 100%;
   border: 0;
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
-  gap: 9px;
+  grid-template-columns: 50px minmax(0, 1fr);
+  gap: 10px;
   align-items: start;
   border-radius: 8px;
-  padding: 8px 9px;
+  padding: 9px 10px;
   background: transparent;
   color: inherit;
   text-align: left;
@@ -1572,7 +1572,7 @@ select,
 .lyrics-line.empty p {
   margin: 0;
   color: #615c55;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 750;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -1591,7 +1591,7 @@ select,
 }
 
 .lyrics-line.active .lyrics-line-button {
-  background: rgb(26 26 26 / 88%);
+  background: rgb(26 26 26 / 92%);
   box-shadow: 0 4px 12px rgb(0 0 0 / 12%);
 }
 

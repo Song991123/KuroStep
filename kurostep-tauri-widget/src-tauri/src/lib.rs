@@ -31,7 +31,7 @@ struct LyricContextState {
 }
 
 const DEPLOYED_WIDGET_URL: &str = "https://song991123.github.io/KuroStep/";
-const CONTENT_CACHE_VERSION: &str = "20260713-v058";
+const CONTENT_CACHE_VERSION: &str = "20260715-v059";
 
 #[tauri::command]
 fn set_lyrics_visible(
@@ -96,11 +96,11 @@ fn estimate_lyrics_window_size(line: &str, translation: &str) -> (f64, f64) {
     let line_units = visual_units(line).max(10.0);
     let translation_units = visual_units(translation);
     let longest = line_units.max(translation_units);
-    let width = (longest * 15.5 + 88.0).clamp(280.0, 1480.0);
+    let width = (longest * 18.0 + 112.0).clamp(320.0, 1680.0);
     let height = if translation.trim().is_empty() {
-        62.0
+        76.0
     } else {
-        92.0
+        112.0
     };
     (width, height)
 }
@@ -322,12 +322,20 @@ fn saved_or_default_position(
         .and_then(|main| main.current_monitor().ok().flatten())
         .or_else(|| window.current_monitor().ok().flatten())
         .or_else(|| app.primary_monitor().ok().flatten())?;
-    let monitor_position = monitor.position();
-    let monitor_size = monitor.size();
-    let scale_factor = monitor.scale_factor();
+    let scale_factor = monitor.scale_factor().max(1.0);
+    let raw_monitor_position = monitor.position();
+    let raw_monitor_size = monitor.size();
+    let monitor_position = PhysicalPosition {
+        x: (raw_monitor_position.x as f64 / scale_factor).round() as i32,
+        y: (raw_monitor_position.y as f64 / scale_factor).round() as i32,
+    };
+    let monitor_size = tauri::PhysicalSize {
+        width: (raw_monitor_size.width as f64 / scale_factor).round().max(1.0) as u32,
+        height: (raw_monitor_size.height as f64 / scale_factor).round().max(1.0) as u32,
+    };
     let positions = read_window_positions(app);
-    let width_px = width * scale_factor;
-    let height_px = height * scale_factor;
+    let width_px = width;
+    let height_px = height;
 
     if let Some(point) = positions.get(label) {
         let saved_position = clamp_position(
@@ -335,12 +343,12 @@ fn saved_or_default_position(
                 x: point.x,
                 y: point.y,
             },
-            monitor_position,
-            monitor_size,
+            &monitor_position,
+            &monitor_size,
             width_px,
             height_px,
         );
-        let safety_gap = (12.0 * scale_factor).round() as i32;
+        let safety_gap = 12;
         if label == "main"
             || !overlaps_visible_peer_window(
                 app,
@@ -359,8 +367,8 @@ fn saved_or_default_position(
             label,
             width_px,
             height_px,
-            monitor_position,
-            monitor_size,
+            &monitor_position,
+            &monitor_size,
         ) {
             return Some(position);
         }
@@ -372,20 +380,20 @@ fn saved_or_default_position(
             label,
             width_px,
             height_px,
-            monitor_position,
-            monitor_size,
+            &monitor_position,
+            &monitor_size,
         ) {
             return Some(position);
         }
     }
 
-    let margin = (24.0 * scale_factor).round() as i32;
-    let main_width = (380.0 * scale_factor).round() as i32;
-    let main_height = (720.0 * scale_factor).round() as i32;
-    let paw_gap = (20.0 * scale_factor).round() as i32;
-    let lyrics_gap = (18.0 * scale_factor).round() as i32;
+    let margin = 24;
+    let main_width = 380;
+    let main_height = 720;
+    let paw_gap = 20;
+    let lyrics_gap = 18;
     let main_x = monitor_position.x + monitor_size.width as i32 - main_width - margin;
-    let main_y = monitor_position.y + (76.0 * scale_factor).round() as i32;
+    let main_y = monitor_position.y + 76;
     let lyrics_y_above = main_y - height_px.ceil() as i32 - lyrics_gap;
     let lyrics_y_below = main_y + main_height + lyrics_gap;
     let lyrics_y = if lyrics_y_above >= monitor_position.y + margin {
@@ -400,7 +408,7 @@ fn saved_or_default_position(
         },
         "paw" => PhysicalPosition {
             x: main_x - main_width - paw_gap,
-            y: main_y + (42.0 * scale_factor).round() as i32,
+            y: main_y + 42,
         },
         "lyrics" => PhysicalPosition {
             x: main_x,
@@ -414,8 +422,8 @@ fn saved_or_default_position(
 
     Some(clamp_position(
         raw,
-        monitor_position,
-        monitor_size,
+        &monitor_position,
+        &monitor_size,
         width_px,
         height_px,
     ))
@@ -476,12 +484,11 @@ fn child_position_from_main(
     let main = app.get_webview_window("main")?;
     let main_position = main.outer_position().ok()?;
     let main_size = main.outer_size().ok()?;
-    let scale_factor = main.scale_factor().unwrap_or(1.0);
-    let gap = (20.0 * scale_factor).round() as i32;
+    let gap = 20;
     let width = width_px.ceil() as i32;
     let height = height_px.ceil() as i32;
-    let titlebar_offset = (42.0 * scale_factor).round() as i32;
-    let candidates = match label {
+    let titlebar_offset = 42;
+    let mut candidates = match label {
         "paw" => vec![
             PhysicalPosition {
                 x: main_position.x - width - gap,
@@ -520,6 +527,14 @@ fn child_position_from_main(
         ],
         _ => return None,
     };
+    candidates.extend(monitor_edge_candidates(
+        label,
+        monitor_position,
+        monitor_size,
+        width,
+        height,
+        gap,
+    ));
     let fallback = *candidates.first()?;
 
     first_non_overlapping_position(
@@ -541,6 +556,39 @@ fn child_position_from_main(
             height_px,
         ))
     })
+}
+
+fn monitor_edge_candidates(
+    label: &str,
+    monitor_position: &PhysicalPosition<i32>,
+    monitor_size: &tauri::PhysicalSize<u32>,
+    width: i32,
+    height: i32,
+    gap: i32,
+) -> Vec<PhysicalPosition<i32>> {
+    let margin = gap.max(16);
+    let left = monitor_position.x + margin;
+    let top = monitor_position.y + margin;
+    let right = monitor_position.x + monitor_size.width as i32 - width - margin;
+    let bottom = monitor_position.y + monitor_size.height as i32 - height - margin;
+    let center_x = monitor_position.x + ((monitor_size.width as i32 - width) / 2);
+    let center_y = monitor_position.y + ((monitor_size.height as i32 - height) / 2);
+
+    match label {
+        "lyrics" => vec![
+            PhysicalPosition { x: center_x, y: top },
+            PhysicalPosition { x: center_x, y: bottom },
+            PhysicalPosition { x: left, y: top },
+            PhysicalPosition { x: right, y: top },
+        ],
+        "paw" => vec![
+            PhysicalPosition { x: left, y: center_y },
+            PhysicalPosition { x: right, y: center_y },
+            PhysicalPosition { x: left, y: bottom },
+            PhysicalPosition { x: right, y: bottom },
+        ],
+        _ => Vec::new(),
+    }
 }
 
 fn first_non_overlapping_position(

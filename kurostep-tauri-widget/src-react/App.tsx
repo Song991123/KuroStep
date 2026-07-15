@@ -219,6 +219,10 @@ function translationStatusLabel(status: string | null | undefined) {
   }
 }
 
+function hasVisibleTranslation(translation: Translation | null | undefined) {
+  return Boolean(translation?.translatedText?.trim());
+}
+
 type YouTubePlayer = {
   cueVideoById: (options: { videoId: string; startSeconds?: number }) => void;
   loadVideoById?: (options: { videoId: string; startSeconds?: number }) => void;
@@ -1096,11 +1100,24 @@ function MusicPlayerWidget({
     displayedDurationRef.current = displayedDuration;
   }, [displayedDuration]);
 
-  function isLikelyYoutubeAdPlayback(player: YouTubePlayer | null, seconds: number) {
+  function isLikelyYoutubeAdPlayback(player: YouTubePlayer | null, seconds: number, currentSeconds = NaN) {
     const expectedDuration = displayedDurationRef.current || track?.durationSeconds || 0;
+    const currentPosition = Number(currentSeconds);
+    const candidateDuration = Number(seconds);
     const activeVideoId = String(player?.getVideoData?.()?.video_id || "");
     const isDifferentVideo = Boolean(activeVideoId && videoId && activeVideoId !== videoId);
-    return isDifferentVideo || isLikelyYoutubeAdDuration(seconds, expectedDuration);
+    const isShortPreDurationClip =
+      expectedDuration <= 0 &&
+      Number.isFinite(candidateDuration) &&
+      candidateDuration > 0 &&
+      candidateDuration <= YOUTUBE_AD_DURATION_MAX_SECONDS;
+    const isPreDurationClockOnlyClip =
+      expectedDuration <= 0 &&
+      Number.isFinite(currentPosition) &&
+      currentPosition > 0 &&
+      currentPosition <= YOUTUBE_AD_DURATION_MAX_SECONDS &&
+      (!Number.isFinite(candidateDuration) || candidateDuration <= 0 || candidateDuration <= YOUTUBE_AD_DURATION_MAX_SECONDS);
+    return isDifferentVideo || isShortPreDurationClip || isPreDurationClockOnlyClip || isLikelyYoutubeAdDuration(seconds, expectedDuration);
   }
 
   function reportDuration(seconds: number) {
@@ -1302,7 +1319,7 @@ function MusicPlayerWidget({
       const rawCurrent = player?.getCurrentTime?.();
       const current = Number.isFinite(rawCurrent) ? Number(rawCurrent) : playbackPositionRef.current;
       const rawDuration = player?.getDuration?.();
-      if (isLikelyYoutubeAdPlayback(player || null, Number(rawDuration) || 0)) {
+      if (isLikelyYoutubeAdPlayback(player || null, Number(rawDuration) || 0, current)) {
         stalledTickRef.current = 0;
         return;
       }
@@ -1735,7 +1752,7 @@ function LyricsWidget({
       </div>
       <div className={`lyrics-preview ${selectedLine ? "playing" : ""} ${lyricsExpanded ? "expanded" : ""}`}>
         <p>{lineText}</p>
-        {translation?.translatedText && <small>{translation.translatedText}</small>}
+        {hasVisibleTranslation(translation) && <small>{translation.translatedText}</small>}
         <button className="action-button compact" id="save-lyric-piece" type="button" disabled={!selectedLine?.text} onClick={onSavePiece}>현재 줄 저장</button>
         {currentTrack && (
           <div className="lyric-sync-controls" aria-label="가사 싱크 보정">
@@ -1757,7 +1774,7 @@ function LyricsWidget({
               {fullLines.length ? fullLines.map((line) => {
                 const isActive = line.index === selectedLine?.lineIndex;
                 const ref = lyricRefByLineIndex.get(line.index);
-                const activeLineTranslation = isActive ? translation?.translatedText || "" : "";
+                const activeLineTranslation = isActive && hasVisibleTranslation(translation) ? translation?.translatedText || "" : "";
                 return (
                 <li className={`lyrics-line${isActive ? " active" : ""}`} data-line-index={line.index} key={line.index} ref={isActive ? activeLineRef : undefined}>
                   <button
@@ -2305,9 +2322,7 @@ export default function App() {
       setTranslation(koreanDraft);
       setTranslationCache((current) => ({ ...current, [key]: koreanDraft, [legacyKey]: koreanDraft }));
     } else {
-      const pendingDraft = makeLocalTranslation(lineSnapshot, "", "");
-      setTranslation(pendingDraft);
-      setTranslationCache((current) => ({ ...current, [key]: pendingDraft, [legacyKey]: pendingDraft }));
+      setTranslation(null);
     }
     if (pendingTranslationRef.current.has(key)) {
       return;
