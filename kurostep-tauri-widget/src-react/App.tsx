@@ -1788,9 +1788,13 @@ function LyricsWidget({
         )}
         {lyricsExpanded && (
           <div className="lyrics-full-panel">
+            <div className={`lyrics-full-now${selectedLine ? " active" : ""}`} aria-live="polite">
+              <span>현재 줄</span>
+              <strong>{lineText}</strong>
+            </div>
             <div className="lyrics-full-meta">
-              <span>{fullLines.length ? `전체 ${fullLines.length}줄` : "가사 대기 중"}</span>
-              <span>{selectedLine ? `현재 ${formatTimestamp(selectedLine.startTimeMs)}` : "싱크 준비"}</span>
+              <span>{fullLines.length ? `전체 가사 ${fullLines.length}줄` : "가사 대기 중"}</span>
+              <span>{selectedLine ? `싱크 위치 ${formatTimestamp(selectedLine.startTimeMs)}` : "싱크 준비 중"}</span>
             </div>
             <ol className="lyrics-full-list" id="lyrics-full-list">
               {fullLines.length ? fullLines.map((line) => {
@@ -1810,6 +1814,7 @@ function LyricsWidget({
                       text: line.text,
                     })}
                   >
+                    <span className="lyrics-line-marker" aria-hidden="true" />
                     <span className="lyrics-line-time">{formatTimestamp(line.startTimeMs)}</span>
                     <span className="lyrics-line-copy">
                       <strong>{line.text}</strong>
