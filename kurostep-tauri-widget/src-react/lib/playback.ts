@@ -33,6 +33,11 @@ export function repeatModeNotice(mode: RepeatMode) {
   return "반복 산책을 잠깐 접었다냥.";
 }
 
+export function shouldReplayCurrentTrackOnEnded(mode: RepeatMode, playlistLength: number) {
+  const length = Math.max(0, Math.floor(Number(playlistLength) || 0));
+  return mode === "one" || (mode === "all" && length <= 1);
+}
+
 export function getNextPlaylistIndex(length: number, currentIndex: number, offset: number, wrap: boolean) {
   const listLength = Math.max(0, Math.floor(Number(length) || 0));
   if (listLength <= 0) return -1;

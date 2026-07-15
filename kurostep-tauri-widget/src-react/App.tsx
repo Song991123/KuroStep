@@ -45,6 +45,7 @@ import {
   normalizeRepeatMode,
   repeatModeLabel,
   repeatModeNotice,
+  shouldReplayCurrentTrackOnEnded,
   type RepeatMode,
 } from "./lib/playback";
 import { extractYoutubeId, extractYoutubePlaylistId, fetchYoutubeMetadata } from "./lib/youtube";
@@ -957,6 +958,7 @@ function MusicPlayerWidget({
   const lastReportedDurationRef = useRef(0);
   const repeatModeRef = useRef<RepeatMode>(repeatMode);
   const isPlayingRef = useRef(isPlaying);
+  const playlistLengthRef = useRef(tracks.length);
   const manualSeekUntilRef = useRef(0);
   const videoId = getYoutubeVideoId(track);
   const displayedDuration = duration || track?.durationSeconds || 0;
@@ -980,6 +982,10 @@ function MusicPlayerWidget({
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
+
+  useEffect(() => {
+    playlistLengthRef.current = tracks.length;
+  }, [tracks.length]);
 
   useEffect(() => {
     playbackPositionRef.current = position;
@@ -1138,7 +1144,7 @@ function MusicPlayerWidget({
                 return;
               }
               if (event.data === window.YT.PlayerState.ENDED) {
-                if (repeatModeRef.current === "one") {
+                if (shouldReplayCurrentTrackOnEnded(repeatModeRef.current, playlistLengthRef.current)) {
                   playerRef.current?.seekTo?.(0, true);
                   playerRef.current?.playVideo?.();
                 } else {
