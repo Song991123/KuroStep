@@ -86,7 +86,23 @@ assert.equal(isLikelyYoutubeAdPlaybackSnapshot({
   candidateDurationSeconds: 0,
   expectedDurationSeconds: 0,
   currentSeconds: 8,
-}), false, "matching official playback can advance before duration only when no known song length exists");
+}), true, "matching playback must not advance before YouTube reports a trusted duration");
+assert.equal(isLikelyYoutubeAdPlaybackSnapshot({
+  activeVideoId: "song-video",
+  expectedVideoId: "song-video",
+  title: "Official MV",
+  candidateDurationSeconds: 30,
+  expectedDurationSeconds: 0,
+  currentSeconds: 12,
+}), true, "short matching pre-roll clips must not advance the song clock before duration is known");
+assert.equal(isLikelyYoutubeAdPlaybackSnapshot({
+  activeVideoId: "song-video",
+  expectedVideoId: "song-video",
+  title: "Official MV",
+  candidateDurationSeconds: 180,
+  expectedDurationSeconds: 0,
+  currentSeconds: 2,
+}), false, "matching playback can advance once YouTube reports a trusted song-like duration");
 assert.equal(isLikelyYoutubeAdPlaybackSnapshot({
   activeVideoId: "song-video",
   expectedVideoId: "song-video",
