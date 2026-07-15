@@ -65,6 +65,12 @@ public class LyricTranslationService {
         LyricLineRef lineRef = lyricLineRefRepository.findById(lyricLineRefId)
                 .orElseThrow(() -> new NotFoundException("가사 라인 참조를 찾을 수 없습니다."));
         String languageCode = normalizeLanguageCode(request.targetLanguageCode());
+        LyricTranslation existingTranslation = lyricTranslationRepository
+                .findByUserIdAndLyricLineRefIdAndLanguageCode(userId, lyricLineRefId, languageCode)
+                .orElse(null);
+        if (existingTranslation != null && existingTranslation.isEdited()) {
+            return LyricTranslationResponse.from(existingTranslation);
+        }
 
         TranslationProviderResult result = translationProviderClient.translate(
                 request.sourceText(),
@@ -72,15 +78,12 @@ public class LyricTranslationService {
                 languageCode
         );
 
-        LyricTranslation translation = lyricTranslationRepository
-                .findByUserIdAndLyricLineRefIdAndLanguageCode(userId, lyricLineRefId, languageCode)
-                .map(existing -> {
-                    existing.replaceDraft(result.translatedText(), request.memoText(), result.provider());
-                    return existing;
-                })
-                .orElseGet(() -> lyricTranslationRepository.save(
+        LyricTranslation translation = existingTranslation != null
+                ? existingTranslation
+                : lyricTranslationRepository.save(
                         LyricTranslation.createDraft(lineRef, user, languageCode, result.translatedText(), request.memoText(), result.provider())
-                ));
+                );
+        translation.replaceDraft(result.translatedText(), request.memoText(), result.provider());
 
         return LyricTranslationResponse.from(translation);
     }
