@@ -84,6 +84,20 @@ const samples = [
     sourceId: "U6BDbXIah-Y",
     durationSeconds: 180,
   },
+  {
+    title: "LOVE ATTACK",
+    artist: "RESCENE",
+    sourceUrl: "https://youtu.be/9XttLI0oH0I",
+    sourceId: "9XttLI0oH0I",
+    durationSeconds: 182,
+  },
+  {
+    title: "Dirty Work",
+    artist: "aespa",
+    sourceUrl: "https://youtu.be/M2WTUoy4y6E",
+    sourceId: "M2WTUoy4y6E",
+    durationSeconds: 180,
+  },
 ];
 
 function todayIso() {
@@ -275,6 +289,7 @@ async function main() {
   );
   assert.equal(afterRemoval.some((track) => track.trackId === secondTrack.trackId), false, "removed playlist item must disappear immediately");
   assert.equal(afterRemoval.some((track) => track.playlistTrackId === replacementTrack.playlistTrackId), true, "replacement current track must remain in the playlist");
+  assert.equal(afterRemoval.length, samples.length - 1, "playlist removal should only remove the selected item");
   const taskAfterRemoval = await api<CreatorTask>(
     `/api/tasks/${task.id}?userId=${auth.userId}`,
     {},
