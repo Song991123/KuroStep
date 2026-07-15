@@ -12,6 +12,7 @@
     "build:desktop-assets": "KUROSTEP_DESKTOP_BUILD=1 vite build && rm -rf dist-react/assets-local && cp src/lyrics.html src/lyrics.css src/lyrics.js dist-react/ && cp -R src/assets dist-react/assets-local",
     "qa:logic": "node --experimental-strip-types scripts/qa-logic-check.ts",
     "qa:korean-live": "node --experimental-strip-types scripts/qa-korean-live.ts",
+    "qa:native-status": "node --experimental-strip-types scripts/qa-native-status.ts",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },

@@ -78,6 +78,21 @@ assert.equal(isLikelyYoutubeAdPlaybackSnapshot({
   expectedDurationSeconds: 210,
   currentSeconds: 20,
 }), false, "matching official playback should advance song playback");
+assert.equal(isLikelyYoutubeAdPlaybackSnapshot({
+  activeVideoId: "song-video",
+  expectedVideoId: "song-video",
+  title: "Official MV",
+  candidateDurationSeconds: 0,
+  expectedDurationSeconds: 0,
+  currentSeconds: 8,
+}), false, "matching official playback should advance even before YouTube reports a duration");
+assert.equal(isLikelyYoutubeAdPlaybackSnapshot({
+  activeVideoId: "",
+  expectedVideoId: "song-video",
+  candidateDurationSeconds: 0,
+  expectedDurationSeconds: 0,
+  currentSeconds: 8,
+}), true, "unknown pre-duration playback should not advance the song clock");
 
 const line: SelectedLine = { id: 101, lineIndex: 0, startTimeMs: 7360, text: "Green, green" };
 const sameLineWithoutServerId: SelectedLine = { lineIndex: 0, startTimeMs: 7360, text: "Green, green" };

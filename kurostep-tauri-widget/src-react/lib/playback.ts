@@ -85,9 +85,11 @@ export function isLikelyYoutubeAdPlaybackSnapshot(snapshot: YoutubePlaybackSnaps
   const activeVideoId = String(snapshot.activeVideoId || "");
   const expectedVideoId = String(snapshot.expectedVideoId || "");
   const isDifferentVideo = Boolean(activeVideoId && expectedVideoId && activeVideoId !== expectedVideoId);
+  const isExpectedVideoActive = Boolean(activeVideoId && expectedVideoId && activeVideoId === expectedVideoId);
   const titleLooksLikeAd = youtubeTitleLooksLikeAd(snapshot.title);
   const durationLooksLikeAd = isLikelyAdDuration(candidateDuration, expectedDuration);
   const isUnknownShortClipDuringKnownTrack =
+    !isExpectedVideoActive &&
     !activeVideoId &&
     expectedDuration > YOUTUBE_AD_DURATION_MAX_SECONDS &&
     Number.isFinite(candidateDuration) &&
@@ -97,12 +99,14 @@ export function isLikelyYoutubeAdPlaybackSnapshot(snapshot: YoutubePlaybackSnaps
     currentPosition >= 0 &&
     currentPosition <= YOUTUBE_AD_DURATION_MAX_SECONDS;
   const isShortPreDurationClip =
+    !isExpectedVideoActive &&
     !activeVideoId &&
     expectedDuration <= 0 &&
     Number.isFinite(candidateDuration) &&
     candidateDuration > 0 &&
     candidateDuration <= YOUTUBE_AD_DURATION_MAX_SECONDS;
   const isPreDurationClockOnlyClip =
+    !isExpectedVideoActive &&
     expectedDuration <= 0 &&
     Number.isFinite(currentPosition) &&
     currentPosition > 0 &&
