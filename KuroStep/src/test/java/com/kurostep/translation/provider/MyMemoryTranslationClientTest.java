@@ -1,6 +1,7 @@
 package com.kurostep.translation.provider;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.kurostep.translation.domain.TranslationProviderType;
 import com.sun.net.httpserver.HttpServer;
@@ -53,6 +54,24 @@ class MyMemoryTranslationClientTest {
         TranslationProviderResult result = client.translate("Green, green", "en", "ko");
 
         assertThat(result.translatedText()).isEqualTo("녹색, 녹색");
+    }
+
+    @Test
+    void translateRejectsSourceTextAndNonHangulNoiseForKoreanDraft() throws Exception {
+        MyMemoryTranslationClient client = clientWithResponse("""
+                {
+                  "responseData": {"translatedText": "You should come"},
+                  "matches": [
+                    {"translation": "You should come"},
+                    {"translation": "you should come"},
+                    {"translation": "neodo waya hae"}
+                  ]
+                }
+                """);
+
+        assertThatThrownBy(() -> client.translate("You should come", "en", "ko"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("자동 번역 후보");
     }
 
     private MyMemoryTranslationClient clientWithResponse(String responseBody) throws IOException {

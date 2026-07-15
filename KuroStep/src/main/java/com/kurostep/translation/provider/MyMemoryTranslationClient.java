@@ -46,7 +46,8 @@ public class MyMemoryTranslationClient implements TranslationProviderClient {
                 .encode()
                 .toUriString();
 
-        String translatedText = fetchTranslatedText(uri, sourceText, target).orElse(sourceText);
+        String translatedText = fetchTranslatedText(uri, sourceText, target)
+                .orElseThrow(() -> new IllegalArgumentException("쓸 만한 자동 번역 후보를 찾지 못했습니다."));
 
         return new TranslationProviderResult(translatedText, TranslationProviderType.MYMEMORY);
     }
