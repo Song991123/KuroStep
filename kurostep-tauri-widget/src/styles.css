@@ -29,6 +29,7 @@ body {
   display: grid;
   place-items: center;
   color: var(--text-charcoal);
+  font-size: 14px;
   -webkit-app-region: drag;
 }
 

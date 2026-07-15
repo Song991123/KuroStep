@@ -31,7 +31,7 @@ struct LyricContextState {
 }
 
 const DEPLOYED_WIDGET_URL: &str = "https://song991123.github.io/KuroStep/";
-const CONTENT_CACHE_VERSION: &str = "20260715-v059";
+const CONTENT_CACHE_VERSION: &str = "20260716-v060";
 
 #[tauri::command]
 fn set_lyrics_visible(
@@ -45,12 +45,12 @@ fn set_lyrics_visible(
     let display_line = if line.trim().is_empty() {
         "가사 발자국을 기다리는 중이다냥.".to_string()
     } else {
-        line
+        normalize_overlay_text(&line)
     };
     let display_translation = if translation.trim() == display_line.trim() {
         "".to_string()
     } else {
-        translation
+        normalize_overlay_text(&translation)
     };
     let lyrics = app
         .get_webview_window("lyrics")
@@ -96,13 +96,17 @@ fn estimate_lyrics_window_size(line: &str, translation: &str) -> (f64, f64) {
     let line_units = visual_units(line).max(10.0);
     let translation_units = visual_units(translation);
     let longest = line_units.max(translation_units);
-    let width = (longest * 18.0 + 112.0).clamp(320.0, 1680.0);
+    let width = (longest * 22.0 + 132.0).clamp(360.0, 1800.0);
     let height = if translation.trim().is_empty() {
         76.0
     } else {
         112.0
     };
     (width, height)
+}
+
+fn normalize_overlay_text(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn visual_units(value: &str) -> f64 {

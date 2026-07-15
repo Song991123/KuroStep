@@ -44,8 +44,10 @@ const MAX_LYRIC_SYNC_OFFSET_MS = 30000;
 const REPEAT_MODES = ["off", "all", "one"] as const;
 const MAX_YOUTUBE_RECOVERY_ATTEMPTS = 2;
 const LONG_FORM_TRACK_SECONDS = 12 * 60;
-const LYRIC_FETCH_TIMEOUT_MS = 45000;
+const LYRIC_FETCH_TIMEOUT_MS = 30000;
 const YOUTUBE_AD_DURATION_MAX_SECONDS = 90;
+const LYRIC_LOADING_MESSAGE = "처음 듣는 곡이면 가사 발자국을 굽는 중이다냥.";
+const LYRIC_EMPTY_MESSAGE = "맞는 싱크 가사를 아직 못 찾았다냥. 공식 MV/Topic 영상이면 제목과 아티스트 기준으로 다시 찾아볼게냥.";
 
 if (isEmbeddedContent) {
   document.documentElement.classList.add("embedded-mode");
@@ -444,6 +446,10 @@ function hasTimedLyricSource(source: LyricSource | null | undefined) {
   );
 }
 
+function hasUsefulLyricSource(source: LyricSource | null | undefined) {
+  return Boolean(source?.lines?.some((line) => line.text?.trim() && !isInstrumentalLyricMarker(line.text)));
+}
+
 function chooseLineByPlaybackTime(lyric: Lyric | null, source: LyricSource | null, positionSeconds: number, syncOffsetMs = 0): SelectedLine | null {
   const refs = lyric?.lines || [];
   const sourceLines = source?.lines || [];
@@ -547,7 +553,7 @@ function getIntroClockGuardSeconds(source: LyricSource | null) {
   if (!firstVocalLine) {
     return 0;
   }
-  return Math.max(0, Math.min(Number(firstVocalLine.startTimeMs) / 1000 - 0.4, 20));
+  return Math.max(0, Math.min(Number(firstVocalLine.startTimeMs) / 1000 - 0.4, 3));
 }
 
 function isLikelyYoutubeAdDuration(seconds: number, expectedSeconds = 0) {
@@ -1108,6 +1114,15 @@ function MusicPlayerWidget({
     const candidateDuration = Number(seconds);
     const activeVideoId = String(player?.getVideoData?.()?.video_id || "");
     const isDifferentVideo = Boolean(activeVideoId && videoId && activeVideoId !== videoId);
+    const isUnknownShortClipDuringKnownTrack =
+      !activeVideoId &&
+      expectedDuration > YOUTUBE_AD_DURATION_MAX_SECONDS &&
+      Number.isFinite(candidateDuration) &&
+      candidateDuration > 0 &&
+      candidateDuration <= YOUTUBE_AD_DURATION_MAX_SECONDS &&
+      Number.isFinite(currentPosition) &&
+      currentPosition >= 0 &&
+      currentPosition <= YOUTUBE_AD_DURATION_MAX_SECONDS;
     const isShortPreDurationClip =
       expectedDuration <= 0 &&
       Number.isFinite(candidateDuration) &&
@@ -1119,7 +1134,7 @@ function MusicPlayerWidget({
       currentPosition > 0 &&
       currentPosition <= YOUTUBE_AD_DURATION_MAX_SECONDS &&
       (!Number.isFinite(candidateDuration) || candidateDuration <= 0 || candidateDuration <= YOUTUBE_AD_DURATION_MAX_SECONDS);
-    return isDifferentVideo || isShortPreDurationClip || isPreDurationClockOnlyClip || isLikelyYoutubeAdDuration(seconds, expectedDuration);
+    return isDifferentVideo || isUnknownShortClipDuringKnownTrack || isShortPreDurationClip || isPreDurationClockOnlyClip || isLikelyYoutubeAdDuration(seconds, expectedDuration);
   }
 
   function reportDuration(seconds: number) {
@@ -1343,7 +1358,7 @@ function MusicPlayerWidget({
       const previous = lastPlaybackTimeRef.current;
       const isActuallyPlaying = window.YT && playerState === window.YT.PlayerState.PLAYING;
       const nearTrackEnd = nextDuration > 0 && previous >= nextDuration - 2 && current < 2;
-      const jumpedBackUnexpectedly = isActuallyPlaying && previous > 3 && current + 2 < previous && !manualSeekActive && !nearTrackEnd;
+      const jumpedBackUnexpectedly = previous > 3 && current + 2 < previous && !manualSeekActive && !nearTrackEnd;
       const stableCurrent = jumpedBackUnexpectedly ? previous : current;
 
       playbackPositionRef.current = stableCurrent;
@@ -1648,6 +1663,7 @@ function LyricMemoWidget({
   const lineKey = lyricLineKey(selectedLine);
   const statusLabel = translationStatusLabel(translation?.status);
   const draftDirtyRef = useRef(false);
+  const memoFocusedRef = useRef(false);
 
   useEffect(() => {
     setTranslatedText(translation?.translatedText || (selectedLine?.text && containsHangul(selectedLine.text) ? selectedLine.text : ""));
@@ -1657,6 +1673,7 @@ function LyricMemoWidget({
 
   useEffect(() => {
     if (draftDirtyRef.current) return;
+    if (memoFocusedRef.current) return;
     if (!translation) return;
     setTranslatedText(translation?.translatedText || (selectedLine?.text && containsHangul(selectedLine.text) ? selectedLine.text : ""));
     setMemoText(normalizeMemoText(translation?.memoText));
@@ -1687,8 +1704,8 @@ function LyricMemoWidget({
       {selectedLine?.text ? (
         <>
           <p className="memo-context" id="memo-context"><span>{formatTimestamp(selectedLine.startTimeMs)}</span> "{selectedLine.text}"</p>
-          <label className="memo-field"><span>번역문</span><textarea className="memo-input" id="translated-text" value={translatedText} onChange={(event) => changeTranslatedText(event.target.value)} placeholder="이 줄의 한국어 번역을 적어줘냥" /></label>
-          <label className="memo-field"><span>작업 메모</span><textarea className="memo-input" id="translation-memo" value={memoText} onChange={(event) => changeMemoText(event.target.value)} placeholder="이 가사를 작업에 어떻게 붙일지 적어줘냥" /></label>
+          <label className="memo-field"><span>번역문</span><textarea className="memo-input" id="translated-text" value={translatedText} onFocus={() => { memoFocusedRef.current = true; }} onBlur={() => { memoFocusedRef.current = false; }} onChange={(event) => changeTranslatedText(event.target.value)} placeholder="이 줄의 한국어 번역을 적어줘냥" /></label>
+          <label className="memo-field"><span>작업 메모</span><textarea className="memo-input" id="translation-memo" value={memoText} onFocus={() => { memoFocusedRef.current = true; }} onBlur={() => { memoFocusedRef.current = false; }} onChange={(event) => changeMemoText(event.target.value)} placeholder="이 가사를 작업에 어떻게 붙일지 적어줘냥" /></label>
           <div className="memo-actions">
             <button className="action-button primary compact" id="save-memo" type="button" onClick={() => onSaveMemo(translatedText, memoText)}>메모 저장</button>
             <button className="action-button compact danger" id="delete-memo" type="button" onClick={deleteMemo}>메모 삭제</button>
@@ -1706,6 +1723,7 @@ function LyricsWidget({
   lyricSource,
   selectedLine,
   translation,
+  lyricLoadMessage,
   lyricsExpanded,
   lyricSyncOffsetMs,
   onToggleExpanded,
@@ -1719,6 +1737,7 @@ function LyricsWidget({
   lyricSource: LyricSource | null;
   selectedLine: SelectedLine | null;
   translation: Translation | null;
+  lyricLoadMessage: string;
   lyricsExpanded: boolean;
   lyricSyncOffsetMs: number;
   onToggleExpanded: () => void;
@@ -1735,7 +1754,7 @@ function LyricsWidget({
     lyricRefs.forEach((lineRef) => refs.set(lineRef.lineIndex, lineRef));
     return refs;
   }, [lyricRefs]);
-  const lineText = selectedLine?.text || (currentTrack ? "처음 듣는 곡이면 가사 발자국을 굽는 중이다냥." : "아직 재생 중인 곡이 없다냥.");
+  const lineText = selectedLine?.text || lyricLoadMessage || (currentTrack ? LYRIC_LOADING_MESSAGE : "아직 재생 중인 곡이 없다냥.");
 
   useEffect(() => {
     if (!lyricsExpanded || selectedLine?.lineIndex == null) return;
@@ -1800,7 +1819,7 @@ function LyricsWidget({
                 </li>
                 );
               }) : (
-                <li className="lyrics-line empty"><p>아직 불러온 가사가 없다냥.</p></li>
+                <li className="lyrics-line empty"><p>{lyricLoadMessage || "아직 불러온 가사가 없다냥."}</p></li>
               )}
             </ol>
           </div>
@@ -1838,6 +1857,8 @@ export default function App() {
   const [pendingPlaylistImport, setPendingPlaylistImport] = useState<PendingPlaylistImport | null>(null);
   const [lyric, setLyric] = useState<Lyric | null>(null);
   const [lyricSource, setLyricSource] = useState<LyricSource | null>(null);
+  const [lyricLoadState, setLyricLoadState] = useState<"idle" | "loading" | "ready" | "empty" | "error">("idle");
+  const [lyricLoadMessage, setLyricLoadMessage] = useState("");
   const [selectedLine, setSelectedLine] = useState<SelectedLine | null>(null);
   const [translation, setTranslation] = useState<Translation | null>(null);
   const [translationCache, setTranslationCache] = useState<Record<string, Translation>>({});
@@ -2212,7 +2233,7 @@ export default function App() {
   const warmTrackLyricCache = useCallback(async (trackId: number, session = authRef.current) => {
     const cacheKey = `kurostep.lyrics.${trackId}`;
     const cached = readJson<LyricSource | null>(cacheKey, null);
-    if (cached?.lines?.length && cached?.lyric && hasTimedLyricSource(cached)) {
+    if (cached?.lines?.length && cached?.lyric && hasTimedLyricSource(cached) && hasUsefulLyricSource(cached)) {
       return cached;
     }
     const existing = lyricWarmupRef.current.get(trackId);
@@ -2222,7 +2243,7 @@ export default function App() {
     const warmup = api<LyricFetchResponse>(`/api/tracks/${trackId}/lyrics/fetch`, { method: "POST", timeoutMs: LYRIC_FETCH_TIMEOUT_MS }, session)
       .then((response) => {
         const source = parseLyricSource(response);
-        if (source.lines.length) {
+        if (hasUsefulLyricSource(source)) {
           writeJson(cacheKey, source);
         }
         return source;
@@ -2240,6 +2261,8 @@ export default function App() {
     if (!track?.id) {
       setLyric(null);
       setLyricSource(null);
+      setLyricLoadState("idle");
+      setLyricLoadMessage("");
       setSelectedLine(null);
       setTranslation(null);
       return;
@@ -2248,6 +2271,8 @@ export default function App() {
     if (isLongFormOrNonSongTrack(track)) {
       setLyric(null);
       setLyricSource(null);
+      setLyricLoadState("empty");
+      setLyricLoadMessage(friendlyLyricMessage(null, track));
       setSelectedLine(null);
       setTranslation(null);
       setNotice({ kind: "notice", message: friendlyLyricMessage(null, track) });
@@ -2256,27 +2281,50 @@ export default function App() {
 
     const cacheKey = `kurostep.lyrics.${track.id}`;
     const cached = readJson<LyricSource | null>(cacheKey, null);
-    if (cached?.lines?.length && cached?.lyric && hasTimedLyricSource(cached)) {
+    if (cached?.lines?.length && cached?.lyric && hasTimedLyricSource(cached) && hasUsefulLyricSource(cached)) {
       if (requestId !== lyricLoadRequestRef.current) return;
       setLyric(cached.lyric || null);
       setLyricSource(cached);
+      setLyricLoadState("ready");
+      setLyricLoadMessage("");
       return;
     }
 
-    setNotice({ kind: "notice", message: "처음 듣는 곡이면 가사 발자국을 굽는 중이다냥." });
+    setLyricLoadState("loading");
+    setLyricLoadMessage(LYRIC_LOADING_MESSAGE);
+    setNotice({ kind: "notice", message: LYRIC_LOADING_MESSAGE });
     try {
-      const source = await warmTrackLyricCache(track.id, session);
+      const source = await Promise.race([
+        warmTrackLyricCache(track.id, session),
+        new Promise<never>((_, reject) => {
+          window.setTimeout(() => reject(new Error("lyric fetch timeout")), LYRIC_FETCH_TIMEOUT_MS + 1500);
+        }),
+      ]);
       if (requestId !== lyricLoadRequestRef.current) return;
       setLyric(source.lyric || null);
       setLyricSource(source);
-      setNotice({ kind: "notice", message: "가사 발자국 준비 완료냥." });
+      if (hasUsefulLyricSource(source)) {
+        setLyricLoadState("ready");
+        setLyricLoadMessage("");
+        setNotice({ kind: "notice", message: "가사 발자국 준비 완료냥." });
+      } else {
+        setLyricLoadState("empty");
+        setLyricLoadMessage(LYRIC_EMPTY_MESSAGE);
+        setSelectedLine(null);
+        setTranslation(null);
+        setNotice({ kind: "notice", message: LYRIC_EMPTY_MESSAGE });
+      }
     } catch (error) {
       if (requestId !== lyricLoadRequestRef.current) return;
+      const message = friendlyLyricMessage(error, track);
+      lyricWarmupRef.current.delete(track.id);
       setLyric(null);
       setLyricSource(null);
+      setLyricLoadState("error");
+      setLyricLoadMessage(message);
       setSelectedLine(null);
       setTranslation(null);
-      setNotice({ kind: "notice", message: friendlyLyricMessage(error, track) });
+      setNotice({ kind: "notice", message });
     }
   }, [warmTrackLyricCache]);
 
@@ -2304,6 +2352,8 @@ export default function App() {
     setPlaybackPosition(0);
     setTrackDuration(workspace.currentTrack?.durationSeconds || 0);
     setLyricSyncOffsetMs(readLyricSyncOffset(workspace.currentTrack));
+    setLyricLoadState("idle");
+    setLyricLoadMessage("");
     setSelectedLine(null);
     setTranslation(null);
     void loadTrackLyrics(workspace.currentTrack, authRef.current);
@@ -2311,9 +2361,10 @@ export default function App() {
 
   useEffect(() => {
     if (shellView !== "main") return;
-    if (!auth?.accessToken || !workspace.currentTrack?.id || lyricSource?.lines?.length) return;
+    if (!auth?.accessToken || !workspace.currentTrack?.id) return;
+    if (lyricLoadState === "loading" || lyricLoadState === "ready" || lyricLoadState === "empty") return;
     void loadTrackLyrics(workspace.currentTrack, auth);
-  }, [auth?.accessToken, workspace.currentTrack?.id, lyricSource?.lines?.length, isPlaying, loadTrackLyrics, shellView]);
+  }, [auth?.accessToken, workspace.currentTrack?.id, lyricLoadState, isPlaying, loadTrackLyrics, shellView]);
 
   useEffect(() => {
     if (shellView !== "main") return;
@@ -3457,6 +3508,7 @@ export default function App() {
           lyricSource={lyricSource}
           selectedLine={selectedLine}
           translation={activeTranslation}
+          lyricLoadMessage={lyricLoadMessage}
           lyricsExpanded={lyricsExpanded}
           lyricSyncOffsetMs={lyricSyncOffsetMs}
           onToggleExpanded={() => setLyricsExpanded((value) => !value)}

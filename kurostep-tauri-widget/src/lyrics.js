@@ -3,6 +3,10 @@ const translationElement = document.querySelector("#lyric-translation");
 const dragRegion = document.querySelector("#lyrics-drag-region");
 let positionSaveTimer = null;
 
+function normalizeOverlayText(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
 function getCurrentWindow() {
   return window.__TAURI__?.window?.getCurrentWindow?.();
 }
@@ -53,8 +57,8 @@ document.addEventListener("keydown", blockDeveloperShortcut, true);
 
 window.__TAURI__?.event?.listen?.("lyrics:update", (event) => {
   const payload = event.payload ?? {};
-  const nextLine = payload.line || "가사 발자국을 기다리는 중이다냥.";
-  const nextTranslation = payload.translation || "";
+  const nextLine = normalizeOverlayText(payload.line) || "가사 발자국을 기다리는 중이다냥.";
+  const nextTranslation = normalizeOverlayText(payload.translation);
 
   if (lineElement.textContent !== nextLine) {
     lineElement.textContent = nextLine;
