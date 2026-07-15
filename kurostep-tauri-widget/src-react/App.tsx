@@ -1811,9 +1811,11 @@ export default function App() {
       type: "auth_state",
       authenticated: Boolean(auth),
       pawVisible: pawWidgetVisible,
+      lyricsVisible: lyricsOverlayVisible,
+      autoTranslationEnabled,
       authJson: auth ? JSON.stringify(auth) : null,
     });
-  }, [auth, pawWidgetVisible]);
+  }, [auth, pawWidgetVisible, lyricsOverlayVisible, autoTranslationEnabled]);
 
   useEffect(() => {
     function syncAuthFromStorage(event: StorageEvent) {

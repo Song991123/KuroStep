@@ -283,6 +283,20 @@ async function setNativePawVisible(visible, payload = {}) {
   }
 }
 
+async function setNativeLyricsVisible(visible, payload = {}) {
+  try {
+    await invokeNative("set_lyrics_visible", {
+      line: "",
+      translation: "",
+      ...payload,
+      visible,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function exitApp() {
   try {
     await invokeNative("exit_app");
@@ -335,12 +349,27 @@ async function handleNativeMessage(message, replyTarget = null, replyOrigin = "*
     } else if (message.clearAuth) {
       window.localStorage.removeItem("kurostep.auth");
     }
+    if (typeof message.pawVisible === "boolean") {
+      window.localStorage.setItem("kurostep.pawWidgetVisible", JSON.stringify(message.pawVisible));
+    }
+    if (typeof message.lyricsVisible === "boolean") {
+      window.localStorage.setItem("kurostep.lyricsOverlayVisible", JSON.stringify(message.lyricsVisible));
+    }
+    if (typeof message.autoTranslationEnabled === "boolean") {
+      window.localStorage.setItem("kurostep.autoTranslationEnabled", JSON.stringify(message.autoTranslationEnabled));
+    }
     renderActions();
     if (view === "main") {
+      const shouldShowChildWindows = Boolean(message.authenticated);
       const didUseNative = await setNativePawVisible(Boolean(message.authenticated && message.pawVisible !== false), {
         reload: false,
         authJson: message.authJson || null,
         clearAuth: !message.authenticated,
+      });
+      await setNativeLyricsVisible(Boolean(shouldShowChildWindows && message.lyricsVisible !== false), {
+        line: message.line || "",
+        translation: message.translation || "",
+        contextJson: message.contextJson,
       });
       if (!didUseNative) {
         if (message.authenticated && message.pawVisible !== false) {
