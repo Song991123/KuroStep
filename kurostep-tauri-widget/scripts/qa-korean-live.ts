@@ -233,6 +233,58 @@ async function main() {
     auth,
   );
   assert.equal(reordered.length, playlistTracks.length, "reorder must keep the same playlist track count");
+  assert.deepEqual(
+    reordered.map((track) => track.playlistTrackId),
+    playlistTracks.map((track) => track.playlistTrackId).reverse(),
+    "reorder must preserve the requested playlist order",
+  );
+
+  const secondTrack = playlistTracks[1];
+  assert.ok(secondTrack, "playlist transition QA requires a second track");
+  const switchedTask = await api<CreatorTask>(
+    `/api/tasks/${task.id}/current-playlist-track/${secondTrack.playlistTrackId}?userId=${auth.userId}`,
+    { method: "PATCH" },
+    auth,
+  );
+  assert.equal(
+    switchedTask.currentPlaylistTrackId,
+    secondTrack.playlistTrackId,
+    "current track transition must persist immediately",
+  );
+
+  const replacementTrack = playlistTracks[0];
+  const replacedBeforeRemoval = await api<CreatorTask>(
+    `/api/tasks/${task.id}/current-playlist-track/${replacementTrack.playlistTrackId}?userId=${auth.userId}`,
+    { method: "PATCH" },
+    auth,
+  );
+  assert.equal(
+    replacedBeforeRemoval.currentPlaylistTrackId,
+    replacementTrack.playlistTrackId,
+    "app-style removal flow must save a replacement current track before removing the old current item",
+  );
+  await api<void>(
+    `/api/playlists/${playlist.id}/tracks/${secondTrack.trackId}?userId=${auth.userId}`,
+    { method: "DELETE" },
+    auth,
+  );
+  const afterRemoval = await api<PlaylistTrack[]>(
+    `/api/playlists/${playlist.id}/tracks?userId=${auth.userId}`,
+    {},
+    auth,
+  );
+  assert.equal(afterRemoval.some((track) => track.trackId === secondTrack.trackId), false, "removed playlist item must disappear immediately");
+  assert.equal(afterRemoval.some((track) => track.playlistTrackId === replacementTrack.playlistTrackId), true, "replacement current track must remain in the playlist");
+  const taskAfterRemoval = await api<CreatorTask>(
+    `/api/tasks/${task.id}?userId=${auth.userId}`,
+    {},
+    auth,
+  );
+  assert.equal(
+    taskAfterRemoval.currentPlaylistTrackId,
+    replacementTrack.playlistTrackId,
+    "current track must still point at the replacement after removing another playlist item",
+  );
 
   const lyricResults: Array<{
     title: string;
@@ -330,7 +382,13 @@ async function main() {
     qaUserId: auth.userId,
     taskId: task.id,
     playlistId: playlist.id,
-    currentPlaylistTrackId: currentTask.currentPlaylistTrackId,
+    currentPlaylistTrackId: taskAfterRemoval.currentPlaylistTrackId,
+    playlistTransition: {
+      initialCurrentPlaylistTrackId: currentTask.currentPlaylistTrackId,
+      switchedCurrentPlaylistTrackId: switchedTask.currentPlaylistTrackId,
+      replacementCurrentPlaylistTrackId: taskAfterRemoval.currentPlaylistTrackId,
+      remainingTrackCount: afterRemoval.length,
+    },
     tracks: tracks.map((track) => ({
       id: track.id,
       title: track.title,
