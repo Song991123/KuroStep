@@ -1749,6 +1749,7 @@ export default function App() {
   const activeTranslation = isTranslationForLine(translation, selectedLine) ? translation : null;
   const pawWidgetVisibleRef = useRef(pawWidgetVisible);
   const lyricsOverlayVisibleRef = useRef(lyricsOverlayVisible);
+  const autoTranslationEnabledRef = useRef(autoTranslationEnabled);
   const activeTranslationRef = useRef<Translation | null>(activeTranslation);
 
   useEffect(() => {
@@ -1825,6 +1826,10 @@ export default function App() {
   useEffect(() => {
     lyricsOverlayVisibleRef.current = lyricsOverlayVisible;
   }, [lyricsOverlayVisible]);
+
+  useEffect(() => {
+    autoTranslationEnabledRef.current = autoTranslationEnabled;
+  }, [autoTranslationEnabled]);
 
   useEffect(() => {
     activeTranslationRef.current = activeTranslation;
@@ -2450,7 +2455,7 @@ export default function App() {
         if (!shouldAutoTranslateLine(lineSnapshot.text)) {
           return;
         }
-        if (!autoTranslationEnabled) {
+        if (!autoTranslationEnabledRef.current) {
           return;
         }
         const created = await api<Translation>(`/api/lyric-line-refs/${lineSnapshot.id}/translations/auto-draft?userId=${auth.userId}`, {
@@ -2462,7 +2467,7 @@ export default function App() {
             memoText: "",
           }),
         }, auth);
-        if (cancelled || !lineStillCurrent()) return;
+        if (cancelled || !lineStillCurrent() || !autoTranslationEnabledRef.current) return;
         const localDraftBeforeAutoDraft = readLocalTranslationDraft(trackIdSnapshot, lineSnapshot);
         if (localDraftBeforeAutoDraft) {
           applyTranslationForLine(localDraftBeforeAutoDraft);
