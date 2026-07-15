@@ -31,7 +31,7 @@ body {
 .lyrics-overlay {
   display: inline-flex;
   width: fit-content;
-  max-width: calc(100vw - 28px);
+  max-width: min(1480px, calc(100vw - 28px));
   flex-direction: column;
   align-items: center;
   padding: 8px 14px 10px;
@@ -43,12 +43,11 @@ body {
 .lyric-line,
 .lyric-translation {
   margin: 0;
-  max-width: calc(100vw - 28px);
+  max-width: min(1480px, calc(100vw - 28px));
   cursor: move;
   overflow: visible;
   overflow-wrap: normal;
   pointer-events: auto;
-  text-wrap: balance;
   white-space: normal;
   word-break: keep-all;
   -webkit-app-region: drag;
@@ -65,7 +64,7 @@ body {
   font-size: 20px;
   font-style: italic;
   font-weight: 700;
-  line-height: 1.45;
+  line-height: 1.42;
 }
 
 .lyric-translation {
@@ -74,7 +73,7 @@ body {
   font-size: 16px;
   font-style: italic;
   font-weight: 650;
-  line-height: 1.45;
+  line-height: 1.42;
 }
 
 @keyframes floatDown {
