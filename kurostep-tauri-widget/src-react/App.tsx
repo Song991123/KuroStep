@@ -2064,6 +2064,15 @@ export default function App() {
     setWorkspace(next);
   }
 
+  function resetActiveLyricState(message = "") {
+    setLyric(null);
+    setLyricSource(null);
+    setSelectedLine(null);
+    setTranslation(null);
+    setLyricLoadState(message ? "loading" : "idle");
+    setLyricLoadMessage(message);
+  }
+
   function updateCurrentTrackDuration(seconds: number) {
     const currentTrack = workspaceRef.current.currentTrack;
     const nextDuration = normalizeTrackDuration(seconds, currentTrack?.durationSeconds || trackDuration);
@@ -3001,6 +3010,12 @@ export default function App() {
   async function selectTrack(playlistTrack: PlaylistTrack) {
     const currentWorkspace = workspaceRef.current;
     if (!auth?.userId) return;
+    const isChangingTrack = currentWorkspace.currentTrack?.playlistTrackId !== playlistTrack.playlistTrackId;
+    if (isChangingTrack) {
+      resetActiveLyricState(LYRIC_LOADING_MESSAGE);
+      setPlaybackPosition(0);
+      setTrackDuration(playlistTrack.durationSeconds || 0);
+    }
     let work = currentWorkspace.work;
     try {
       if (!work) {
@@ -3047,6 +3062,9 @@ export default function App() {
       broadcastWorkspaceSync("current-track-selected");
       setNotice({ kind: "notice", message: "현재 곡을 바꿨다냥." });
     } catch (error) {
+      if (isChangingTrack) {
+        resetActiveLyricState("");
+      }
       setNotice({ kind: "error", message: (error as Error).message });
     }
   }
@@ -3070,6 +3088,7 @@ export default function App() {
       const playlistTracks = await reloadPlaylistTracks(auth);
       if (removingCurrent) {
         if (!replacement || !playlistTracks.length) {
+          resetActiveLyricState("");
           updateWorkspaceState((current) => ({
             ...current,
             work: updatedWork,
@@ -3080,6 +3099,9 @@ export default function App() {
           setTrackDuration(0);
           setIsPlaying(false);
         } else {
+          resetActiveLyricState(LYRIC_LOADING_MESSAGE);
+          setPlaybackPosition(0);
+          setTrackDuration(replacement.durationSeconds || 0);
           const detail = await api<Track>(`/api/tracks/${replacement.trackId}`, {}, auth);
           updateWorkspaceState((current) => ({
             ...current,
