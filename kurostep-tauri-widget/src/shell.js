@@ -14,6 +14,48 @@ let positionSaveTimer = null;
 let latestLyricContextJson = "{}";
 let latestLyricContextStamp = 0;
 
+function readShellFlag(key, fallback = true) {
+  try {
+    const value = window.localStorage.getItem(key);
+    return value == null ? fallback : JSON.parse(value) !== false;
+  } catch {
+    return fallback;
+  }
+}
+
+function readShellAuthJson() {
+  const authJson = window.localStorage.getItem("kurostep.auth");
+  if (!authJson) {
+    return null;
+  }
+  try {
+    const auth = JSON.parse(authJson);
+    return auth?.accessToken ? authJson : null;
+  } catch {
+    return null;
+  }
+}
+
+function syncShellAuthToContent() {
+  const authJson = readShellAuthJson();
+  if (!authJson) {
+    return;
+  }
+  authenticated = true;
+  renderActions();
+  shellFrame.contentWindow?.postMessage(
+    {
+      source: "kurostep-shell",
+      type: "hydrate_auth",
+      authJson,
+      pawVisible: readShellFlag("kurostep.pawWidgetVisible", true),
+      lyricsVisible: readShellFlag("kurostep.lyricsOverlayVisible", true),
+      autoTranslationEnabled: readShellFlag("kurostep.autoTranslationEnabled", true),
+    },
+    trustedContentOrigin,
+  );
+}
+
 if (view === "paw") {
   shellWindow.classList.add("paw");
 }
@@ -202,6 +244,11 @@ if (view === "paw") {
   window.setInterval(refreshLyricContextFromNative, 500);
 }
 
+shellFrame.addEventListener("load", () => {
+  syncShellAuthToContent();
+  window.setTimeout(syncShellAuthToContent, 250);
+});
+
 function scheduleWindowPositionSave() {
   window.clearTimeout(positionSaveTimer);
   positionSaveTimer = window.setTimeout(() => {
@@ -260,6 +307,11 @@ async function handleNativeMessage(message, replyTarget = null, replyOrigin = "*
 
   if (message.type === "auth_state") {
     authenticated = Boolean(message.authenticated);
+    if (message.authJson) {
+      window.localStorage.setItem("kurostep.auth", message.authJson);
+    } else if (message.clearAuth) {
+      window.localStorage.removeItem("kurostep.auth");
+    }
     renderActions();
     if (view === "main") {
       const didUseNative = await setNativePawVisible(Boolean(message.authenticated && message.pawVisible !== false), {

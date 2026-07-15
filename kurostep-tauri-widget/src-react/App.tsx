@@ -2068,9 +2068,45 @@ export default function App() {
 
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
-      const data = event.data as { source?: string; action?: string; type?: string; command?: string; message?: string; context?: CurrentLyricContext; contextJson?: string };
+      const data = event.data as {
+        source?: string;
+        action?: string;
+        type?: string;
+        command?: string;
+        message?: string;
+        authJson?: string;
+        pawVisible?: boolean;
+        lyricsVisible?: boolean;
+        autoTranslationEnabled?: boolean;
+        context?: CurrentLyricContext;
+        contextJson?: string;
+      };
       if (data?.source === "kurostep-shell" && data.action === "open_settings") {
         setSettingsOpen(true);
+        return;
+      }
+      if (data?.source === "kurostep-shell" && data.type === "hydrate_auth" && isTauriEmbeddedContent) {
+        try {
+          const hydratedAuth = data.authJson ? JSON.parse(data.authJson) as AuthSession : null;
+          if (hydratedAuth?.accessToken && authRef.current?.accessToken !== hydratedAuth.accessToken) {
+            writeJson("kurostep.auth", hydratedAuth);
+            setAuth(hydratedAuth);
+          }
+          if (typeof data.pawVisible === "boolean") {
+            writeJson("kurostep.pawWidgetVisible", data.pawVisible);
+            setPawWidgetVisible(data.pawVisible);
+          }
+          if (typeof data.lyricsVisible === "boolean") {
+            writeJson("kurostep.lyricsOverlayVisible", data.lyricsVisible);
+            setLyricsOverlayVisible(data.lyricsVisible);
+          }
+          if (typeof data.autoTranslationEnabled === "boolean") {
+            writeJson("kurostep.autoTranslationEnabled", data.autoTranslationEnabled);
+            setAutoTranslationEnabled(data.autoTranslationEnabled);
+          }
+        } catch {
+          // Ignore malformed shell hydration; the normal login flow remains available.
+        }
         return;
       }
       if (data?.source === "kurostep-shell" && data.type === "current_lyric_context") {
@@ -2626,7 +2662,7 @@ export default function App() {
     setPlaybackPosition(0);
     setTrackDuration(0);
     setNotice({ kind: "notice", message: "다음 작업 때 또 보자냥." });
-    postShellMessage({ type: "auth_state", authenticated: false });
+    postShellMessage({ type: "auth_state", authenticated: false, clearAuth: true });
   }
 
   async function exitApp() {
