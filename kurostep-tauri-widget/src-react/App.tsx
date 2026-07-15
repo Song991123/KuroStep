@@ -3313,6 +3313,7 @@ export default function App() {
 
   const visibleNotice = loading ? { kind: "notice" as const, message: "작업실 불러오는 중이냥" } : notice;
   const introClockGuardSeconds = useMemo(() => getIntroClockGuardSeconds(lyricSource), [lyricSource]);
+  const showInlineLyricsWidget = shellView === "main" && !isTauriEmbeddedContent && !isTauriApp;
 
   if (shellView === "paw" && !auth) {
     return (
@@ -3452,21 +3453,23 @@ export default function App() {
           onReorderTracks={reorderPlaylist}
           onPage={setPlaylistPage}
         />
-        <LyricsWidget
-          currentTrack={workspace.currentTrack}
-          lyric={lyric}
-          lyricSource={lyricSource}
-          selectedLine={selectedLine}
-          translation={activeTranslation}
-          lyricLoadMessage={lyricLoadMessage}
-          lyricsExpanded={lyricsExpanded}
-          lyricSyncOffsetMs={lyricSyncOffsetMs}
-          onToggleExpanded={() => setLyricsExpanded((value) => !value)}
-          onSelectLine={syncLyricsToLine}
-          onSavePiece={saveCurrentLyricPiece}
-          onAdjustSync={adjustLyricSync}
-          onResetSync={resetLyricSync}
-        />
+        {showInlineLyricsWidget && (
+          <LyricsWidget
+            currentTrack={workspace.currentTrack}
+            lyric={lyric}
+            lyricSource={lyricSource}
+            selectedLine={selectedLine}
+            translation={activeTranslation}
+            lyricLoadMessage={lyricLoadMessage}
+            lyricsExpanded={lyricsExpanded}
+            lyricSyncOffsetMs={lyricSyncOffsetMs}
+            onToggleExpanded={() => setLyricsExpanded((value) => !value)}
+            onSelectLine={syncLyricsToLine}
+            onSavePiece={saveCurrentLyricPiece}
+            onAdjustSync={adjustLyricSync}
+            onResetSync={resetLyricSync}
+          />
+        )}
       </div>
       {!isTauriApp && !isEmbeddedContent && pawWidgetVisible && (
         <aside className="detached-widget paw-detached-widget" aria-label="작업 발자국 위젯">
