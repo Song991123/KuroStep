@@ -229,6 +229,18 @@ function hasVisibleTranslation(translation: Translation | null | undefined) {
   return Boolean(translation?.translatedText?.trim());
 }
 
+function translationFingerprint(translation: Translation | null | undefined) {
+  if (!translation) return "";
+  return [
+    translation.id || "",
+    translation.clientLineKey || "",
+    translation.lyricLineRefId || "",
+    translation.status || "",
+    translation.translatedText || "",
+    normalizeMemoText(translation.memoText),
+  ].join("|");
+}
+
 type YouTubePlayer = {
   cueVideoById: (options: { videoId: string; startSeconds?: number }) => void;
   loadVideoById?: (options: { videoId: string; startSeconds?: number }) => void;
@@ -1120,12 +1132,9 @@ function MusicPlayerWidget({
     const candidateDuration = Number(seconds);
     const videoData = player?.getVideoData?.();
     const activeVideoId = String(videoData?.video_id || "");
-    const isVerifiedContentVideo = Boolean(activeVideoId && videoId && activeVideoId === videoId);
-    if (isVerifiedContentVideo && !youtubeTitleLooksLikeAd(videoData?.title)) {
-      return false;
-    }
     const isDifferentVideo = Boolean(activeVideoId && videoId && activeVideoId !== videoId);
     const titleLooksLikeAd = youtubeTitleLooksLikeAd(videoData?.title);
+    const durationLooksLikeAd = isLikelyYoutubeAdDuration(candidateDuration, expectedDuration);
     const isUnknownShortClipDuringKnownTrack =
       !activeVideoId &&
       expectedDuration > YOUTUBE_AD_DURATION_MAX_SECONDS &&
@@ -1147,7 +1156,14 @@ function MusicPlayerWidget({
       currentPosition > 0 &&
       currentPosition <= YOUTUBE_AD_DURATION_MAX_SECONDS &&
       (!Number.isFinite(candidateDuration) || candidateDuration <= 0 || candidateDuration <= YOUTUBE_AD_DURATION_MAX_SECONDS);
-    return titleLooksLikeAd || isDifferentVideo || isUnknownShortClipDuringKnownTrack || isShortPreDurationClip || isPreDurationClockOnlyClip || isLikelyYoutubeAdDuration(seconds, expectedDuration);
+    return (
+      titleLooksLikeAd ||
+      isDifferentVideo ||
+      isUnknownShortClipDuringKnownTrack ||
+      isShortPreDurationClip ||
+      isPreDurationClockOnlyClip ||
+      durationLooksLikeAd
+    );
   }
 
   function reportDuration(seconds: number) {
@@ -1888,6 +1904,7 @@ export default function App() {
   const translationCacheRef = useRef<Record<string, Translation>>(translationCache);
   const pendingTranslationRef = useRef(new Set<string>());
   const lastAppliedLyricContextAtRef = useRef(0);
+  const lastAppliedLyricContextStampRef = useRef("");
   const lyricLoadRequestRef = useRef(0);
   const lyricWarmupRef = useRef(new Map<number, Promise<LyricSource>>());
   const lastSyncedDurationRef = useRef<Record<number, number>>({});
@@ -1976,14 +1993,31 @@ export default function App() {
     if (contextAt && contextAt < lastAppliedLyricContextAtRef.current) {
       return;
     }
+    const nextLine = context.line || null;
+    const isEmptyContext = !context.trackId && !nextLine?.text && !context.translation?.translatedText;
+    if (isEmptyContext && selectedLineRef.current?.text) {
+      return;
+    }
     if (contextAt) {
       lastAppliedLyricContextAtRef.current = contextAt;
     }
-    const nextLine = context.line || null;
     const localDraft = readLocalTranslationDraft(context.trackId, nextLine);
     const nextTranslation = localDraft || (isTranslationForLine(context.translation, nextLine) ? context.translation || null : null);
-    setSelectedLine(nextLine);
-    setTranslation((current) => nextTranslation || (isTranslationForLine(current, nextLine) ? current : null));
+    const nextStamp = [
+      context.trackId || "",
+      lyricLineKey(nextLine),
+      contextAt || "",
+      translationFingerprint(nextTranslation),
+    ].join("::");
+    if (nextStamp === lastAppliedLyricContextStampRef.current) {
+      return;
+    }
+    lastAppliedLyricContextStampRef.current = nextStamp;
+    setSelectedLine((current) => (isSameLyricLine(current, nextLine) ? current : nextLine));
+    setTranslation((current) => {
+      const stableTranslation = nextTranslation || (isTranslationForLine(current, nextLine) ? current : null);
+      return translationFingerprint(stableTranslation) === translationFingerprint(current) ? current : stableTranslation;
+    });
   }
 
   useEffect(() => {
@@ -2623,6 +2657,7 @@ export default function App() {
   useEffect(() => {
     function refreshFromPeer(reason?: string) {
       setSavedLyricPieces(readJson<SavedLyricPiece[]>("kurostep.savedLyricPieces", []));
+      if (reason === "current-lyric-context") return;
       if (reason?.startsWith("lyric-piece")) return;
 
       const session = authRef.current;
@@ -3494,6 +3529,15 @@ export default function App() {
           }}
         >
           가사 오버레이 {lyricsOverlayVisible ? "ON" : "OFF"}
+        </button>
+        <button
+          className={`action-button ${autoTranslationEnabled ? "primary" : ""}`}
+          id="global-auto-translation-toggle"
+          type="button"
+          aria-pressed={autoTranslationEnabled}
+          onClick={() => changeAutoTranslationEnabled(!autoTranslationEnabled)}
+        >
+          자동 번역 {autoTranslationEnabled ? "ON" : "OFF"}
         </button>
       </div>
       <div className="widget-stack">
