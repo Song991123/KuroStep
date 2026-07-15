@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import pawBlack from "../src/assets/paw-print.svg";
 import pawNeutral from "../src/assets/paw-print-neutral.svg";
 import {
@@ -1273,10 +1273,40 @@ function MusicPlayerWidget({
     const rect = event.currentTarget.getBoundingClientRect();
     const ratio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0;
     const seconds = displayedDuration * Math.min(Math.max(ratio, 0), 1);
+    seekToPosition(seconds);
+  }
+
+  function seekToPosition(seconds: number) {
+    if (!displayedDuration) return;
+    const max = Math.max(displayedDuration - 1, 0);
+    const nextSeconds = Math.min(Math.max(seconds, 0), max);
     manualSeekUntilRef.current = Date.now() + 1800;
-    lastPlaybackTimeRef.current = seconds;
-    playerRef.current?.seekTo?.(seconds, true);
-    onSeek(seconds);
+    lastPlaybackTimeRef.current = nextSeconds;
+    playerRef.current?.seekTo?.(nextSeconds, true);
+    onSeek(nextSeconds);
+  }
+
+  function seekByKeyboard(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (!track || !displayedDuration) return;
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      skipBy(-5);
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      skipBy(5);
+    } else if (event.key === "PageDown") {
+      event.preventDefault();
+      skipBy(-30);
+    } else if (event.key === "PageUp") {
+      event.preventDefault();
+      skipBy(30);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      seekToPosition(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      seekToPosition(displayedDuration);
+    }
   }
 
   function skipBy(seconds: number) {
@@ -1362,7 +1392,20 @@ function MusicPlayerWidget({
         </div>
         <div className="progress-row" aria-label="재생 위치">
           <span>{formatDuration(position)}</span>
-          <div className="progress-track" id="progress-track" role="slider" tabIndex={0} aria-label="재생 위치 이동" onPointerDown={seekByPointer}>
+          <div
+            className="progress-track"
+            id="progress-track"
+            role="slider"
+            tabIndex={0}
+            aria-label="재생 위치 이동"
+            aria-disabled={!track}
+            aria-valuemin={0}
+            aria-valuemax={Math.round(displayedDuration || 0)}
+            aria-valuenow={Math.round(Math.min(position, displayedDuration || position || 0))}
+            aria-valuetext={`${formatDuration(position)} / ${formatDuration(displayedDuration)}`}
+            onPointerDown={seekByPointer}
+            onKeyDown={seekByKeyboard}
+          >
             <span id="progress-bar" style={{ width: `${progressRatio * 100}%` }}></span>
             <i id="progress-thumb" style={{ left: `${progressRatio * 100}%` }}></i>
           </div>
