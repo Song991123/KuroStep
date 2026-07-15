@@ -126,6 +126,9 @@ assert.equal(getNextPlaylistIndex(3, 10, 1, false), 2, "out-of-range current ind
 const tauriConfig = JSON.parse(readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8"));
 const capability = JSON.parse(readFileSync(new URL("../src-tauri/capabilities/default.json", import.meta.url), "utf8"));
 const appSource = readFileSync(new URL("../src-react/App.tsx", import.meta.url), "utf8");
+const appCss = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+const shellCss = readFileSync(new URL("../src/shell.css", import.meta.url), "utf8");
+const lyricsCss = readFileSync(new URL("../src/lyrics.css", import.meta.url), "utf8");
 
 assert.ok(
   tauriConfig.app.windows.every((windowConfig: { devtools?: boolean }) => windowConfig.devtools === false),
@@ -141,5 +144,21 @@ assert.match(
   /cancelled \|\| !lineStillCurrent\(\) \|\| !autoTranslationEnabledRef\.current/,
   "late auto-translation responses must not apply after the user turns automatic translation off",
 );
+
+for (const [name, css] of [
+  ["styles.css", appCss],
+  ["shell.css", shellCss],
+  ["lyrics.css", lyricsCss],
+] as const) {
+  assert.equal(
+    /font-size:\s*(?:[0-9]|1[0-3])px/.test(css),
+    false,
+    `${name} must not use text smaller than 14px`,
+  );
+}
+
+assert.equal(/text-overflow:\s*ellipsis/.test(lyricsCss), false, "lyrics overlay must never ellipsize text");
+assert.equal(/-webkit-line-clamp|line-clamp/.test(lyricsCss), false, "lyrics overlay must not clamp lyric lines");
+assert.equal(/white-space:\s*nowrap/.test(lyricsCss), false, "lyrics overlay must wrap instead of clipping long lines");
 
 console.log("qa:logic ok");
