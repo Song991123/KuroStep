@@ -1556,11 +1556,11 @@ select,
 }
 
 .lyrics-full-list {
-  max-height: 360px;
+  max-height: min(48vh, 420px);
   display: grid;
-  gap: 0;
+  gap: 5px;
   margin: 0;
-  padding: 6px 8px;
+  padding: 8px;
   overflow: auto;
   list-style: none;
   scrollbar-width: none;
@@ -1575,10 +1575,10 @@ select,
 
 .lyrics-line {
   position: relative;
-  border-radius: 0;
+  border-radius: 8px;
   padding: 0;
   color: #706a62;
-  transition: background-color 0.12s ease;
+  transition: background-color 0.12s ease, transform 0.12s ease;
 }
 
 .lyrics-line::before {
@@ -1596,11 +1596,11 @@ select,
   width: 100%;
   border: 0;
   display: grid;
-  grid-template-columns: 18px 54px minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: 18px 50px minmax(0, 1fr);
+  gap: 7px;
   align-items: start;
   border-radius: 8px;
-  padding: 9px 10px;
+  padding: 9px 8px;
   background: transparent;
   color: inherit;
   text-align: left;
@@ -1631,7 +1631,7 @@ select,
 
 .lyrics-line-copy {
   display: grid;
-  gap: 4px;
+  gap: 5px;
   min-width: 0;
 }
 
@@ -1659,6 +1659,7 @@ select,
   z-index: 1;
   border-radius: 8px;
   background: rgb(230 185 30 / 12%);
+  transform: translateY(-1px);
 }
 
 .lyrics-line.active .lyrics-line-button {

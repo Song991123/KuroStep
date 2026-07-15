@@ -96,13 +96,30 @@ fn estimate_lyrics_window_size(line: &str, translation: &str) -> (f64, f64) {
     let line_units = visual_units(line).max(10.0);
     let translation_units = visual_units(translation);
     let longest = line_units.max(translation_units);
-    let width = (longest * 22.0 + 132.0).clamp(360.0, 1800.0);
-    let height = if translation.trim().is_empty() {
-        76.0
+    let width = (longest * 18.0 + 132.0).clamp(360.0, 1280.0);
+    let line_rows = wrapped_overlay_rows(line_units, width).max(1);
+    let translation_rows = if translation.trim().is_empty() {
+        0
     } else {
-        112.0
+        wrapped_overlay_rows(translation_units, width).max(1)
     };
+    let height = (42.0
+        + f64::from(line_rows) * 31.0
+        + if translation_rows > 0 {
+            6.0 + f64::from(translation_rows) * 25.0
+        } else {
+            0.0
+        })
+    .clamp(76.0, 240.0);
     (width, height)
+}
+
+fn wrapped_overlay_rows(units: f64, width: f64) -> u32 {
+    if units <= 0.0 {
+        return 0;
+    }
+    let usable_units = ((width - 132.0) / 18.0).max(10.0);
+    (units / usable_units).ceil().max(1.0) as u32
 }
 
 fn normalize_overlay_text(value: &str) -> String {
@@ -699,4 +716,33 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lyric_overlay_grows_for_long_lines() {
+        let (short_width, short_height) = estimate_lyrics_window_size("Green, green", "");
+        let (long_width, long_height) = estimate_lyrics_window_size(
+            "You should come mess with the team and keep moving all night long",
+            "팀이랑 부딪히러 와도 돼, 밤새 계속 움직여도 돼",
+        );
+
+        assert!(short_width >= 360.0);
+        assert!(short_height >= 76.0);
+        assert!(long_width > short_width);
+        assert!(long_height > short_height);
+    }
+
+    #[test]
+    fn lyric_overlay_wraps_extreme_lines_instead_of_clipping() {
+        let repeated = "really ".repeat(220);
+        let (width, height) = estimate_lyrics_window_size(&repeated, "");
+
+        assert_eq!(width, 1280.0);
+        assert!(height > 76.0);
+        assert!(height <= 240.0);
+    }
 }
