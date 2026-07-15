@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -32,6 +33,7 @@ const positionsPath = process.env.KUROSTEP_WINDOW_POSITIONS_PATH ||
   join(homedir(), "Library/Application Support/com.song991123.kurostep/window-positions-v6.json");
 const maxAgeMs = Number(process.env.KUROSTEP_NATIVE_STATUS_MAX_AGE_MS || 180000);
 const positionTolerancePx = Number(process.env.KUROSTEP_NATIVE_POSITION_TOLERANCE_PX || 4);
+const expectedBuildCommit = process.env.KUROSTEP_EXPECTED_BUILD_COMMIT || readCurrentGitCommit();
 const status = JSON.parse(readFileSync(statusPath, "utf8")) as ClientStatus;
 const savedPositions = JSON.parse(readFileSync(positionsPath, "utf8")) as SavedWindowPositions;
 const ageMs = Date.now() - Number(status.timestamp_ms || 0);
@@ -45,6 +47,10 @@ assert.equal(status.view, "main", "native status should be reported from the mai
 assert.equal(status.authenticated, true, "installed app should keep the user logged in for smoke QA");
 assert.ok(status.build_commit && status.build_commit !== "unknown", "native status must include the installed React build commit");
 assert.ok(status.build_time && status.build_time !== "unknown", "native status must include the installed React build time");
+assert.equal(status.build_commit, expectedBuildCommit, `installed app build must match the current git commit (${expectedBuildCommit})`);
+assert.notEqual(status.stage, "client-error", "installed app must not report a recent client runtime error");
+assert.notEqual(status.stage, "client-unhandled-rejection", "installed app must not report a recent unhandled promise rejection");
+assert.notEqual(status.stage, "native-error", "installed app must not report a recent native command error");
 assert.equal(status.overlaps.length, 0, `visible native windows must not overlap: ${status.overlaps.join(", ")}`);
 
 const main = windowsByLabel.get("main");
@@ -80,6 +86,14 @@ function assertWindowRestoredFromSavedPosition(label: string, windowStatus: Wind
   );
 }
 
+function readCurrentGitCommit() {
+  try {
+    return execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
+  } catch {
+    return "";
+  }
+}
+
 console.log(JSON.stringify({
   ok: true,
   statusPath,
@@ -89,6 +103,7 @@ console.log(JSON.stringify({
   build: {
     commit: status.build_commit,
     time: status.build_time,
+    expectedCommit: expectedBuildCommit,
   },
   authenticated: status.authenticated,
   toggles: {
