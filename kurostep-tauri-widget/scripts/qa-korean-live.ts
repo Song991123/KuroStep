@@ -345,7 +345,8 @@ async function main() {
     firstStartTimeMs: number | null;
     syncedLyricsLength: number;
   }> = [];
-  let firstLineRef: LyricLineRef | null = null;
+  let manualLineRef: LyricLineRef | null = null;
+  let autoLineRef: LyricLineRef | null = null;
 
   for (const track of tracks) {
     const fetched = await api<LyricFetchResponse>(
@@ -383,7 +384,14 @@ async function main() {
       `${track.title} synced lookup should select the lyric line for the current playback time`,
     );
 
-    firstLineRef ||= lines.find((line) => typeof line.id === "number") || null;
+    for (const line of lines) {
+      if (typeof line.id !== "number") continue;
+      manualLineRef ||= line;
+      if (manualLineRef?.id !== line.id) {
+        autoLineRef ||= line;
+      }
+      if (manualLineRef && autoLineRef) break;
+    }
     lyricResults.push({
       title: track.title,
       lineCount: lines.length,
@@ -395,10 +403,11 @@ async function main() {
     });
   }
 
-  assert.ok(firstLineRef?.id, "at least one synced line ref must be available for memo QA");
+  assert.ok(manualLineRef?.id, "at least one synced line ref must be available for memo QA");
+  assert.ok(autoLineRef?.id, "a separate synced line ref must be available for auto-translation QA");
 
   const manual = await api<Translation>(
-    `/api/lyric-line-refs/${firstLineRef.id}/translations?userId=${auth.userId}`,
+    `/api/lyric-line-refs/${manualLineRef.id}/translations?userId=${auth.userId}`,
     {
       method: "POST",
       body: JSON.stringify({
@@ -413,7 +422,7 @@ async function main() {
   assert.equal(manual.memoText, "QA 메모 저장 확인", "manual memo text must be saved");
 
   const saved = await api<Translation[]>(
-    `/api/lyric-line-refs/${firstLineRef.id}/translations?userId=${auth.userId}`,
+    `/api/lyric-line-refs/${manualLineRef.id}/translations?userId=${auth.userId}`,
     {},
     auth,
   );
@@ -422,9 +431,9 @@ async function main() {
     "saved manual memo must be readable without flicker-prone empty replacement",
   );
 
-  const autoSourceText = "Green, green";
+  const autoSourceText = "You should come";
   const autoDraft = await api<Translation>(
-    `/api/lyric-line-refs/${firstLineRef.id}/translations/auto-draft?userId=${auth.userId}`,
+    `/api/lyric-line-refs/${autoLineRef.id}/translations/auto-draft?userId=${auth.userId}`,
     {
       method: "POST",
       body: JSON.stringify({
@@ -444,6 +453,8 @@ async function main() {
     isUsefulKoreanTranslation(autoSourceText, autoDraft.translatedText),
     `auto translation must be Korean and not source echo: ${autoDraft.translatedText}`,
   );
+  assert.notEqual(autoDraft.provider, "MANUAL", "auto translation QA must not be satisfied by a previously saved manual memo");
+  assert.notEqual(autoDraft.translatedText.trim(), "필수", "MyMemory fallback must not choose a misleading partial-segment translation");
 
   const summary = {
     ok: true,
@@ -465,7 +476,7 @@ async function main() {
     })),
     lyrics: lyricResults,
     manualMemo: {
-      lineRefId: firstLineRef.id,
+      lineRefId: manualLineRef.id,
       saved: true,
     },
     autoTranslation: autoDraft,
