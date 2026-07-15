@@ -198,6 +198,61 @@ assert.match(
   "memo widget must ignore stale translations from the previous lyric line",
 );
 
+const requiredControlIds = [
+  "window-minimize",
+  "settings-open",
+  "app-exit-button",
+  "toggle-paw-widget",
+  "global-lyrics-toggle",
+  "global-auto-translation-toggle",
+  "player-previous-track",
+  "player-rewind-10",
+  "player-toggle-play",
+  "player-forward-10",
+  "player-next-track",
+  "player-repeat-mode",
+  "progress-track",
+  "volume-toggle",
+  "volume-slider",
+  "youtube-video-toggle",
+  "youtube-link-submit",
+  "shuffle-playlist",
+  "playlist-import-confirm",
+  "playlist-import-cancel",
+  "playlist-page-prev",
+  "playlist-page-next",
+  "lyrics-panel-toggle",
+  "save-lyric-piece",
+  "lyrics-sync-late-5s",
+  "lyrics-sync-late-500ms",
+  "lyrics-sync-early-500ms",
+  "lyrics-sync-early-5s",
+  "lyrics-sync-reset",
+  "save-memo",
+  "delete-memo",
+];
+for (const id of requiredControlIds) {
+  assert.match(appSource, new RegExp(`id="${id}"`), `${id} control must have a stable id for no-mouse QA`);
+}
+for (const id of [
+  "player-previous-track",
+  "player-rewind-10",
+  "player-toggle-play",
+  "player-forward-10",
+  "player-next-track",
+  "player-repeat-mode",
+  "volume-toggle",
+  "youtube-video-toggle",
+  "shuffle-playlist",
+  "lyrics-panel-toggle",
+]) {
+  assert.match(
+    appSource,
+    new RegExp(`<button[\\s\\S]*id="${id}"[\\s\\S]*aria-label=`),
+    `${id} button must expose an accessible name`,
+  );
+}
+
 for (const [name, css] of [
   ["styles.css", appCss],
   ["shell.css", shellCss],
