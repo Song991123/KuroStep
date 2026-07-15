@@ -1537,22 +1537,24 @@ function LyricMemoWidget({
   const [translatedText, setTranslatedText] = useState("");
   const [memoText, setMemoText] = useState("");
   const lineKey = lyricLineKey(selectedLine);
-  const statusLabel = translationStatusLabel(translation?.status);
+  const activeMemoTranslation = isTranslationForLine(translation, selectedLine) ? translation : null;
+  const statusLabel = translationStatusLabel(activeMemoTranslation?.status);
   const draftDirtyRef = useRef(false);
   const memoFocusedRef = useRef(false);
 
   useEffect(() => {
-    setTranslatedText(translation?.translatedText || "");
-    setMemoText(normalizeMemoText(translation?.memoText));
+    const nextTranslation = isTranslationForLine(translation, selectedLine) ? translation : null;
+    setTranslatedText(nextTranslation?.translatedText || "");
+    setMemoText(normalizeMemoText(nextTranslation?.memoText));
     draftDirtyRef.current = false;
   }, [lineKey, selectedLine?.text]);
 
   useEffect(() => {
     if (draftDirtyRef.current) return;
     if (memoFocusedRef.current) return;
-    if (!translation) return;
-    setTranslatedText(translation?.translatedText || "");
-    setMemoText(normalizeMemoText(translation?.memoText));
+    if (!activeMemoTranslation) return;
+    setTranslatedText(activeMemoTranslation.translatedText || "");
+    setMemoText(normalizeMemoText(activeMemoTranslation.memoText));
   }, [translation?.id, translation?.translatedText, translation?.memoText, lineKey, selectedLine?.text]);
 
   function changeTranslatedText(value: string) {

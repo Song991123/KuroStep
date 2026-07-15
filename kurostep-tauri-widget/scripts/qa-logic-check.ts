@@ -86,7 +86,15 @@ assert.equal(isLikelyYoutubeAdPlaybackSnapshot({
   candidateDurationSeconds: 0,
   expectedDurationSeconds: 0,
   currentSeconds: 8,
-}), false, "matching official playback should advance even before YouTube reports a duration");
+}), false, "matching official playback can advance before duration only when no known song length exists");
+assert.equal(isLikelyYoutubeAdPlaybackSnapshot({
+  activeVideoId: "song-video",
+  expectedVideoId: "song-video",
+  title: "Official MV",
+  candidateDurationSeconds: 0,
+  expectedDurationSeconds: 210,
+  currentSeconds: 8,
+}), true, "known tracks must not advance the song clock until YouTube reports a trusted duration");
 assert.equal(isLikelyYoutubeAdPlaybackSnapshot({
   activeVideoId: "",
   expectedVideoId: "song-video",
@@ -183,6 +191,11 @@ assert.match(
   appSource,
   /cancelled \|\| !lineStillCurrent\(\) \|\| !autoTranslationEnabledRef\.current/,
   "late auto-translation responses must not apply after the user turns automatic translation off",
+);
+assert.match(
+  appSource,
+  /const activeMemoTranslation = isTranslationForLine\(translation, selectedLine\) \? translation : null/,
+  "memo widget must ignore stale translations from the previous lyric line",
 );
 
 for (const [name, css] of [
