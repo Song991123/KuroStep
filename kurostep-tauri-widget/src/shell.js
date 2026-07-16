@@ -387,6 +387,19 @@ async function handleNativeMessage(message, replyTarget = null, replyOrigin = "*
     return;
   }
 
+  if (message.type === "client_status") {
+    await invokeNative("report_client_status", {
+      view: message.view || view,
+      stage: message.stage || "client-status",
+      authenticated: Boolean(message.authenticated),
+      text: String(message.text || ""),
+      currentLyricContext: message.currentLyricContext || "",
+      buildCommit: message.buildCommit || "unknown",
+      buildTime: message.buildTime || "unknown",
+    }).catch(() => {});
+    return;
+  }
+
   if (message.type !== "native_command") {
     return;
   }

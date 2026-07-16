@@ -196,6 +196,7 @@ const tauriSource = readFileSync(new URL("../src-tauri/src/lib.rs", import.meta.
 const processHygieneSource = readFileSync(new URL("./qa-process-hygiene.ts", import.meta.url), "utf8");
 const nativeSeedSource = readFileSync(new URL("./qa-native-seed.ts", import.meta.url), "utf8");
 const nativeSmokeSource = readFileSync(new URL("./qa-native-smoke.ts", import.meta.url), "utf8");
+const nativeStatusSource = readFileSync(new URL("./qa-native-status.ts", import.meta.url), "utf8");
 const shellSource = readFileSync(new URL("../src/shell.js", import.meta.url), "utf8");
 const lyricsOverlaySource = readFileSync(new URL("../src/lyrics.js", import.meta.url), "utf8");
 const reactUiParityDoc = readFileSync(new URL("../docs/react-ui-parity.md", import.meta.url), "utf8");
@@ -510,6 +511,10 @@ assert.match(appSource, /<LyricsWidget[\s\S]*showSyncControls=\{false\}[\s\S]*su
 assert.match(appSource, /lineActionLabel="이 줄 선택하기"/, "paw full lyrics should select a line for memo editing instead of pretending to adjust playback sync");
 assert.match(appSource, /if \(shellView !== "main" && shellView !== "paw"\)/, "paw window should load lyric sources so the installed app has a full-lyrics UI");
 assert.match(appCss, /\.paw-full-lyrics \.lyrics-preview\s*\{[\s\S]*padding:\s*6px 0 0/, "paw full lyrics section should avoid double padding inside the paw widget");
+assert.match(appSource, /postShellMessage\(\{ type: "client_status"/, "embedded React views should report render text to the native shell for no-mouse QA");
+assert.match(shellSource, /message\.type === "client_status"[\s\S]*report_client_status/, "Tauri shell should forward embedded view status to native QA state");
+assert.match(tauriSource, /views:\s*HashMap<String, ClientViewStatus>/, "native status should keep per-view render evidence for main and paw windows");
+assert.match(nativeStatusSource, /pawStatus\?\.text[\s\S]*가사 창/, "native status QA should prove the paw window exposes the full lyrics surface");
 assert.match(buildInfoSource, /KUROSTEP_BUILD_COMMIT/, "React build should expose a build commit for installed-app QA");
 assert.match(appSource, /buildCommit:\s*KUROSTEP_BUILD_COMMIT/, "main view should report the React build commit to native status");
 assert.match(tauriSource, /build_commit:\s*Option<String>/, "native status should persist the React build commit");

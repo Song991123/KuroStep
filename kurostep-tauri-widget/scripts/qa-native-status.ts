@@ -24,6 +24,17 @@ type ClientStatus = {
   timestamp_ms: number;
   windows: WindowStatus[];
   overlaps: string[];
+  views?: Record<string, ClientViewStatus>;
+};
+
+type ClientViewStatus = {
+  stage?: string;
+  authenticated?: boolean;
+  text?: string;
+  current_lyric_context?: string | null;
+  build_commit?: string | null;
+  build_time?: string | null;
+  timestamp_ms?: number;
 };
 
 type SavedWindowPositions = Record<string, { x?: number | null; y?: number | null }>;
@@ -39,20 +50,23 @@ const status = JSON.parse(readFileSync(statusPath, "utf8")) as ClientStatus;
 const savedPositions = JSON.parse(readFileSync(positionsPath, "utf8")) as SavedWindowPositions;
 const ageMs = Date.now() - Number(status.timestamp_ms || 0);
 const windowsByLabel = new Map(status.windows.map((windowStatus) => [windowStatus.label, windowStatus]));
-const text = status.text || "";
+const mainStatus = status.views?.main || status;
+const pawStatus = status.views?.paw || null;
+const text = mainStatus.text || "";
 const pawToggleOn = text.includes("작업 발자국 ON");
 const lyricsToggleOn = text.includes("가사 오버레이 ON");
-const currentLyricContext = parseCurrentLyricContext(status.current_lyric_context);
+const currentLyricContext = parseCurrentLyricContext(mainStatus.current_lyric_context || status.current_lyric_context);
 
 assert.ok(ageMs >= 0 && ageMs <= maxAgeMs, `native status must be fresh (${ageMs}ms old)`);
-assert.equal(status.view, "main", "native status should be reported from the main player view");
-assert.equal(status.authenticated, true, "installed app should keep the user logged in for smoke QA");
-assert.ok(status.build_commit && status.build_commit !== "unknown", "native status must include the installed React build commit");
-assert.ok(status.build_time && status.build_time !== "unknown", "native status must include the installed React build time");
-assert.equal(status.build_commit, expectedBuildCommit, `installed app build must match the current git commit (${expectedBuildCommit})`);
-assert.notEqual(status.stage, "client-error", "installed app must not report a recent client runtime error");
-assert.notEqual(status.stage, "client-unhandled-rejection", "installed app must not report a recent unhandled promise rejection");
-assert.notEqual(status.stage, "native-error", "installed app must not report a recent native command error");
+assert.equal(mainStatus.authenticated, true, "installed app should keep the main player view logged in for smoke QA");
+assert.ok(mainStatus.build_commit && mainStatus.build_commit !== "unknown", "native status must include the installed React build commit");
+assert.ok(mainStatus.build_time && mainStatus.build_time !== "unknown", "native status must include the installed React build time");
+assert.equal(mainStatus.build_commit, expectedBuildCommit, `installed app build must match the current git commit (${expectedBuildCommit})`);
+for (const [view, viewStatus] of Object.entries(status.views || { [status.view]: status })) {
+  assert.notEqual(viewStatus.stage, "client-error", `${view} view must not report a recent client runtime error`);
+  assert.notEqual(viewStatus.stage, "client-unhandled-rejection", `${view} view must not report a recent unhandled promise rejection`);
+  assert.notEqual(viewStatus.stage, "native-error", `${view} view must not report a recent native command error`);
+}
 assert.equal(status.overlaps.length, 0, `visible native windows must not overlap: ${status.overlaps.join(", ")}`);
 
 const main = windowsByLabel.get("main");
@@ -64,6 +78,9 @@ if (pawToggleOn) {
   assert.equal(paw?.visible, true, "paw window must be visible when 작업 발자국 is ON");
   assertWindowRestoredFromSavedPosition("paw", paw);
   assertCurrentLyricContext("paw");
+  assert.ok(pawStatus?.authenticated, "paw view should report an authenticated render status");
+  assert.match(pawStatus?.text || "", /작업 발자국/, "paw view should report its rendered task surface");
+  assert.match(pawStatus?.text || "", /가사 창/, "paw view should report its full lyrics surface");
 }
 
 if (lyricsToggleOn) {
@@ -134,8 +151,18 @@ console.log(JSON.stringify({
     time: status.build_time,
     expectedCommit: expectedBuildCommit,
   },
-  authenticated: status.authenticated,
+  authenticated: mainStatus.authenticated,
   currentLyricContext,
+  viewStatus: {
+    main: {
+      stage: mainStatus.stage,
+      textIncludesPlayer: text.includes("BGM 턴테이블"),
+    },
+    paw: pawStatus ? {
+      stage: pawStatus.stage,
+      textIncludesFullLyrics: String(pawStatus.text || "").includes("가사 창"),
+    } : null,
+  },
   toggles: {
     paw: pawToggleOn ? "ON" : "unknown/off",
     lyrics: lyricsToggleOn ? "ON" : "unknown/off",
