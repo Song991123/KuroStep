@@ -393,6 +393,7 @@ const requiredControlIds = [
   "toggle-paw-widget",
   "global-lyrics-toggle",
   "global-auto-translation-toggle",
+  "settings-auto-translation-toggle",
   "player-previous-track",
   "player-rewind-10",
   "player-toggle-play",
@@ -505,6 +506,10 @@ assert.match(appSource, /aria-current=\{isActive \? "true" : undefined\}/, "acti
 assert.match(appSource, /fullListRef/, "expanded full lyrics should measure the scroll container before auto-following the active line");
 assert.match(appSource, /scrollIntoView\(\{ block: "nearest", behavior: "auto" \}\)/, "full lyrics should avoid smooth-scroll churn on every lyric tick");
 assert.equal(/scrollIntoView\(\{ block: "center", behavior: "smooth" \}\)/.test(appSource), false, "full lyrics must not constantly animate the list while the song plays");
+assert.match(appSource, /<LyricsWidget[\s\S]*showSyncControls=\{false\}[\s\S]*surface="section"/, "paw window should expose full lyrics as an in-window section without nesting another widget card");
+assert.match(appSource, /lineActionLabel="이 줄 선택하기"/, "paw full lyrics should select a line for memo editing instead of pretending to adjust playback sync");
+assert.match(appSource, /if \(shellView !== "main" && shellView !== "paw"\)/, "paw window should load lyric sources so the installed app has a full-lyrics UI");
+assert.match(appCss, /\.paw-full-lyrics \.lyrics-preview\s*\{[\s\S]*padding:\s*6px 0 0/, "paw full lyrics section should avoid double padding inside the paw widget");
 assert.match(buildInfoSource, /KUROSTEP_BUILD_COMMIT/, "React build should expose a build commit for installed-app QA");
 assert.match(appSource, /buildCommit:\s*KUROSTEP_BUILD_COMMIT/, "main view should report the React build commit to native status");
 assert.match(tauriSource, /build_commit:\s*Option<String>/, "native status should persist the React build commit");

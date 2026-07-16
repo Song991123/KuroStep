@@ -1437,6 +1437,10 @@ select,
   padding: 14px 16px 16px;
 }
 
+.paw-full-lyrics .lyrics-preview {
+  padding: 6px 0 0;
+}
+
 .lyrics-preview p {
   margin: 0;
   min-width: 0;

@@ -689,8 +689,10 @@ function SettingsScreen({
           </div>
           <button
             className={`toggle-pill ${autoTranslationEnabled ? "on" : ""}`}
+            id="settings-auto-translation-toggle"
             type="button"
             role="switch"
+            aria-label="자동 번역 켜고 끄기"
             aria-checked={autoTranslationEnabled}
             onClick={() => onToggleAutoTranslation(!autoTranslationEnabled)}
           >
@@ -1551,12 +1553,19 @@ function MusicPlayerWidget({
 function TaskPawWidget({
   workspace,
   savedLyricPieces,
+  lyric,
+  lyricSource,
   selectedLine,
   translation,
+  lyricLoadMessage,
+  lyricsExpanded,
   onSelectTask,
   onCreateTask,
   onUpdateStatus,
   onDeleteTask,
+  onToggleLyricsExpanded,
+  onSelectLyricLine,
+  onSavePiece,
   onSaveMemo,
   onDeleteMemo,
   onDraftMemo,
@@ -1564,12 +1573,19 @@ function TaskPawWidget({
 }: {
   workspace: Workspace;
   savedLyricPieces: SavedLyricPiece[];
+  lyric: Lyric | null;
+  lyricSource: LyricSource | null;
   selectedLine: SelectedLine | null;
   translation: Translation | null;
+  lyricLoadMessage: string;
+  lyricsExpanded: boolean;
   onSelectTask: (task: CreatorTask) => void;
   onCreateTask: (title: string) => Promise<void> | void;
   onUpdateStatus: (status: TaskStatus) => void;
   onDeleteTask: () => void;
+  onToggleLyricsExpanded: () => void;
+  onSelectLyricLine: (line: SelectedLine) => void;
+  onSavePiece: () => void;
   onSaveMemo: (translatedText: string, memoText: string) => void;
   onDeleteMemo: () => void;
   onDraftMemo: (translatedText: string, memoText: string) => void;
@@ -1584,6 +1600,24 @@ function TaskPawWidget({
         </div>
       </div>
       <TodayWorkWidget tasks={workspace.tasks} work={workspace.work} onSelectTask={onSelectTask} onCreateTask={onCreateTask} onUpdateStatus={onUpdateStatus} onDeleteTask={onDeleteTask} />
+      <LyricsWidget
+        currentTrack={workspace.currentTrack}
+        lyric={lyric}
+        lyricSource={lyricSource}
+        selectedLine={selectedLine}
+        translation={translation}
+        lyricLoadMessage={lyricLoadMessage}
+        lyricsExpanded={lyricsExpanded}
+        lyricSyncOffsetMs={0}
+        showSyncControls={false}
+        lineActionLabel="이 줄 선택하기"
+        surface="section"
+        onToggleExpanded={onToggleLyricsExpanded}
+        onSelectLine={onSelectLyricLine}
+        onSavePiece={onSavePiece}
+        onAdjustSync={() => {}}
+        onResetSync={() => {}}
+      />
       <LyricMemoWidget selectedLine={selectedLine} translation={translation} onSaveMemo={onSaveMemo} onDeleteMemo={onDeleteMemo} onDraftChange={onDraftMemo} />
       <section className="widget-section saved-lyrics-widget" aria-labelledby="saved-lyrics-title">
         <SectionHeader title="저장한 가사 조각" />
@@ -1691,6 +1725,9 @@ function LyricsWidget({
   onSavePiece,
   onAdjustSync,
   onResetSync,
+  showSyncControls = true,
+  lineActionLabel = "이 줄로 싱크 맞추기",
+  surface = "group",
 }: {
   currentTrack: Track | null;
   lyric: Lyric | null;
@@ -1705,6 +1742,9 @@ function LyricsWidget({
   onSavePiece: () => void;
   onAdjustSync: (deltaMs: number) => void;
   onResetSync: () => void;
+  showSyncControls?: boolean;
+  lineActionLabel?: string;
+  surface?: "group" | "section";
 }) {
   const fullLines = lyricSource?.lines || [];
   const lyricRefs = lyric?.lines || [];
@@ -1716,6 +1756,7 @@ function LyricsWidget({
     return refs;
   }, [lyricRefs]);
   const lineText = selectedLine?.text || lyricLoadMessage || (currentTrack ? (fullLines.length ? "재생하면 현재 가사를 따라간다냥." : LYRIC_LOADING_MESSAGE) : "아직 재생 중인 곡이 없다냥.");
+  const isSectionSurface = surface === "section";
 
   useEffect(() => {
     if (!lyricsExpanded || selectedLine?.lineIndex == null) return;
@@ -1732,11 +1773,11 @@ function LyricsWidget({
   }, [lyricsExpanded, selectedLine?.lineIndex]);
 
   return (
-    <section className="widget-group lyrics-widget" aria-label="가사 창">
-      <div className="widget-group-head">
+    <section className={`${isSectionSurface ? "widget-section paw-full-lyrics" : "widget-group"} lyrics-widget`} aria-label="가사 창">
+      <div className={isSectionSurface ? "section-head lyrics-section-head" : "widget-group-head"}>
         <div>
-          <h2>가사 창</h2>
-          <p>지금 흐르는 문장을 보고, 펼치면 전체 가사를 본다냥</p>
+          <h2 className={isSectionSurface ? "section-title" : undefined}>가사 창</h2>
+          {!isSectionSurface && <p>지금 흐르는 문장을 보고, 펼치면 전체 가사를 본다냥</p>}
         </div>
         <button className="lyrics-panel-toggle" id="lyrics-panel-toggle" type="button" aria-expanded={lyricsExpanded} aria-controls="lyrics-full-list" title={lyricsExpanded ? "가사 접기" : "가사 펼치기"} aria-label={lyricsExpanded ? "가사 접기" : "가사 펼치기"} onClick={onToggleExpanded}>
           <Icon name="chevronDown" />
@@ -1746,7 +1787,7 @@ function LyricsWidget({
         <p>{lineText}</p>
         {hasVisibleTranslation(translation) && <small>{translation.translatedText}</small>}
         <button className="action-button compact" id="save-lyric-piece" type="button" disabled={!selectedLine?.text} onClick={onSavePiece}>현재 줄 저장</button>
-        {currentTrack && (
+        {currentTrack && showSyncControls && (
           <div className="lyric-sync-controls" aria-label="가사 싱크 보정">
             <span>싱크 {formatLyricSyncOffset(lyricSyncOffsetMs)}</span>
             <button className="mini-sync-button" id="lyrics-sync-late-5s" type="button" onClick={() => onAdjustSync(-LYRIC_SYNC_COARSE_STEP_MS)}>5초 늦게</button>
@@ -1782,7 +1823,7 @@ function LyricsWidget({
                   <button
                     className="lyrics-line-button"
                     type="button"
-                    aria-label={`${formatTimestamp(line.startTimeMs)} 이 줄로 싱크 맞추기`}
+                    aria-label={`${formatTimestamp(line.startTimeMs)} ${lineActionLabel}`}
                     onClick={() => onSelectLine({
                       id: ref?.id || null,
                       lineIndex: line.index,
@@ -2489,7 +2530,7 @@ export default function App() {
   }, [warmTrackLyricCache]);
 
   useEffect(() => {
-    if (shellView !== "main") {
+    if (shellView !== "main" && shellView !== "paw") {
       setTrackDuration(workspace.currentTrack?.durationSeconds || 0);
       return;
     }
@@ -3600,12 +3641,25 @@ export default function App() {
         <TaskPawWidget
           workspace={workspace}
           savedLyricPieces={savedLyricPieces}
+          lyric={lyric}
+          lyricSource={lyricSource}
           selectedLine={selectedLine}
           translation={activeTranslation}
+          lyricLoadMessage={lyricLoadMessage}
+          lyricsExpanded={lyricsExpanded}
           onSelectTask={(task) => updateWorkspaceState((current) => ({ ...current, work: task }))}
           onCreateTask={createTask}
           onUpdateStatus={updateStatus}
           onDeleteTask={deleteTask}
+          onToggleLyricsExpanded={() => {
+            setLyricsExpanded((value) => {
+              const next = !value;
+              writeJson("kurostep.lyricsExpanded", next);
+              return next;
+            });
+          }}
+          onSelectLyricLine={setSelectedLine}
+          onSavePiece={saveCurrentLyricPiece}
           onSaveMemo={saveMemo}
           onDeleteMemo={deleteMemo}
           onDraftMemo={draftMemo}
@@ -3736,12 +3790,25 @@ export default function App() {
           <TaskPawWidget
             workspace={workspace}
             savedLyricPieces={savedLyricPieces}
+            lyric={lyric}
+            lyricSource={lyricSource}
             selectedLine={selectedLine}
             translation={activeTranslation}
+            lyricLoadMessage={lyricLoadMessage}
+            lyricsExpanded={lyricsExpanded}
             onSelectTask={(task) => updateWorkspaceState((current) => ({ ...current, work: task }))}
             onCreateTask={createTask}
             onUpdateStatus={updateStatus}
             onDeleteTask={deleteTask}
+            onToggleLyricsExpanded={() => {
+              setLyricsExpanded((value) => {
+                const next = !value;
+                writeJson("kurostep.lyricsExpanded", next);
+                return next;
+              });
+            }}
+            onSelectLyricLine={setSelectedLine}
+            onSavePiece={saveCurrentLyricPiece}
             onSaveMemo={saveMemo}
             onDeleteMemo={deleteMemo}
             onDraftMemo={draftMemo}
