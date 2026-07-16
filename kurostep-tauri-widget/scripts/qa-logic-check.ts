@@ -190,6 +190,7 @@ const tauriConfig = JSON.parse(readFileSync(new URL("../src-tauri/tauri.conf.jso
 const capability = JSON.parse(readFileSync(new URL("../src-tauri/capabilities/default.json", import.meta.url), "utf8"));
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const appSource = readFileSync(new URL("../src-react/App.tsx", import.meta.url), "utf8");
+const apiSource = readFileSync(new URL("../src-react/lib/api.ts", import.meta.url), "utf8");
 const buildInfoSource = readFileSync(new URL("../src-react/buildInfo.ts", import.meta.url), "utf8");
 const tauriSource = readFileSync(new URL("../src-tauri/src/lib.rs", import.meta.url), "utf8");
 const processHygieneSource = readFileSync(new URL("./qa-process-hygiene.ts", import.meta.url), "utf8");
@@ -204,6 +205,18 @@ assert.ok(
 assert.ok(
   capability.permissions.includes("core:webview:deny-internal-toggle-devtools"),
   "Tauri IPC must deny internal devtools toggling",
+);
+assert.match(apiSource, /export class ApiError extends Error/, "API errors should preserve HTTP status for auth recovery");
+assert.match(apiSource, /export function isAuthExpiredError/, "auth expiry detection should be shared instead of string-only app catches");
+assert.match(
+  appSource,
+  /function clearAuthSession\([\s\S]*window\.localStorage\.removeItem\("kurostep\.auth"\)[\s\S]*setAuth\(null\)/,
+  "expired sessions should clear stored auth and return to the login screen",
+);
+assert.match(
+  appSource,
+  /if \(isAuthExpiredError\(error\)\) \{[\s\S]*clearAuthSession\(\);[\s\S]*return;[\s\S]*\}/,
+  "JWT or 401 errors should not keep the stale authenticated workspace mounted",
 );
 assert.match(appSource, /autoTranslationEnabledRef/, "auto translation toggle must use a live ref for late async guards");
 assert.match(

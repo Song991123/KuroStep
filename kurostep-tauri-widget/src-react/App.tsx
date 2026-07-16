@@ -4,6 +4,7 @@ import pawNeutral from "../src/assets/paw-print-neutral.svg";
 import {
   api,
   authErrorMessage,
+  isAuthExpiredError,
   isValidEmail,
   PLAYLIST_PAGE_SIZE,
   readJson,
@@ -2100,6 +2101,21 @@ export default function App() {
     setLyricLoadMessage(message);
   }
 
+  function clearAuthSession(message = "세션이 만료됐어냥. 다시 로그인해줘냥.") {
+    window.localStorage.removeItem("kurostep.auth");
+    authRef.current = null;
+    setAuth(null);
+    updateWorkspaceState({ tasks: [], work: null, counts: { ...emptyCounts }, playlist: null, playlistTracks: [], currentTrack: null });
+    resetActiveLyricState();
+    setIsPlaying(false);
+    setPlaybackPosition(0);
+    setTrackDuration(0);
+    setNotice({ kind: "error", message });
+    void invokeNative("set_paw_visible", { visible: false, reload: false, clearAuth: true }).catch(() => {});
+    void invokeNative("set_lyrics_visible", { visible: false, line: "", translation: "" }).catch(() => {});
+    postShellMessage({ type: "auth_state", authenticated: false, clearAuth: true });
+  }
+
   function updateCurrentTrackDuration(seconds: number) {
     const currentTrack = workspaceRef.current.currentTrack;
     const nextDuration = normalizeTrackDuration(seconds, currentTrack?.durationSeconds || trackDuration);
@@ -2698,6 +2714,10 @@ export default function App() {
       setPlaylistPage((current) => Math.min(current, getPlaylistPageCount(playlistTracks.length)));
       setNotice({ kind: "notice", message: "오늘 발자국장 준비 완료냥" });
     } catch (error) {
+      if (isAuthExpiredError(error)) {
+        clearAuthSession();
+        return;
+      }
       setNotice({ kind: "error", message: `작업 정보를 못 불러왔어냥: ${(error as Error).message}` });
     } finally {
       setLoading(false);
@@ -2761,7 +2781,11 @@ export default function App() {
         }
         return refreshWorkspace(nextAuth);
       })
-      .catch(() => {
+      .catch((error) => {
+        if (isAuthExpiredError(error)) {
+          clearAuthSession();
+          return;
+        }
         setNotice({ kind: "error", message: "세션 확인이 잠깐 막혔다냥. 로그인 상태는 유지해둘게냥." });
         void refreshWorkspace(auth);
       });
