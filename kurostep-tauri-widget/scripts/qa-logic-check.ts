@@ -194,6 +194,7 @@ const apiSource = readFileSync(new URL("../src-react/lib/api.ts", import.meta.ur
 const buildInfoSource = readFileSync(new URL("../src-react/buildInfo.ts", import.meta.url), "utf8");
 const tauriSource = readFileSync(new URL("../src-tauri/src/lib.rs", import.meta.url), "utf8");
 const processHygieneSource = readFileSync(new URL("./qa-process-hygiene.ts", import.meta.url), "utf8");
+const nativeSeedSource = readFileSync(new URL("./qa-native-seed.ts", import.meta.url), "utf8");
 const shellSource = readFileSync(new URL("../src/shell.js", import.meta.url), "utf8");
 const lyricsOverlaySource = readFileSync(new URL("../src/lyrics.js", import.meta.url), "utf8");
 const reactUiParityDoc = readFileSync(new URL("../docs/react-ui-parity.md", import.meta.url), "utf8");
@@ -506,6 +507,16 @@ assert.equal(/scrollIntoView\(\{ block: "center", behavior: "smooth" \}\)/.test(
 assert.match(buildInfoSource, /KUROSTEP_BUILD_COMMIT/, "React build should expose a build commit for installed-app QA");
 assert.match(appSource, /buildCommit:\s*KUROSTEP_BUILD_COMMIT/, "main view should report the React build commit to native status");
 assert.match(tauriSource, /build_commit:\s*Option<String>/, "native status should persist the React build commit");
+assert.equal(
+  packageJson.scripts["qa:native-seed"],
+  "node --experimental-strip-types scripts/qa-native-seed.ts",
+  "native seed QA should be runnable from package scripts",
+);
+assert.match(nativeSeedSource, /kurostep\.auth/, "native seed QA should inject the auth session without using mouse input");
+assert.match(nativeSeedSource, /kurostep\.pawWidgetVisible/, "native seed QA should turn the paw window on before installed-app smoke checks");
+assert.match(nativeSeedSource, /kurostep\.lyricsOverlayVisible/, "native seed QA should turn the lyrics overlay on before installed-app smoke checks");
+assert.match(nativeSeedSource, /kurostep\.currentLyricContext/, "native seed QA should seed a lyric context for native status checks");
+assert.match(nativeSeedSource, /LocalStorage\/localstorage\.sqlite3/, "native seed QA should target WebKit localStorage for the installed Tauri app");
 assert.equal(
   packageJson.scripts["qa:process-hygiene"],
   "node --experimental-strip-types scripts/qa-process-hygiene.ts",
