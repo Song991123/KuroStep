@@ -287,6 +287,11 @@ assert.match(
 );
 assert.match(
   appSource,
+  /id="memo-save-state"[\s\S]*aria-live=\{statusLabel \? "polite" : "off"\}/,
+  "empty memo status must not keep an active live region that flickers while lyrics change",
+);
+assert.match(
+  appSource,
   /async function deleteMemo\(\) \{[\s\S]*?removeLocalTranslationDraft\(workspace\.currentTrack\?\.id, selectedLine\);/,
   "deleting a memo must clear the matching local draft",
 );
@@ -398,6 +403,8 @@ assert.equal(/white-space:\s*nowrap/.test(lyricsCss), false, "lyrics overlay mus
 assert.match(lyricsCss, /body\s*\{[\s\S]*pointer-events:\s*none/, "lyrics overlay body should let empty transparent space pass mouse events");
 assert.match(lyricsCss, /\.lyrics-overlay\s*\{[\s\S]*pointer-events:\s*none/, "lyrics overlay wrapper should not catch empty-space mouse events");
 assert.match(lyricsCss, /\.lyric-line,\s*\n\.lyric-translation\s*\{[\s\S]*pointer-events:\s*auto/, "only visible lyric text should be draggable");
+assert.match(appCss, /\.memo-save-state\.empty\s*\{[\s\S]*visibility:\s*hidden/, "empty memo status should reserve space without visually flickering");
+assert.equal(/\.memo-save-state\s*\{[\s\S]*transition:/.test(appCss), false, "memo status should not animate between empty and saved labels");
 assert.match(appCss, /\.lyrics-full-now\s*\{[\s\S]*position:\s*sticky/, "expanded full lyrics should keep the current line visible while scrolling");
 assert.match(appCss, /\.lyrics-full-list\s*\{[\s\S]*scrollbar-width:\s*thin/, "expanded full lyrics should expose a visible scroll affordance");
 assert.equal(/\.lyrics-full-list::-webkit-scrollbar\s*\{[\s\S]*display:\s*none/.test(appCss), false, "expanded full lyrics must not hide its scrollbar");

@@ -1662,7 +1662,7 @@ function LyricMemoWidget({
           <div className="memo-actions">
             <button className="action-button primary compact" id="save-memo" type="button" onClick={() => onSaveMemo(translatedText, memoText)}>메모 저장</button>
             <button className="action-button compact danger" id="delete-memo" type="button" onClick={deleteMemo}>메모 삭제</button>
-            <span className={`memo-save-state${statusLabel ? "" : " empty"}`} id="memo-save-state" aria-live="polite">{statusLabel}</span>
+            <span className={`memo-save-state${statusLabel ? "" : " empty"}`} id="memo-save-state" aria-live={statusLabel ? "polite" : "off"}>{statusLabel}</span>
           </div>
         </>
       ) : <p className="state-message">곡을 재생하면 현재 가사와 한국어 메모를 만질 수 있다냥.</p>}
