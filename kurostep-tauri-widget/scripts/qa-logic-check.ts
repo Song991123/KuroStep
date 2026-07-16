@@ -196,6 +196,7 @@ const tauriSource = readFileSync(new URL("../src-tauri/src/lib.rs", import.meta.
 const processHygieneSource = readFileSync(new URL("./qa-process-hygiene.ts", import.meta.url), "utf8");
 const shellSource = readFileSync(new URL("../src/shell.js", import.meta.url), "utf8");
 const lyricsOverlaySource = readFileSync(new URL("../src/lyrics.js", import.meta.url), "utf8");
+const reactUiParityDoc = readFileSync(new URL("../docs/react-ui-parity.md", import.meta.url), "utf8");
 const appCss = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const shellCss = readFileSync(new URL("../src/shell.css", import.meta.url), "utf8");
 const lyricsCss = readFileSync(new URL("../src/lyrics.css", import.meta.url), "utf8");
@@ -439,5 +440,8 @@ assert.match(processHygieneSource, /tauri dev/, "process hygiene QA should detec
 assert.match(processHygieneSource, /GradleDaemon/, "process hygiene QA should detect stale build daemons");
 assert.match(processHygieneSource, /unexpectedProcesses\.length/, "process hygiene QA should reject unknown KuroStep-related processes");
 assert.match(processHygieneSource, /installedAppMainProcesses\.length <= 1/, "process hygiene QA should reject duplicate installed app processes");
+assert.match(reactUiParityDoc, /기본 텍스트와 버튼은 14px 이상/, "React UI parity docs should preserve the 14px minimum text rule");
+assert.match(reactUiParityDoc, /배포 UI 렌더 QA는 GitHub Pages origin에서 진행한다/, "React UI parity docs should require Pages-origin render QA");
+assert.match(reactUiParityDoc, /CORS[\s\S]*“준비 중” 재현 판단에 쓰지 않는다/, "React UI parity docs should not treat local Vite CORS failures as deployed ready-state bugs");
 
 console.log("qa:logic ok");
