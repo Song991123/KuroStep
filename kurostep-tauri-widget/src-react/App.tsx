@@ -995,6 +995,7 @@ function MusicPlayerWidget({
   const pageCount = getPlaylistPageCount(tracks.length);
   const visibleTracks = tracks.slice((page - 1) * PLAYLIST_PAGE_SIZE, page * PLAYLIST_PAGE_SIZE);
   const progressRatio = displayedDuration > 0 ? Math.min(position / displayedDuration, 1) : 0;
+  const [linkSubmitting, setLinkSubmitting] = useState(false);
 
   function getPlaylistDuration(playlistTrack: PlaylistTrack) {
     if (playlistTrack.playlistTrackId === track?.playlistTrackId) {
@@ -1351,10 +1352,15 @@ function MusicPlayerWidget({
 
   async function submitLink() {
     const value = url.trim();
-    if (!value) return;
-    const registered = await onRegisterLink(value);
-    if (registered) {
-      setUrl("");
+    if (!value || linkSubmitting) return;
+    setLinkSubmitting(true);
+    try {
+      const registered = await onRegisterLink(value);
+      if (registered) {
+        setUrl("");
+      }
+    } finally {
+      setLinkSubmitting(false);
     }
   }
 
@@ -1463,11 +1469,11 @@ function MusicPlayerWidget({
         <SectionHeader title="유튜브 링크" />
         <form className="link-form" id="link-widget-title" onSubmit={(event) => {
           event.preventDefault();
-          submitLink();
+          void submitLink();
         }}>
           <input className="form-input wide" value={url} onChange={(event) => setUrl(event.target.value)} type="url" placeholder="영상 또는 플레이리스트 링크를 붙여넣어줘냥" aria-label="유튜브 링크" />
-          <button className="action-button primary" id="youtube-link-submit" type="button" disabled={!canRegisterLinks} onClick={() => void submitLink()}>
-            {canRegisterLinks ? "링크 불러오기" : "준비 중"}
+          <button className="action-button primary" id="youtube-link-submit" type="button" disabled={!canRegisterLinks || linkSubmitting} onClick={() => void submitLink()}>
+            {linkSubmitting ? "불러오는 중" : canRegisterLinks ? "링크 불러오기" : "준비 중"}
           </button>
         </form>
         {pendingPlaylistImport && (

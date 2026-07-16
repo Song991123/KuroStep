@@ -245,6 +245,17 @@ assert.match(
   /const adPlayback = isLikelyYoutubeAdPlayback\(playerRef\.current, rawDuration, current\);[\s\S]*if \(adPlayback\) \{[\s\S]*stalledTickRef\.current = 0;[\s\S]*return;[\s\S]*\}[\s\S]*if \(event\.data === window\.YT\.PlayerState\.PLAYING\)/,
   "YouTube ad state changes must not pause, advance, or repeat the real playlist track",
 );
+assert.match(appSource, /const \[linkSubmitting, setLinkSubmitting\] = useState\(false\)/, "YouTube link submit should have its own in-flight guard");
+assert.match(
+  appSource,
+  /async function submitLink\(\) \{[\s\S]*if \(!value \|\| linkSubmitting\) return;[\s\S]*setLinkSubmitting\(true\);[\s\S]*finally \{[\s\S]*setLinkSubmitting\(false\);[\s\S]*\}/,
+  "YouTube link submit must always clear its in-flight state",
+);
+assert.match(
+  appSource,
+  /id="youtube-link-submit"[\s\S]*disabled=\{!canRegisterLinks \|\| linkSubmitting\}[\s\S]*linkSubmitting \? "불러오는 중"/,
+  "YouTube link button should disable and show loading text while a link is being registered",
+);
 assert.match(appSource, /autoTranslationEnabledRef/, "auto translation toggle must use a live ref for late async guards");
 assert.match(
   appSource,
