@@ -265,6 +265,11 @@ declare global {
 }
 
 const emptyCounts: Record<TaskStatus, number> = { TODO: 0, DOING: 0, DONE: 0 };
+const taskStatusControls: Array<{ status: TaskStatus; id: string }> = [
+  { status: "TODO", id: "task-status-todo" },
+  { status: "DOING", id: "task-status-doing" },
+  { status: "DONE", id: "task-status-done" },
+];
 let youtubeApiPromise: Promise<YouTubeApi> | null = null;
 
 function isYoutubeApiReady(api?: YouTubeApi) {
@@ -843,16 +848,19 @@ function TodayWorkWidget({
         >
           <input
             className="form-input"
+            id="task-title-input"
             value={draftTitle}
             onChange={(event) => setDraftTitle(event.target.value)}
             placeholder="새 발자국을 적어줘냥"
             aria-label="새 할 일 제목"
             autoFocus
           />
-          <button className="action-button primary compact" type="submit">추가</button>
+          <button className="action-button primary compact" id="create-task-submit" type="submit" aria-label="새 할 일 추가 완료">추가</button>
           <button
             className="action-button compact"
+            id="create-task-cancel"
             type="button"
+            aria-label="새 할 일 추가 취소"
             onClick={() => {
               setDraftTitle("");
               setCreating(false);
@@ -879,8 +887,15 @@ function TodayWorkWidget({
             <span>현재곡 {work.currentPlaylistTrackId ? `#${work.currentPlaylistTrackId}` : "없음"}</span>
           </div>
           <div className="status-badges" aria-label="작업 상태">
-            {(["TODO", "DOING", "DONE"] as TaskStatus[]).map((status) => (
-              <button key={status} className={`badge${status === work.status ? " active" : ""}`} type="button" onClick={() => onUpdateStatus(status)}>
+            {taskStatusControls.map(({ status, id }) => (
+              <button
+                key={status}
+                className={`badge${status === work.status ? " active" : ""}`}
+                id={id}
+                type="button"
+                aria-label={`작업 상태를 ${statusLabel(status)}으로 변경`}
+                onClick={() => onUpdateStatus(status)}
+              >
                 {statusLabel(status)} <span>{liveCounts[status] || 0}</span>
               </button>
             ))}
