@@ -234,6 +234,7 @@ async function main() {
   insertUtf16Value(dbPath, "kurostep.pawWidgetVisible", "true");
   insertUtf16Value(dbPath, "kurostep.lyricsOverlayVisible", "true");
   insertUtf16Value(dbPath, "kurostep.autoTranslationEnabled", "true");
+  insertUtf16Value(dbPath, "kurostep.lyricsExpanded", "true");
   insertUtf16Value(dbPath, "kurostep.currentLyricContext", JSON.stringify({
     trackId: track.id,
     line: firstLine ? { ...firstLine, text: "♫" } : null,
@@ -259,6 +260,7 @@ async function main() {
       "kurostep.pawWidgetVisible",
       "kurostep.lyricsOverlayVisible",
       "kurostep.autoTranslationEnabled",
+      "kurostep.lyricsExpanded",
       "kurostep.currentLyricContext",
     ],
   }, null, 2));

@@ -80,6 +80,9 @@ const LYRIC_EMPTY_MESSAGE = "맞는 싱크 가사를 아직 못 찾았다냥. �
 if (isEmbeddedContent) {
   document.documentElement.classList.add("embedded-mode");
 }
+if (isTauriApp) {
+  document.documentElement.classList.add("tauri-app-mode");
+}
 
 function blockDeveloperShortcut(event: KeyboardEvent) {
   const key = event.key.toLowerCase();

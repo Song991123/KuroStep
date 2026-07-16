@@ -208,6 +208,31 @@ assert.ok(
   tauriConfig.app.windows.every((windowConfig: { devtools?: boolean }) => windowConfig.devtools === false),
   "all Tauri windows must keep devtools disabled",
 );
+const tauriWindowConfig = new Map(
+  tauriConfig.app.windows.map((windowConfig: { label: string; transparent?: boolean }) => [windowConfig.label, windowConfig]),
+);
+assert.equal(tauriWindowConfig.get("main")?.transparent, true, "main Tauri window must stay transparent so React card margins cannot render as a white box");
+assert.equal(tauriWindowConfig.get("paw")?.transparent, true, "paw Tauri window must stay transparent so rounded widget corners cannot render as a white box");
+assert.match(
+  appSource,
+  /if \(isTauriApp\) \{[\s\S]*document\.documentElement\.classList\.add\("tauri-app-mode"\)/,
+  "installed Tauri React views should get a dedicated class for native window layout",
+);
+assert.match(
+  appCss,
+  /\.tauri-app-mode:not\(\.embedded-mode\) \.widget-container\s*\{[\s\S]*height:\s*100vh/,
+  "installed main widget should fill the native window height instead of leaving white margins",
+);
+assert.match(
+  tauriSource,
+  /WebviewWindowBuilder::new\(app, "main"[\s\S]*\.transparent\(true\)/,
+  "programmatically-created main windows must stay transparent",
+);
+assert.match(
+  tauriSource,
+  /WebviewWindowBuilder::new\(app, "paw"[\s\S]*\.transparent\(true\)/,
+  "programmatically-created paw windows must stay transparent",
+);
 assert.ok(
   capability.permissions.includes("core:webview:deny-internal-toggle-devtools"),
   "Tauri IPC must deny internal devtools toggling",
@@ -526,6 +551,7 @@ assert.equal(
 assert.match(nativeSeedSource, /kurostep\.auth/, "native seed QA should inject the auth session without using mouse input");
 assert.match(nativeSeedSource, /kurostep\.pawWidgetVisible/, "native seed QA should turn the paw window on before installed-app smoke checks");
 assert.match(nativeSeedSource, /kurostep\.lyricsOverlayVisible/, "native seed QA should turn the lyrics overlay on before installed-app smoke checks");
+assert.match(nativeSeedSource, /kurostep\.lyricsExpanded/, "native seed QA should expand the full lyrics panel in the paw window");
 assert.match(nativeSeedSource, /kurostep\.currentLyricContext/, "native seed QA should seed a lyric context for native status checks");
 assert.match(nativeSeedSource, /LocalStorage\/localstorage\.sqlite3/, "native seed QA should target WebKit localStorage for the installed Tauri app");
 assert.match(nativeSeedSource, /function assertInstalledAppIsStopped/, "native seed QA should guard against writing WebKit storage while the app is running");
@@ -538,6 +564,7 @@ assert.equal(
 assert.match(nativeSmokeSource, /runNodeScript\("scripts\/qa-native-seed\.ts"\)/, "native smoke QA should seed the installed app without mouse input");
 assert.match(nativeSmokeSource, /openInstalledApp\(\)/, "native smoke QA should launch the installed app after seeding");
 assert.match(nativeSmokeSource, /runNodeScriptBuffered\("scripts\/qa-native-status\.ts"\)/, "native smoke QA should hide transient native status failures while polling");
+assert.match(nativeStatusSource, /전체 가사/, "native status QA should prove expanded full lyrics are visible in the paw window");
 assert.match(nativeSmokeSource, /runNodeScript\("scripts\/qa-process-hygiene\.ts"\)/, "native smoke QA should finish with process hygiene verification");
 assert.equal(
   packageJson.scripts["qa:process-hygiene"],

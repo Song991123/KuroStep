@@ -84,6 +84,11 @@ select,
   box-shadow: none;
 }
 
+.tauri-app-mode:not(.embedded-mode) .widget-container {
+  width: 100vw;
+  height: 100vh;
+}
+
 @keyframes fadeIn {
   0% {
     opacity: 0;
