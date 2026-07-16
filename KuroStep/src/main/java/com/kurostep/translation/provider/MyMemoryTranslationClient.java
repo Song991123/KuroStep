@@ -70,7 +70,7 @@ public class MyMemoryTranslationClient implements TranslationProviderClient {
             return translationCandidates(root, sourceText).stream()
                     .filter(candidate -> isUsefulTranslation(candidate.text(), sourceText, targetLanguageCode))
                     .max(Comparator.comparingDouble(candidate -> scoreCandidate(candidate, sourceText)))
-                    .map(candidate -> candidate.text().trim());
+                    .map(candidate -> KoreanLyricDraftPolisher.polish(sourceText, targetLanguageCode, candidate.text().trim()));
         } catch (IOException | InterruptedException | IllegalArgumentException e) {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
