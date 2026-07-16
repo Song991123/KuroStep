@@ -2033,12 +2033,12 @@ select,
   overflow-wrap: anywhere;
   text-overflow: clip;
   white-space: normal;
-  transition: background-color 0.16s ease, color 0.16s ease;
 }
 
 .memo-save-state.empty {
   background: transparent;
   color: transparent;
+  visibility: hidden;
 }
 
 @media (max-width: 360px) {
