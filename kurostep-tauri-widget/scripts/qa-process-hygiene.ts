@@ -31,6 +31,9 @@ const staleProcessPatterns = [
 const processes = readProcesses();
 const relevantProcesses = processes.filter((processInfo) => isRelevant(processInfo.command));
 const staleProcesses = relevantProcesses.filter((processInfo) => isStale(processInfo.command));
+const allowedRuntimeProcesses = relevantProcesses.filter((processInfo) => isAllowedRuntime(processInfo.command));
+const installedAppMainProcesses = relevantProcesses.filter((processInfo) => /\/Applications\/KuroStep\.app\/Contents\/MacOS\/KuroStep/.test(processInfo.command));
+const unexpectedProcesses = relevantProcesses.filter((processInfo) => !isAllowedRuntime(processInfo.command) && !isStale(processInfo.command));
 
 assert.equal(
   staleProcesses.length,
@@ -38,12 +41,22 @@ assert.equal(
   `KuroStep QA should not leave dev servers or build daemons running:\n${formatProcesses(staleProcesses)}`,
 );
 
+assert.equal(
+  unexpectedProcesses.length,
+  0,
+  `KuroStep QA found related processes that are neither the installed app nor known stale dev servers:\n${formatProcesses(unexpectedProcesses)}`,
+);
+
+assert.ok(
+  installedAppMainProcesses.length <= 1,
+  `KuroStep QA should not leave duplicate installed app processes running:\n${formatProcesses(installedAppMainProcesses)}`,
+);
+
 console.log(JSON.stringify({
   ok: true,
   inspectedProcessCount: processes.length,
   relevantProcessCount: relevantProcesses.length,
-  allowedRuntimeProcesses: relevantProcesses
-    .filter((processInfo) => allowedRuntimePatterns.some((pattern) => pattern.test(processInfo.command)))
+  allowedRuntimeProcesses: allowedRuntimeProcesses
     .map((processInfo) => ({ pid: processInfo.pid, command: shorten(processInfo.command) })),
 }, null, 2));
 
@@ -70,8 +83,12 @@ function isRelevant(command: string) {
 }
 
 function isStale(command: string) {
-  if (allowedRuntimePatterns.some((pattern) => pattern.test(command))) return false;
+  if (isAllowedRuntime(command)) return false;
   return staleProcessPatterns.some((pattern) => pattern.test(command));
+}
+
+function isAllowedRuntime(command: string) {
+  return allowedRuntimePatterns.some((pattern) => pattern.test(command));
 }
 
 function formatProcesses(processesToFormat: ProcessInfo[]) {

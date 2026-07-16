@@ -437,5 +437,7 @@ assert.equal(
 assert.match(processHygieneSource, /\/Applications\/KuroStep\.app/, "process hygiene QA should allow the installed app runtime");
 assert.match(processHygieneSource, /tauri dev/, "process hygiene QA should detect stale Tauri dev servers");
 assert.match(processHygieneSource, /GradleDaemon/, "process hygiene QA should detect stale build daemons");
+assert.match(processHygieneSource, /unexpectedProcesses\.length/, "process hygiene QA should reject unknown KuroStep-related processes");
+assert.match(processHygieneSource, /installedAppMainProcesses\.length <= 1/, "process hygiene QA should reject duplicate installed app processes");
 
 console.log("qa:logic ok");
