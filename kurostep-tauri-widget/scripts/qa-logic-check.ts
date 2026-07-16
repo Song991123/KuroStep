@@ -220,6 +220,11 @@ assert.match(
 );
 assert.match(
   appSource,
+  /setInterval\(heartbeat,\s*30000\)/,
+  "installed-app status should refresh periodically even when the UI is idle",
+);
+assert.match(
+  appSource,
   /const adPlayback = isLikelyYoutubeAdPlayback\(playerRef\.current, rawDuration, current\);[\s\S]*if \(adPlayback\) \{[\s\S]*stalledTickRef\.current = 0;[\s\S]*return;[\s\S]*\}[\s\S]*if \(event\.data === window\.YT\.PlayerState\.PLAYING\)/,
   "YouTube ad state changes must not pause, advance, or repeat the real playlist track",
 );
@@ -367,6 +372,9 @@ assert.match(lyricsCss, /\.lyric-line,\s*\n\.lyric-translation\s*\{[\s\S]*pointe
 assert.match(appCss, /\.lyrics-full-now\s*\{[\s\S]*position:\s*sticky/, "expanded full lyrics should keep the current line visible while scrolling");
 assert.match(appCss, /\.lyrics-full-list\s*\{[\s\S]*scrollbar-width:\s*thin/, "expanded full lyrics should expose a visible scroll affordance");
 assert.equal(/\.lyrics-full-list::-webkit-scrollbar\s*\{[\s\S]*display:\s*none/.test(appCss), false, "expanded full lyrics must not hide its scrollbar");
+assert.match(appCss, /\.lyrics-panel-toggle\[aria-expanded="true"\] svg\s*\{[\s\S]*transform:\s*rotate\(180deg\)/, "expanded lyrics toggle should visually reflect its state");
+assert.match(appCss, /\.lyrics-line-button:focus-visible\s*\{[\s\S]*outline:/, "full lyrics rows should have visible keyboard focus");
+assert.match(appCss, /@media \(max-width:\s*430px\)[\s\S]*\.lyrics-line-button\s*\{[\s\S]*grid-template-columns:\s*16px 50px minmax\(0, 1fr\)/, "full lyrics rows should keep stable columns on narrow screens");
 assert.match(appSource, /aria-current=\{isActive \? "true" : undefined\}/, "active full-lyrics row should expose aria-current");
 assert.match(appSource, /fullListRef/, "expanded full lyrics should measure the scroll container before auto-following the active line");
 assert.match(appSource, /scrollIntoView\(\{ block: "nearest", behavior: "auto" \}\)/, "full lyrics should avoid smooth-scroll churn on every lyric tick");
