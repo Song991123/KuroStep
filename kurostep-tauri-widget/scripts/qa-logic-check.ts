@@ -314,6 +314,14 @@ const requiredControlIds = [
   "playlist-import-cancel",
   "playlist-page-prev",
   "playlist-page-next",
+  "open-task-create",
+  "task-title-input",
+  "create-task-submit",
+  "create-task-cancel",
+  "delete-task",
+  "task-status-todo",
+  "task-status-doing",
+  "task-status-done",
   "lyrics-panel-toggle",
   "save-lyric-piece",
   "lyrics-sync-late-5s",
@@ -325,7 +333,11 @@ const requiredControlIds = [
   "delete-memo",
 ];
 for (const id of requiredControlIds) {
-  assert.match(appSource, new RegExp(`id="${id}"`), `${id} control must have a stable id for no-mouse QA`);
+  assert.match(
+    appSource,
+    new RegExp(`(?:id="${id}"|id: "${id}")`),
+    `${id} control must have a stable id for no-mouse QA`,
+  );
 }
 for (const id of [
   "player-previous-track",
@@ -337,13 +349,25 @@ for (const id of [
   "volume-toggle",
   "youtube-video-toggle",
   "shuffle-playlist",
+  "open-task-create",
+  "create-task-submit",
+  "create-task-cancel",
+  "delete-task",
+  "task-status-todo",
+  "task-status-doing",
+  "task-status-done",
   "lyrics-panel-toggle",
 ]) {
-  assert.match(
-    appSource,
-    new RegExp(`<button[\\s\\S]*id="${id}"[\\s\\S]*aria-label=`),
-    `${id} button must expose an accessible name`,
-  );
+  if (id.startsWith("task-status-")) {
+    assert.match(appSource, new RegExp(`id: "${id}"`), `${id} button must expose a stable status control id`);
+    assert.match(appSource, /aria-label=\{`작업 상태를 \$\{statusLabel\(status\)\}으로 변경`\}/, `${id} button must expose an accessible name`);
+  } else {
+    assert.match(
+      appSource,
+      new RegExp(`<button[\\s\\S]*id="${id}"[\\s\\S]*aria-label=`),
+      `${id} button must expose an accessible name`,
+    );
+  }
 }
 assert.match(appSource, /function seekByKeyboard/, "progress slider should support keyboard seeking");
 assert.match(appSource, /event\.key === "ArrowLeft"[\s\S]*skipBy\(-5\)/, "progress slider ArrowLeft should seek backward");
