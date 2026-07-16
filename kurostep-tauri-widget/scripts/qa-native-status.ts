@@ -81,6 +81,7 @@ if (pawToggleOn) {
   assert.ok(pawStatus?.authenticated, "paw view should report an authenticated render status");
   assert.match(pawStatus?.text || "", /작업 발자국/, "paw view should report its rendered task surface");
   assert.match(pawStatus?.text || "", /가사 창/, "paw view should report its full lyrics surface");
+  assert.match(pawStatus?.text || "", /전체 가사/, "paw view should report the expanded full lyrics panel");
 }
 
 if (lyricsToggleOn) {
@@ -161,6 +162,7 @@ console.log(JSON.stringify({
     paw: pawStatus ? {
       stage: pawStatus.stage,
       textIncludesFullLyrics: String(pawStatus.text || "").includes("가사 창"),
+      textIncludesExpandedLyrics: String(pawStatus.text || "").includes("전체 가사"),
     } : null,
   },
   toggles: {
