@@ -217,6 +217,39 @@ async function main() {
   }, auth);
   assert.equal(task.taskDate, date, "created task must be dated today");
 
+  const tasksAfterCreate = await api<CreatorTask[]>(`/api/tasks?userId=${auth.userId}&date=${date}`, {}, auth);
+  assert.ok(
+    tasksAfterCreate.some((item) => item.id === task.id && item.title === task.title),
+    "created task must appear in today's task list immediately",
+  );
+
+  const doingTask = await api<CreatorTask>(`/api/tasks/${task.id}/status?userId=${auth.userId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status: "DOING" }),
+  }, auth);
+  assert.equal(doingTask.status, "DOING", "task status update must return the new status immediately");
+  const tasksAfterStatus = await api<CreatorTask[]>(`/api/tasks?userId=${auth.userId}&date=${date}`, {}, auth);
+  assert.ok(
+    tasksAfterStatus.some((item) => item.id === task.id && item.status === "DOING"),
+    "updated task status must appear in today's task list immediately",
+  );
+
+  const disposableTask = await api<CreatorTask>(`/api/tasks?userId=${auth.userId}`, {
+    method: "POST",
+    body: JSON.stringify({
+      title: "삭제 반영 QA 작업",
+      description: "삭제 직후 목록 반영 확인",
+      taskDate: date,
+    }),
+  }, auth);
+  await api<void>(`/api/tasks/${disposableTask.id}?userId=${auth.userId}`, { method: "DELETE" }, auth);
+  const tasksAfterDelete = await api<CreatorTask[]>(`/api/tasks?userId=${auth.userId}&date=${date}`, {}, auth);
+  assert.equal(
+    tasksAfterDelete.some((item) => item.id === disposableTask.id),
+    false,
+    "deleted task must disappear from today's task list immediately",
+  );
+
   const playlist = await api<Playlist>(`/api/playlists?userId=${auth.userId}`, {
     method: "POST",
     body: JSON.stringify({
@@ -480,6 +513,11 @@ async function main() {
     apiBaseUrl: API_BASE_URL,
     qaUserId: auth.userId,
     taskId: task.id,
+    taskRoundTrip: {
+      createdVisible: true,
+      updatedStatus: doingTask.status,
+      deletedInvisible: true,
+    },
     playlistId: playlist.id,
     currentPlaylistTrackId: taskAfterRemoval.currentPlaylistTrackId,
     playlistTransition: {
