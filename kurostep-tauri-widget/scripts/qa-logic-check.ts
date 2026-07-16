@@ -210,6 +210,22 @@ assert.match(
   /cancelled \|\| !lineStillCurrent\(\) \|\| !autoTranslationEnabledRef\.current/,
   "late auto-translation responses must not apply after the user turns automatic translation off",
 );
+assert.match(appSource, /function isAutoDraftTranslation/, "auto translation drafts should be distinguishable from user-saved translations");
+assert.match(
+  appSource,
+  /autoTranslationEnabledRef\.current = enabled;[\s\S]*if \(!enabled\) \{[\s\S]*pendingTranslationRef\.current\.clear\(\);[\s\S]*setTranslation\(\(current\) => isAutoDraftTranslation\(current\) \? null : current\);/,
+  "turning automatic translation off should immediately hide current auto drafts and cancel pending draft work",
+);
+assert.match(
+  appSource,
+  /Object\.entries\(current\)\.filter\(\(\[, value\]\) => isManualOrSavedTranslation\(value\)\)/,
+  "turning automatic translation off should remove cached auto drafts from the visible translation cache",
+);
+assert.match(
+  appSource,
+  /const allowedTranslations = autoTranslationEnabledRef\.current[\s\S]*: translations\.filter\(\(item\) => isManualOrSavedTranslation\(item\)\);/,
+  "saved auto drafts from the server must not be applied while automatic translation is off",
+);
 assert.match(
   appSource,
   /const activeMemoTranslation = isTranslationForLine\(translation, selectedLine\) \? translation : null/,
