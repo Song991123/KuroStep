@@ -344,6 +344,9 @@ async function main() {
     synced: boolean;
     firstStartTimeMs: number | null;
     syncedLyricsLength: number;
+    sampledLine?: string;
+    sampledStartTimeMs?: number;
+    selectedStartTimeMs?: number | null;
   }> = [];
   let manualLineRef: LyricLineRef | null = null;
   let autoLineRef: LyricLineRef | null = null;
@@ -372,6 +375,16 @@ async function main() {
     assertStrictlySortedTimedLines(track.title, lines);
     assertStrictlySortedTimedLines(`${track.title} source`, sourceLines);
 
+    const firstSourceLine = sourceLines[0];
+    if (firstSourceLine.startTimeMs > 300) {
+      const earlyLine = chooseLineByPlaybackTime(
+        { id: fetched.lyric!.id, trackId: track.id, synced: true, lines },
+        { source: "LRCLIB", synced: true, lines: sourceLines },
+        (firstSourceLine.startTimeMs - 250) / 1000,
+      );
+      assert.equal(earlyLine, null, `${track.title} must not show a lyric before the first timed line`);
+    }
+
     const middleSourceLine = sourceLines[Math.floor(sourceLines.length / 2)];
     const selectedMiddleLine = chooseLineByPlaybackTime(
       { id: fetched.lyric!.id, trackId: track.id, synced: true, lines },
@@ -382,6 +395,11 @@ async function main() {
       selectedMiddleLine?.text,
       middleSourceLine.text,
       `${track.title} synced lookup should select the lyric line for the current playback time`,
+    );
+    assert.ok(selectedMiddleLine, `${track.title} synced lookup should return a selected line`);
+    assert.ok(
+      Math.abs(Number(selectedMiddleLine.startTimeMs) - middleSourceLine.startTimeMs) <= 1,
+      `${track.title} selected lyric timestamp must match the source timestamp: selected=${selectedMiddleLine.startTimeMs}, source=${middleSourceLine.startTimeMs}`,
     );
 
     for (const line of lines) {
@@ -400,6 +418,7 @@ async function main() {
       syncedLyricsLength: (fetched.syncedLyrics || "").length,
       sampledLine: middleSourceLine.text,
       sampledStartTimeMs: middleSourceLine.startTimeMs,
+      selectedStartTimeMs: selectedMiddleLine.startTimeMs ?? null,
     });
   }
 

@@ -42,7 +42,8 @@ const lyric: Lyric = {
 };
 
 assert.equal(chooseLineByPlaybackTime(lyric, source, 0), null, "first lyric should not flash before its timestamp");
-assert.equal(chooseLineByPlaybackTime(lyric, source, 7.1)?.text, "Green, green");
+assert.equal(chooseLineByPlaybackTime(lyric, source, 7.1), null, "first lyric should not appear too early because of lookahead");
+assert.equal(chooseLineByPlaybackTime(lyric, source, 7.3)?.text, "Green, green");
 assert.equal(chooseLineByPlaybackTime(lyric, source, 22.3)?.text, "mess with the team");
 assert.equal(chooseLineByPlaybackTime(lyric, source, 1.8, 5600)?.text, "Green, green");
 assert.equal(chooseLineByPlaybackTime(lyric, source, 8.0, -3000), null, "negative sync offset must not flash an early lyric");
