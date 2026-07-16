@@ -144,14 +144,3 @@ export function chooseLineByPlaybackTime(
     text: fallbackSourceLine?.text || "",
   };
 }
-
-export function isLikelyYoutubeAdDuration(seconds: number, expectedSeconds = 0) {
-  const nextDuration = Number(seconds);
-  const expectedDuration = Number(expectedSeconds);
-  if (!Number.isFinite(nextDuration) || !Number.isFinite(expectedDuration)) return false;
-  if (nextDuration <= 0 || expectedDuration < 60) return false;
-  if (nextDuration <= 90 && expectedDuration - nextDuration > 20) {
-    return true;
-  }
-  return nextDuration < expectedDuration * 0.55;
-}
