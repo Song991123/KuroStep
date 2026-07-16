@@ -13,7 +13,7 @@
 - 기존 `src/styles.css` 토큰과 className 유지
 - `embedded=1`에서는 내부 mac-header가 아니라 `embedded-content`만 렌더
 - Tauri shell은 그대로 유지
-- 폰트 스케일 유지: 본문 10~13px, 제목 13~24px 범위
+- 폰트 스케일 유지: 기본 텍스트와 버튼은 14px 이상, 제목/현재 가사/강조 텍스트는 화면 밀도에 맞춰 더 크게 둔다.
 - 카드/위젯 구조 유지: `widget-group`, `widget-section`, `sub-section`, `player-area`, `todo-list`, `playlist-list`
 
 ## 기존 구조 분해
@@ -44,6 +44,7 @@
 - 로그인/회원가입 화면: 기존 `auth-screen` 구조 유지
 - 로그인 유지: `kurostep.auth` localStorage 기반
 - 백엔드 API 연결: 로컬은 `localhost:8080`, GitHub Pages/Tauri는 `https://54-116-185-226.sslip.io`
+- 배포 UI 렌더 QA는 GitHub Pages origin에서 진행한다. 로컬 Vite origin(`127.0.0.1`)에 운영 API를 붙이면 브라우저 CORS 정책 때문에 로그인 후 API 호출이 실패할 수 있으므로, “준비 중” 재현 판단에 쓰지 않는다.
 - 작업실 초기화: 오늘 작업 카드 없으면 기본 작업 생성, 플레이리스트 없으면 기본 플레이리스트 생성
 - 오늘 할 일 목록 표시: 실제 `tasks/today` 결과 표시
 - 작업 상태 변경: `TODO`, `DOING`, `DONE` 서버 반영
@@ -100,6 +101,16 @@
 | 트랙 선택 | 성공 |
 | 트랙 제거 | 성공 |
 | Tauri shell iframe 로드 | 성공 |
+
+## 2026-07-16 추가 검증 결과
+
+| 항목 | 결과 |
+|---|---|
+| GitHub Pages main view 렌더 | 성공, 콘솔 에러 0개 |
+| GitHub Pages paw view 렌더 | 성공, 콘솔 에러 0개 |
+| 로컬 Vite + 운영 API 직접 연결 | CORS로 실패 가능, 배포 UI 판정 근거로 사용하지 않음 |
+| `/Applications/KuroStep.app` native status | 성공, `main/paw/lyrics` visible, overlaps `[]` |
+| 프로세스 위생 | 성공, 허용 런타임은 설치 앱 1개 |
 
 ## 남은 범위
 
