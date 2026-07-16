@@ -201,6 +201,14 @@ function hasVisibleTranslation(translation: Translation | null | undefined) {
   return Boolean(translation?.translatedText?.trim());
 }
 
+function isAutoDraftTranslation(translation: Translation | null | undefined) {
+  return translation?.status === "AUTO_DRAFT";
+}
+
+function isManualOrSavedTranslation(translation: Translation | null | undefined) {
+  return Boolean(translation && !isAutoDraftTranslation(translation));
+}
+
 type YouTubePlayer = {
   cueVideoById: (options: { videoId: string; startSeconds?: number }) => void;
   loadVideoById?: (options: { videoId: string; startSeconds?: number }) => void;
@@ -2296,7 +2304,15 @@ export default function App() {
 
   function changeAutoTranslationEnabled(enabled: boolean) {
     writeJson("kurostep.autoTranslationEnabled", enabled);
+    autoTranslationEnabledRef.current = enabled;
     setAutoTranslationEnabled(enabled);
+    if (!enabled) {
+      pendingTranslationRef.current.clear();
+      setTranslation((current) => isAutoDraftTranslation(current) ? null : current);
+      setTranslationCache((current) =>
+        Object.fromEntries(Object.entries(current).filter(([, value]) => isManualOrSavedTranslation(value))),
+      );
+    }
     setNotice({
       kind: "notice",
       message: enabled ? "자동 번역 초안을 다시 켰다냥." : "자동 번역 초안을 잠깐 껐다냥.",
@@ -2448,14 +2464,20 @@ export default function App() {
     if (nextLine?.id !== selectedLine?.id || nextLine?.lineIndex !== selectedLine?.lineIndex) {
       const trackId = workspaceRef.current.currentTrack?.id || null;
       const cacheKey = translationCacheKey(trackId, nextLine);
-      const cachedTranslation = stableTranslationForLine(nextLine, [
+      const translationCandidates = [
         readLocalTranslationDraft(trackId, nextLine),
         translationCacheRef.current[cacheKey],
         nextLine.id != null ? translationCacheRef.current[String(nextLine.id)] : null,
+      ].filter((candidate) => autoTranslationEnabledRef.current || isManualOrSavedTranslation(candidate));
+      const cachedTranslation = stableTranslationForLine(nextLine, [
+        ...translationCandidates,
       ]);
       setSelectedLine(nextLine);
       setTranslation((current) => {
-        const stableTranslation = stableTranslationForLine(nextLine, [cachedTranslation, current]);
+        const stableTranslation = stableTranslationForLine(nextLine, [
+          cachedTranslation,
+          autoTranslationEnabledRef.current || isManualOrSavedTranslation(current) ? current : null,
+        ]);
         return translationFingerprint(stableTranslation) === translationFingerprint(current) ? current : stableTranslation;
       });
     }
@@ -2488,7 +2510,11 @@ export default function App() {
     }
     const cachedTranslation = translationCacheRef.current[key] || translationCacheRef.current[legacyKey];
     if (isTranslationForLine(cachedTranslation, lineSnapshot)) {
-      setTranslation(cachedTranslation);
+      if (autoTranslationEnabledRef.current || isManualOrSavedTranslation(cachedTranslation)) {
+        setTranslation(cachedTranslation);
+      } else {
+        setTranslation((current) => isTranslationForLine(current, lineSnapshot) && isManualOrSavedTranslation(current) ? current : null);
+      }
       return;
     }
     if (!auth?.userId || !lineSnapshot.id) {
@@ -2505,7 +2531,10 @@ export default function App() {
     api<Translation[]>(`/api/lyric-line-refs/${lineSnapshot.id}/translations?userId=${auth.userId}`, {}, auth)
       .then(async (translations) => {
         if (cancelled || !lineStillCurrent()) return;
-        const savedKorean = translations.find((item) => item.languageCode === "ko") || translations[0];
+        const allowedTranslations = autoTranslationEnabledRef.current
+          ? translations
+          : translations.filter((item) => isManualOrSavedTranslation(item));
+        const savedKorean = allowedTranslations.find((item) => item.languageCode === "ko") || allowedTranslations[0];
         const localDraftBeforeSave = readLocalTranslationDraft(trackIdSnapshot, lineSnapshot);
         if (localDraftBeforeSave) {
           applyTranslationForLine(localDraftBeforeSave);
