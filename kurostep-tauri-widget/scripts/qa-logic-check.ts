@@ -195,6 +195,7 @@ const buildInfoSource = readFileSync(new URL("../src-react/buildInfo.ts", import
 const tauriSource = readFileSync(new URL("../src-tauri/src/lib.rs", import.meta.url), "utf8");
 const processHygieneSource = readFileSync(new URL("./qa-process-hygiene.ts", import.meta.url), "utf8");
 const nativeSeedSource = readFileSync(new URL("./qa-native-seed.ts", import.meta.url), "utf8");
+const nativeSmokeSource = readFileSync(new URL("./qa-native-smoke.ts", import.meta.url), "utf8");
 const shellSource = readFileSync(new URL("../src/shell.js", import.meta.url), "utf8");
 const lyricsOverlaySource = readFileSync(new URL("../src/lyrics.js", import.meta.url), "utf8");
 const reactUiParityDoc = readFileSync(new URL("../docs/react-ui-parity.md", import.meta.url), "utf8");
@@ -519,6 +520,15 @@ assert.match(nativeSeedSource, /kurostep\.currentLyricContext/, "native seed QA 
 assert.match(nativeSeedSource, /LocalStorage\/localstorage\.sqlite3/, "native seed QA should target WebKit localStorage for the installed Tauri app");
 assert.match(nativeSeedSource, /function assertInstalledAppIsStopped/, "native seed QA should guard against writing WebKit storage while the app is running");
 assert.match(nativeSeedSource, /\/Applications\/KuroStep\.app\/Contents\/MacOS\/KuroStep/, "native seed QA should detect the installed app process before seeding");
+assert.equal(
+  packageJson.scripts["qa:native-smoke"],
+  "node --experimental-strip-types scripts/qa-native-smoke.ts",
+  "native smoke QA should be runnable from package scripts",
+);
+assert.match(nativeSmokeSource, /runNodeScript\("scripts\/qa-native-seed\.ts"\)/, "native smoke QA should seed the installed app without mouse input");
+assert.match(nativeSmokeSource, /openInstalledApp\(\)/, "native smoke QA should launch the installed app after seeding");
+assert.match(nativeSmokeSource, /runNodeScript\("scripts\/qa-native-status\.ts"\)/, "native smoke QA should verify installed native status");
+assert.match(nativeSmokeSource, /runNodeScript\("scripts\/qa-process-hygiene\.ts"\)/, "native smoke QA should finish with process hygiene verification");
 assert.equal(
   packageJson.scripts["qa:process-hygiene"],
   "node --experimental-strip-types scripts/qa-process-hygiene.ts",
