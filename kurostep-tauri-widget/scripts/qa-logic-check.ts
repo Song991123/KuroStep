@@ -236,9 +236,19 @@ assert.match(
   "installed-app status should refresh periodically even when the UI is idle",
 );
 assert.match(
+  appSource,
+  /currentLyricContext:\s*window\.localStorage\.getItem\("kurostep\.currentLyricContext"\) \|\| ""/,
+  "installed-app status should include the latest lyric context for paw/overlay QA",
+);
+assert.match(
   tauriSource,
   /fn start_client_status_heartbeat\([\s\S]*Duration::from_secs\(30\)[\s\S]*refresh_client_status_heartbeat/,
   "native status should refresh from Rust even when the WebView timer is throttled",
+);
+assert.match(
+  tauriSource,
+  /current_lyric_context:\s*Option<String>/,
+  "native status should persist the latest lyric context for installed-app QA",
 );
 assert.match(
   tauriSource,
