@@ -18,6 +18,7 @@ type ClientStatus = {
   stage: string;
   authenticated: boolean;
   text: string;
+  current_lyric_context?: string | null;
   build_commit?: string | null;
   build_time?: string | null;
   timestamp_ms: number;
@@ -41,6 +42,7 @@ const windowsByLabel = new Map(status.windows.map((windowStatus) => [windowStatu
 const text = status.text || "";
 const pawToggleOn = text.includes("작업 발자국 ON");
 const lyricsToggleOn = text.includes("가사 오버레이 ON");
+const currentLyricContext = parseCurrentLyricContext(status.current_lyric_context);
 
 assert.ok(ageMs >= 0 && ageMs <= maxAgeMs, `native status must be fresh (${ageMs}ms old)`);
 assert.equal(status.view, "main", "native status should be reported from the main player view");
@@ -61,12 +63,32 @@ if (pawToggleOn) {
   const paw = windowsByLabel.get("paw");
   assert.equal(paw?.visible, true, "paw window must be visible when 작업 발자국 is ON");
   assertWindowRestoredFromSavedPosition("paw", paw);
+  assertCurrentLyricContext("paw");
 }
 
 if (lyricsToggleOn) {
   const lyrics = windowsByLabel.get("lyrics");
   assert.equal(lyrics?.visible, true, "lyrics overlay must be visible when 가사 오버레이 is ON");
   assertWindowRestoredFromSavedPosition("lyrics", lyrics);
+  assertCurrentLyricContext("lyrics overlay");
+}
+
+if (text.includes("LEMONADE")) {
+  assert.equal(typeof currentLyricContext.trackId, "number", "LEMONADE smoke QA should report a numeric lyric context trackId");
+}
+
+function assertCurrentLyricContext(target: string) {
+  assert.ok(status.current_lyric_context, `${target} QA should include the latest lyric context in native status`);
+  assert.equal(typeof currentLyricContext, "object", `${target} lyric context must be a JSON object`);
+  assert.equal(typeof currentLyricContext.at, "number", `${target} lyric context must include an update timestamp`);
+  assert.ok(
+    currentLyricContext.trackId == null || typeof currentLyricContext.trackId === "number",
+    `${target} lyric context trackId must be null or a number`,
+  );
+  assert.ok(
+    currentLyricContext.line == null || typeof currentLyricContext.line === "object",
+    `${target} lyric context line must be null or an object`,
+  );
 }
 
 function assertWindowRestoredFromSavedPosition(label: string, windowStatus: WindowStatus | undefined) {
@@ -84,6 +106,13 @@ function assertWindowRestoredFromSavedPosition(label: string, windowStatus: Wind
     Math.abs(Number(windowStatus?.y) - Number(saved.y)) <= positionTolerancePx,
     `${label} y position must restore from saved value: saved=${saved.y}, actual=${windowStatus?.y}`,
   );
+}
+
+function parseCurrentLyricContext(raw: string | null | undefined): Record<string, unknown> {
+  if (!raw) return {};
+  const parsed = JSON.parse(raw);
+  assert.ok(parsed && typeof parsed === "object" && !Array.isArray(parsed), "current lyric context must parse as an object");
+  return parsed as Record<string, unknown>;
 }
 
 function readCurrentGitCommit() {
@@ -106,6 +135,7 @@ console.log(JSON.stringify({
     expectedCommit: expectedBuildCommit,
   },
   authenticated: status.authenticated,
+  currentLyricContext,
   toggles: {
     paw: pawToggleOn ? "ON" : "unknown/off",
     lyrics: lyricsToggleOn ? "ON" : "unknown/off",

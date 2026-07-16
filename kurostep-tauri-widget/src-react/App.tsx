@@ -400,6 +400,7 @@ function reportClientStatus(stage: string, text = "") {
     stage,
     authenticated: Boolean(readJson<AuthSession | null>("kurostep.auth", null)?.accessToken),
     text: text.slice(0, 1000),
+    currentLyricContext: window.localStorage.getItem("kurostep.currentLyricContext") || "",
     buildCommit: KUROSTEP_BUILD_COMMIT,
     buildTime: KUROSTEP_BUILD_TIME,
   }).catch(() => {});
