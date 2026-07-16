@@ -218,6 +218,31 @@ assert.match(
   /setTranslation\(\(current\) => isTranslationForLine\(current, lineSnapshot\) \? current : null\);\s*if \(pendingTranslationRef\.current\.has\(key\)\)/,
   "pending translation fetches must preserve the current line memo instead of blanking and flickering",
 );
+assert.match(
+  appSource,
+  /const localTranslation = makeLocalTranslation\([\s\S]*?writeLocalTranslationDraft\(trackIdSnapshot, line, localTranslation\.translatedText, localTranslation\.memoText \|\| "", "SAVED"\);[\s\S]*?if \(!translationTextForSave \|\| !auth\?\.userId \|\| !line\.id\)/,
+  "manual memo saves must write a local saved draft before any server dependency",
+);
+assert.match(
+  appSource,
+  /const saved = await api<Translation>[\s\S]*?writeLocalTranslationDraft\(trackIdSnapshot, line, normalized\.translatedText, normalized\.memoText \|\| "", "SAVED"\);/,
+  "successful server memo saves must refresh the local saved draft",
+);
+assert.match(
+  appSource,
+  /catch \(error\) \{[\s\S]*?applySavedTranslation\(localTranslation\);/,
+  "failed server memo saves must keep the local saved draft visible",
+);
+assert.match(
+  appSource,
+  /function draftMemo\(translatedText: string, memoText: string\) \{[\s\S]*?writeLocalTranslationDraft\(workspace\.currentTrack\?\.id, selectedLine, normalized\.translatedText, normalized\.memoText \|\| ""\);/,
+  "typing in the memo editor must persist a local draft immediately",
+);
+assert.match(
+  appSource,
+  /async function deleteMemo\(\) \{[\s\S]*?removeLocalTranslationDraft\(workspace\.currentTrack\?\.id, selectedLine\);/,
+  "deleting a memo must clear the matching local draft",
+);
 
 const requiredControlIds = [
   "window-minimize",
