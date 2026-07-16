@@ -224,6 +224,11 @@ assert.match(
   "installed-app status should refresh periodically even when the UI is idle",
 );
 assert.match(
+  tauriSource,
+  /fn start_client_status_heartbeat\([\s\S]*Duration::from_secs\(30\)[\s\S]*refresh_client_status_heartbeat/,
+  "native status should refresh from Rust even when the WebView timer is throttled",
+);
+assert.match(
   appSource,
   /const adPlayback = isLikelyYoutubeAdPlayback\(playerRef\.current, rawDuration, current\);[\s\S]*if \(adPlayback\) \{[\s\S]*stalledTickRef\.current = 0;[\s\S]*return;[\s\S]*\}[\s\S]*if \(event\.data === window\.YT\.PlayerState\.PLAYING\)/,
   "YouTube ad state changes must not pause, advance, or repeat the real playlist track",

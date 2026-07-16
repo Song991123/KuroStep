@@ -18,7 +18,7 @@ struct LyricPayload {
     translation: String,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct ClientStatus {
     view: String,
     stage: String,
@@ -31,7 +31,7 @@ struct ClientStatus {
     overlaps: Vec<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct WindowStatus {
     label: String,
     visible: bool,
@@ -1032,10 +1032,6 @@ fn report_client_status(
     build_commit: Option<String>,
     build_time: Option<String>,
 ) -> Result<(), String> {
-    let timestamp_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| error.to_string())?
-        .as_millis();
     let status = ClientStatus {
         view,
         stage,
@@ -1043,13 +1039,55 @@ fn report_client_status(
         text,
         build_commit,
         build_time,
-        timestamp_ms,
+        timestamp_ms: now_ms()?,
         windows: snapshot_windows(&app),
         overlaps: visible_window_overlaps(&app),
     };
+    write_client_status(&app, &status)
+}
+
+fn now_ms() -> Result<u128, String> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())
+        .map(|duration| duration.as_millis())
+}
+
+fn write_client_status(app: &tauri::AppHandle, status: &ClientStatus) -> Result<(), String> {
     let path = client_status_path(&app)?;
     let raw = serde_json::to_string_pretty(&status).map_err(|error| error.to_string())?;
     fs::write(path, raw).map_err(|error| error.to_string())
+}
+
+fn read_client_status(app: &tauri::AppHandle) -> Option<ClientStatus> {
+    let path = client_status_path(app).ok()?;
+    let raw = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+fn refresh_client_status_heartbeat(app: &tauri::AppHandle) -> Result<(), String> {
+    let mut status = read_client_status(app).unwrap_or(ClientStatus {
+        view: "main".to_string(),
+        stage: "native-heartbeat".to_string(),
+        authenticated: false,
+        text: String::new(),
+        build_commit: None,
+        build_time: None,
+        timestamp_ms: 0,
+        windows: Vec::new(),
+        overlaps: Vec::new(),
+    });
+    status.timestamp_ms = now_ms()?;
+    status.windows = snapshot_windows(app);
+    status.overlaps = visible_window_overlaps(app);
+    write_client_status(app, &status)
+}
+
+fn start_client_status_heartbeat(app: tauri::AppHandle) {
+    thread::spawn(move || loop {
+        thread::sleep(Duration::from_secs(30));
+        let _ = refresh_client_status_heartbeat(&app);
+    });
 }
 
 fn read_window_positions(app: &tauri::AppHandle) -> HashMap<String, WindowPoint> {
@@ -1097,6 +1135,7 @@ pub fn run() {
             }
             ensure_main_window_after_launch(app_handle.clone());
             reconcile_child_window_positions_after_launch(app_handle);
+            start_client_status_heartbeat(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
