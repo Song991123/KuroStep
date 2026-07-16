@@ -48,6 +48,13 @@ function runNodeScript(scriptPath: string) {
   execFileSync("node", ["--experimental-strip-types", scriptPath], { stdio: "inherit" });
 }
 
+function runNodeScriptBuffered(scriptPath: string) {
+  return execFileSync("node", ["--experimental-strip-types", scriptPath], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
 function openInstalledApp() {
   const result = spawnSync("open", ["-a", INSTALLED_APP_BUNDLE], { stdio: "inherit" });
   if (result.status !== 0) {
@@ -59,14 +66,22 @@ function waitForNativeStatus() {
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= STATUS_ATTEMPTS; attempt += 1) {
     try {
-      runNodeScript("scripts/qa-native-status.ts");
+      const output = runNodeScriptBuffered("scripts/qa-native-status.ts");
+      process.stdout.write(output);
       return;
     } catch (error) {
       lastError = error;
       sleep(STATUS_DELAY_MS);
     }
   }
+  writeBufferedFailure(lastError);
   throw lastError;
+}
+
+function writeBufferedFailure(error: unknown) {
+  const bufferedError = error as { stdout?: Buffer | string; stderr?: Buffer | string };
+  if (bufferedError.stdout) process.stdout.write(bufferedError.stdout.toString());
+  if (bufferedError.stderr) process.stderr.write(bufferedError.stderr.toString());
 }
 
 function sleep(ms: number) {

@@ -527,7 +527,7 @@ assert.equal(
 );
 assert.match(nativeSmokeSource, /runNodeScript\("scripts\/qa-native-seed\.ts"\)/, "native smoke QA should seed the installed app without mouse input");
 assert.match(nativeSmokeSource, /openInstalledApp\(\)/, "native smoke QA should launch the installed app after seeding");
-assert.match(nativeSmokeSource, /runNodeScript\("scripts\/qa-native-status\.ts"\)/, "native smoke QA should verify installed native status");
+assert.match(nativeSmokeSource, /runNodeScriptBuffered\("scripts\/qa-native-status\.ts"\)/, "native smoke QA should hide transient native status failures while polling");
 assert.match(nativeSmokeSource, /runNodeScript\("scripts\/qa-process-hygiene\.ts"\)/, "native smoke QA should finish with process hygiene verification");
 assert.equal(
   packageJson.scripts["qa:process-hygiene"],
