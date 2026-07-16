@@ -1829,7 +1829,7 @@ export default function App() {
   const [playbackPosition, setPlaybackPosition] = useState(0);
   const [trackDuration, setTrackDuration] = useState(0);
   const [lyricSyncOffsetMs, setLyricSyncOffsetMs] = useState(0);
-  const [youtubeVisible, setYoutubeVisible] = useState(false);
+  const [youtubeVisible, setYoutubeVisible] = useState(() => readJson<boolean>("kurostep.youtubeVisible", false));
   const [pawWidgetVisible, setPawWidgetVisible] = useState(() => readJson<boolean>("kurostep.pawWidgetVisible", true));
   const [lyricsOverlayVisible, setLyricsOverlayVisible] = useState(() => readJson<boolean>("kurostep.lyricsOverlayVisible", true));
   const [autoTranslationEnabled, setAutoTranslationEnabled] = useState(() => readJson<boolean>("kurostep.autoTranslationEnabled", true));
@@ -1842,7 +1842,7 @@ export default function App() {
   const [selectedLine, setSelectedLine] = useState<SelectedLine | null>(null);
   const [translation, setTranslation] = useState<Translation | null>(null);
   const [translationCache, setTranslationCache] = useState<Record<string, Translation>>({});
-  const [lyricsExpanded, setLyricsExpanded] = useState(false);
+  const [lyricsExpanded, setLyricsExpanded] = useState(() => readJson<boolean>("kurostep.lyricsExpanded", false));
   const [savedLyricPieces, setSavedLyricPieces] = useState(() => readJson<SavedLyricPiece[]>("kurostep.savedLyricPieces", []));
   const authRef = useRef<AuthSession | null>(auth);
   const workspaceRef = useRef<Workspace>(workspace);
@@ -3678,7 +3678,13 @@ export default function App() {
           onPositionChange={setPlaybackPosition}
           onDurationChange={updateCurrentTrackDuration}
           onVolumeChange={changeVolume}
-          onToggleYoutube={() => setYoutubeVisible((value) => !value)}
+          onToggleYoutube={() => {
+            setYoutubeVisible((value) => {
+              const next = !value;
+              writeJson("kurostep.youtubeVisible", next);
+              return next;
+            });
+          }}
           onMoveTrack={moveTrack}
           onSkip={skipPlayback}
           onSeek={seekPlayback}
@@ -3710,7 +3716,13 @@ export default function App() {
             lyricLoadMessage={lyricLoadMessage}
             lyricsExpanded={lyricsExpanded}
             lyricSyncOffsetMs={lyricSyncOffsetMs}
-            onToggleExpanded={() => setLyricsExpanded((value) => !value)}
+            onToggleExpanded={() => {
+              setLyricsExpanded((value) => {
+                const next = !value;
+                writeJson("kurostep.lyricsExpanded", next);
+                return next;
+              });
+            }}
             onSelectLine={syncLyricsToLine}
             onSavePiece={saveCurrentLyricPiece}
             onAdjustSync={adjustLyricSync}

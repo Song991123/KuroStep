@@ -256,6 +256,26 @@ assert.match(
   /id="youtube-link-submit"[\s\S]*disabled=\{!canRegisterLinks \|\| linkSubmitting\}[\s\S]*linkSubmitting \? "불러오는 중"/,
   "YouTube link button should disable and show loading text while a link is being registered",
 );
+assert.match(
+  appSource,
+  /const \[youtubeVisible, setYoutubeVisible\] = useState\(\(\) => readJson<boolean>\("kurostep\.youtubeVisible", false\)\)/,
+  "YouTube video panel visibility should restore the user's previous panel state",
+);
+assert.match(
+  appSource,
+  /onToggleYoutube=\{\(\) => \{[\s\S]*writeJson\("kurostep\.youtubeVisible", next\);[\s\S]*return next;/,
+  "YouTube video panel toggles should persist immediately",
+);
+assert.match(
+  appSource,
+  /const \[lyricsExpanded, setLyricsExpanded\] = useState\(\(\) => readJson<boolean>\("kurostep\.lyricsExpanded", false\)\)/,
+  "expanded lyrics panel should restore the user's previous panel state",
+);
+assert.match(
+  appSource,
+  /onToggleExpanded=\{\(\) => \{[\s\S]*writeJson\("kurostep\.lyricsExpanded", next\);[\s\S]*return next;/,
+  "expanded lyrics panel toggles should persist immediately",
+);
 assert.match(appSource, /autoTranslationEnabledRef/, "auto translation toggle must use a live ref for late async guards");
 assert.match(
   appSource,
