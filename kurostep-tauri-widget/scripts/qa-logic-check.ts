@@ -241,6 +241,41 @@ assert.match(
   "native status should refresh from Rust even when the WebView timer is throttled",
 );
 assert.match(
+  tauriSource,
+  /WebviewWindowBuilder::new\(app, "paw", WebviewUrl::App\("index\.html#\?view=paw&shell=tauri"\.into\(\)\)\)/,
+  "paw window should open the direct React paw view, not the legacy shell iframe",
+);
+assert.equal(
+  /WebviewWindowBuilder::new\(app, "paw", WebviewUrl::App\("shell\.html/.test(tauriSource),
+  false,
+  "paw window must not regress to the shell.html iframe route",
+);
+assert.match(
+  tauriSource,
+  /fn sync_paw_context\([\s\S]*paw\.emit\("paw:lyric-context"[\s\S]*paw\.eval\(&paw_lyric_context_script/,
+  "native paw context sync should push lyric context through both Tauri event and eval fallback",
+);
+assert.match(
+  tauriSource,
+  /fn paw_lyric_context_script[\s\S]*window\.__KUROSTEP_LATEST_LYRIC_CONTEXT__[\s\S]*window\.postMessage\(message, "\*"\)[\s\S]*CustomEvent\("kurostep:lyric-context"/,
+  "paw context eval fallback should update the direct paw view without requiring a shell iframe",
+);
+assert.match(
+  appSource,
+  /writeJson\("kurostep\.currentLyricContext", context\)[\s\S]*new BroadcastChannel\("kurostep\.currentLyricContext"\)[\s\S]*invokeNative\("sync_paw_lyric_context"/,
+  "main player should publish lyric context through storage, BroadcastChannel, and native sync",
+);
+assert.match(
+  appSource,
+  /if \(shellView === "main"\) return;[\s\S]*invokeNative\("get_current_lyric_context"\)/,
+  "paw view should poll native lyric context instead of depending on mouse-visible UI state",
+);
+assert.match(
+  appSource,
+  /if \(shellView === "main"\) return;[\s\S]*window\.addEventListener\("storage", syncCurrentLyricFromStorage\)/,
+  "paw view should listen for stored lyric-context updates",
+);
+assert.match(
   appSource,
   /const adPlayback = isLikelyYoutubeAdPlayback\(playerRef\.current, rawDuration, current\);[\s\S]*if \(adPlayback\) \{[\s\S]*stalledTickRef\.current = 0;[\s\S]*return;[\s\S]*\}[\s\S]*if \(event\.data === window\.YT\.PlayerState\.PLAYING\)/,
   "YouTube ad state changes must not pause, advance, or repeat the real playlist track",
