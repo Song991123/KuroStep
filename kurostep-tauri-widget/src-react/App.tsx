@@ -1143,8 +1143,15 @@ function MusicPlayerWidget({
             onStateChange: (event) => {
               if (!window.YT) return;
               const rawDuration = playerRef.current?.getDuration?.() || 0;
-              if (!isLikelyYoutubeAdPlayback(playerRef.current, rawDuration)) {
+              const rawCurrent = playerRef.current?.getCurrentTime?.();
+              const current = Number.isFinite(rawCurrent) ? Number(rawCurrent) : playbackPositionRef.current;
+              const adPlayback = isLikelyYoutubeAdPlayback(playerRef.current, rawDuration, current);
+              if (!adPlayback) {
                 reportDuration(rawDuration);
+              }
+              if (adPlayback) {
+                stalledTickRef.current = 0;
+                return;
               }
               if (event.data === window.YT.PlayerState.PLAYING) {
                 stalledTickRef.current = 0;

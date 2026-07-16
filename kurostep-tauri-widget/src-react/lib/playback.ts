@@ -67,7 +67,7 @@ export function youtubeTitleLooksLikeAd(title: string | null | undefined) {
   return /\b(advertisement|sponsored|commercial)\b|광고/.test(String(title || "").toLowerCase());
 }
 
-function isLikelyAdDuration(seconds: number, expectedSeconds = 0) {
+export function isLikelyYoutubeAdDuration(seconds: number, expectedSeconds = 0) {
   const nextDuration = Number(seconds);
   const expectedDuration = Number(expectedSeconds);
   if (!Number.isFinite(nextDuration) || !Number.isFinite(expectedDuration)) return false;
@@ -87,7 +87,7 @@ export function isLikelyYoutubeAdPlaybackSnapshot(snapshot: YoutubePlaybackSnaps
   const isDifferentVideo = Boolean(activeVideoId && expectedVideoId && activeVideoId !== expectedVideoId);
   const isExpectedVideoActive = Boolean(activeVideoId && expectedVideoId && activeVideoId === expectedVideoId);
   const titleLooksLikeAd = youtubeTitleLooksLikeAd(snapshot.title);
-  const durationLooksLikeAd = isLikelyAdDuration(candidateDuration, expectedDuration);
+  const durationLooksLikeAd = isLikelyYoutubeAdDuration(candidateDuration, expectedDuration);
   const isUnknownShortClipDuringKnownTrack =
     !isExpectedVideoActive &&
     !activeVideoId &&

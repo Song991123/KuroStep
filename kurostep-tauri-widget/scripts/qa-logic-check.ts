@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import {
   chooseLineByPlaybackTime,
   clampLyricSyncOffset,
-  isLikelyYoutubeAdDuration,
   isSameLyricLine,
   isTranslationForLine,
   lyricLineKey,
@@ -14,6 +13,7 @@ import {
 } from "../src-react/lib/lyrics.ts";
 import {
   getNextPlaylistIndex,
+  isLikelyYoutubeAdDuration,
   isLikelyYoutubeAdPlaybackSnapshot,
   nextRepeatMode,
   normalizeTrackDuration,
@@ -217,6 +217,11 @@ assert.match(
   appSource,
   /if \(isAuthExpiredError\(error\)\) \{[\s\S]*clearAuthSession\(\);[\s\S]*return;[\s\S]*\}/,
   "JWT or 401 errors should not keep the stale authenticated workspace mounted",
+);
+assert.match(
+  appSource,
+  /const adPlayback = isLikelyYoutubeAdPlayback\(playerRef\.current, rawDuration, current\);[\s\S]*if \(adPlayback\) \{[\s\S]*stalledTickRef\.current = 0;[\s\S]*return;[\s\S]*\}[\s\S]*if \(event\.data === window\.YT\.PlayerState\.PLAYING\)/,
+  "YouTube ad state changes must not pause, advance, or repeat the real playlist track",
 );
 assert.match(appSource, /autoTranslationEnabledRef/, "auto translation toggle must use a live ref for late async guards");
 assert.match(
