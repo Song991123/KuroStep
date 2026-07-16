@@ -135,6 +135,18 @@ type ApiOptions = RequestInit & {
   timeoutMs?: number;
 };
 
+export class ApiError extends Error {
+  status: number;
+  body: unknown;
+
+  constructor(message: string, status: number, body: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
 export type SavedLyricPiece = {
   id: string;
   lineRefId?: number | null;
@@ -191,6 +203,20 @@ export function authErrorMessage(error: unknown, mode: "login" | "signup") {
   return `${mode === "signup" ? "회원가입" : "로그인"}에 실패했다냥: ${message}`;
 }
 
+export function isAuthExpiredError(error: unknown) {
+  const message = String((error as Error)?.message || "").toLowerCase();
+  const status = error instanceof ApiError ? error.status : 0;
+  return (
+    status === 401 ||
+    status === 403 ||
+    message.includes("jwt") ||
+    message.includes("token") ||
+    message.includes("토큰") ||
+    message.includes("unauthorized") ||
+    message.includes("forbidden")
+  );
+}
+
 export async function api<T>(path: string, options: ApiOptions = {}, auth?: AuthSession | null): Promise<T> {
   const controller = new AbortController();
   let timeoutId: number | undefined;
@@ -220,7 +246,7 @@ export async function api<T>(path: string, options: ApiOptions = {}, auth?: Auth
 
     if (!response.ok) {
       const message = body?.message || body?.error || text || `HTTP ${response.status}`;
-      throw new Error(message);
+      throw new ApiError(message, response.status, body);
     }
 
     return body as T;
