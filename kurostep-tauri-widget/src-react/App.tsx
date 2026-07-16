@@ -1875,6 +1875,16 @@ export default function App() {
 
   useEffect(() => {
     if (!isTauriApp || isEmbeddedContent) return;
+    const heartbeat = () => {
+      reportClientStatus("client-heartbeat", document.body.innerText || document.title || "");
+    };
+    const heartbeatId = window.setInterval(heartbeat, 30000);
+    heartbeat();
+    return () => window.clearInterval(heartbeatId);
+  }, []);
+
+  useEffect(() => {
+    if (!isTauriApp || isEmbeddedContent) return;
     const savePosition = () => saveCurrentWindowPosition(shellView);
     const scheduleSave = () => scheduleCurrentWindowPositionSave(shellView);
     const intervalId = window.setInterval(savePosition, 5000);
