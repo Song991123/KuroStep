@@ -506,6 +506,10 @@ async function main() {
     `auto translation must be Korean and not source echo: ${autoDraft.translatedText}`,
   );
   assert.notEqual(autoDraft.provider, "MANUAL", "auto translation QA must not be satisfied by a previously saved manual memo");
+  assert.ok(
+    ["DEEPL", "GOOGLE"].includes(String(autoDraft.provider || "")),
+    `auto translation should use a higher-quality free provider before falling back to MyMemory: ${autoDraft.provider}`,
+  );
   assert.notEqual(autoDraft.translatedText.trim(), "필수", "MyMemory fallback must not choose a misleading partial-segment translation");
 
   const summary = {
