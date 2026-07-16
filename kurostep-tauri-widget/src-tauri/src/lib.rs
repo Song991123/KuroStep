@@ -30,6 +30,19 @@ struct ClientStatus {
     timestamp_ms: u128,
     windows: Vec<WindowStatus>,
     overlaps: Vec<String>,
+    #[serde(default)]
+    views: HashMap<String, ClientViewStatus>,
+}
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+struct ClientViewStatus {
+    stage: String,
+    authenticated: bool,
+    text: String,
+    current_lyric_context: Option<String>,
+    build_commit: Option<String>,
+    build_time: Option<String>,
+    timestamp_ms: u128,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -1034,6 +1047,22 @@ fn report_client_status(
     build_commit: Option<String>,
     build_time: Option<String>,
 ) -> Result<(), String> {
+    let timestamp_ms = now_ms()?;
+    let mut views = read_client_status(&app)
+        .map(|status| status.views)
+        .unwrap_or_default();
+    views.insert(
+        view.clone(),
+        ClientViewStatus {
+            stage: stage.clone(),
+            authenticated,
+            text: text.clone(),
+            current_lyric_context: current_lyric_context.clone(),
+            build_commit: build_commit.clone(),
+            build_time: build_time.clone(),
+            timestamp_ms,
+        },
+    );
     let status = ClientStatus {
         view,
         stage,
@@ -1042,9 +1071,10 @@ fn report_client_status(
         current_lyric_context,
         build_commit,
         build_time,
-        timestamp_ms: now_ms()?,
+        timestamp_ms,
         windows: snapshot_windows(&app),
         overlaps: visible_window_overlaps(&app),
+        views,
     };
     write_client_status(&app, &status)
 }
@@ -1080,6 +1110,7 @@ fn refresh_client_status_heartbeat(app: &tauri::AppHandle) -> Result<(), String>
         timestamp_ms: 0,
         windows: Vec::new(),
         overlaps: Vec::new(),
+        views: HashMap::new(),
     });
     status.timestamp_ms = now_ms()?;
     status.windows = snapshot_windows(app);

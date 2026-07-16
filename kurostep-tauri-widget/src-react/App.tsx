@@ -394,8 +394,7 @@ function saveCurrentWindowPosition(label = shellView) {
 }
 
 function reportClientStatus(stage: string, text = "") {
-  if (!isTauriApp || isEmbeddedContent) return;
-  void invokeNative("report_client_status", {
+  const payload = {
     view: shellView,
     stage,
     authenticated: Boolean(readJson<AuthSession | null>("kurostep.auth", null)?.accessToken),
@@ -403,7 +402,13 @@ function reportClientStatus(stage: string, text = "") {
     currentLyricContext: window.localStorage.getItem("kurostep.currentLyricContext") || "",
     buildCommit: KUROSTEP_BUILD_COMMIT,
     buildTime: KUROSTEP_BUILD_TIME,
-  }).catch(() => {});
+  };
+  if (isEmbeddedContent) {
+    postShellMessage({ type: "client_status", ...payload });
+    return;
+  }
+  if (!isTauriApp) return;
+  void invokeNative("report_client_status", payload).catch(() => {});
 }
 
 function scheduleCurrentWindowPositionSave(label = shellView) {
