@@ -91,7 +91,8 @@ export function chooseLineByPlaybackTime(
   const sourceLines = source?.lines || [];
   if (!refs.length && !sourceLines.length) return null;
 
-  const positionMs = positionSeconds * 1000 + LYRIC_SYNC_LOOKAHEAD_MS + syncOffsetMs;
+  const rawPositionMs = positionSeconds * 1000 + syncOffsetMs;
+  const positionMs = rawPositionMs + LYRIC_SYNC_LOOKAHEAD_MS;
   const timedRefs = refs
     .filter((line) => Number.isFinite(line.startTimeMs))
     .sort((left, right) => Number(left.startTimeMs) - Number(right.startTimeMs));
@@ -110,7 +111,7 @@ export function chooseLineByPlaybackTime(
     };
   }
   const firstTimedLine = timedSourceLines[0] || timedRefs[0];
-  if (firstTimedLine && positionMs < Number(firstTimedLine.startTimeMs) - 150) {
+  if (firstTimedLine && rawPositionMs < Number(firstTimedLine.startTimeMs) - 100) {
     return null;
   }
   const sourceLine =
