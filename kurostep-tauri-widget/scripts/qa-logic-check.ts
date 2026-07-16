@@ -194,6 +194,8 @@ const apiSource = readFileSync(new URL("../src-react/lib/api.ts", import.meta.ur
 const buildInfoSource = readFileSync(new URL("../src-react/buildInfo.ts", import.meta.url), "utf8");
 const tauriSource = readFileSync(new URL("../src-tauri/src/lib.rs", import.meta.url), "utf8");
 const processHygieneSource = readFileSync(new URL("./qa-process-hygiene.ts", import.meta.url), "utf8");
+const shellSource = readFileSync(new URL("../src/shell.js", import.meta.url), "utf8");
+const lyricsOverlaySource = readFileSync(new URL("../src/lyrics.js", import.meta.url), "utf8");
 const appCss = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const shellCss = readFileSync(new URL("../src/shell.css", import.meta.url), "utf8");
 const lyricsCss = readFileSync(new URL("../src/lyrics.css", import.meta.url), "utf8");
@@ -206,6 +208,15 @@ assert.ok(
   capability.permissions.includes("core:webview:deny-internal-toggle-devtools"),
   "Tauri IPC must deny internal devtools toggling",
 );
+for (const [name, sourceText] of [
+  ["React app", appSource],
+  ["Tauri shell", shellSource],
+  ["lyrics overlay", lyricsOverlaySource],
+] as const) {
+  assert.match(sourceText, /(?:contextmenu[\s\S]*preventDefault|preventDefault[\s\S]*contextmenu)/, `${name} should block context menu access`);
+  assert.match(sourceText, /keydown[\s\S]*blockDeveloperShortcut/, `${name} should install the developer shortcut guard`);
+  assert.match(sourceText, /event\.key === "F12"[\s\S]*event\.preventDefault\(\)[\s\S]*event\.stopPropagation\(\)/, `${name} should block F12 and stop the shortcut event`);
+}
 assert.match(apiSource, /export class ApiError extends Error/, "API errors should preserve HTTP status for auth recovery");
 assert.match(apiSource, /export function isAuthExpiredError/, "auth expiry detection should be shared instead of string-only app catches");
 assert.match(
