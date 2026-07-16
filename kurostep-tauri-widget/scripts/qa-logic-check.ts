@@ -517,6 +517,8 @@ assert.match(nativeSeedSource, /kurostep\.pawWidgetVisible/, "native seed QA sho
 assert.match(nativeSeedSource, /kurostep\.lyricsOverlayVisible/, "native seed QA should turn the lyrics overlay on before installed-app smoke checks");
 assert.match(nativeSeedSource, /kurostep\.currentLyricContext/, "native seed QA should seed a lyric context for native status checks");
 assert.match(nativeSeedSource, /LocalStorage\/localstorage\.sqlite3/, "native seed QA should target WebKit localStorage for the installed Tauri app");
+assert.match(nativeSeedSource, /function assertInstalledAppIsStopped/, "native seed QA should guard against writing WebKit storage while the app is running");
+assert.match(nativeSeedSource, /\/Applications\/KuroStep\.app\/Contents\/MacOS\/KuroStep/, "native seed QA should detect the installed app process before seeding");
 assert.equal(
   packageJson.scripts["qa:process-hygiene"],
   "node --experimental-strip-types scripts/qa-process-hygiene.ts",

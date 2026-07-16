@@ -7,6 +7,7 @@ import { join } from "node:path";
 const API_BASE_URL = process.env.KUROSTEP_QA_API_BASE_URL || "https://54-116-185-226.sslip.io";
 const TIMEOUT_MS = Number(process.env.KUROSTEP_QA_TIMEOUT_MS || 20000);
 const WEBKIT_BUNDLE_ID = process.env.KUROSTEP_WEBKIT_BUNDLE_ID || "com.song991123.kurostep";
+const INSTALLED_APP_COMMAND = "/Applications/KuroStep.app/Contents/MacOS/KuroStep";
 
 type AuthSession = {
   userId: number;
@@ -144,7 +145,33 @@ function insertUtf16Value(dbPath: string, key: string, value: string) {
   ]);
 }
 
+function installedAppProcesses() {
+  const output = execFileSync("ps", ["-axo", "pid=,command="], { encoding: "utf8" });
+  return output
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.includes(INSTALLED_APP_COMMAND))
+    .map((line) => {
+      const match = line.match(/^(\d+)\s+(.+)$/);
+      return {
+        pid: match ? Number(match[1]) : null,
+        command: match?.[2] || line,
+      };
+    });
+}
+
+function assertInstalledAppIsStopped() {
+  const processes = installedAppProcesses();
+  assert.equal(
+    processes.length,
+    0,
+    `Stop /Applications/KuroStep.app before seeding WebKit LocalStorage. Running processes: ${JSON.stringify(processes)}`,
+  );
+}
+
 async function main() {
+  assertInstalledAppIsStopped();
+
   const runId = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
   const date = todayIso();
   const auth = await api<AuthSession>("/api/auth/signup", {
