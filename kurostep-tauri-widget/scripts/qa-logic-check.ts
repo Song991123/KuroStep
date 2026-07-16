@@ -187,9 +187,11 @@ assert.equal(shouldReplayCurrentTrackOnEnded("off", 1), false, "normal mode shou
 
 const tauriConfig = JSON.parse(readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8"));
 const capability = JSON.parse(readFileSync(new URL("../src-tauri/capabilities/default.json", import.meta.url), "utf8"));
+const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const appSource = readFileSync(new URL("../src-react/App.tsx", import.meta.url), "utf8");
 const buildInfoSource = readFileSync(new URL("../src-react/buildInfo.ts", import.meta.url), "utf8");
 const tauriSource = readFileSync(new URL("../src-tauri/src/lib.rs", import.meta.url), "utf8");
+const processHygieneSource = readFileSync(new URL("./qa-process-hygiene.ts", import.meta.url), "utf8");
 const appCss = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const shellCss = readFileSync(new URL("../src/shell.css", import.meta.url), "utf8");
 const lyricsCss = readFileSync(new URL("../src/lyrics.css", import.meta.url), "utf8");
@@ -337,5 +339,13 @@ assert.equal(/scrollIntoView\(\{ block: "center", behavior: "smooth" \}\)/.test(
 assert.match(buildInfoSource, /KUROSTEP_BUILD_COMMIT/, "React build should expose a build commit for installed-app QA");
 assert.match(appSource, /buildCommit:\s*KUROSTEP_BUILD_COMMIT/, "main view should report the React build commit to native status");
 assert.match(tauriSource, /build_commit:\s*Option<String>/, "native status should persist the React build commit");
+assert.equal(
+  packageJson.scripts["qa:process-hygiene"],
+  "node --experimental-strip-types scripts/qa-process-hygiene.ts",
+  "process hygiene QA should be runnable from package scripts",
+);
+assert.match(processHygieneSource, /\/Applications\/KuroStep\.app/, "process hygiene QA should allow the installed app runtime");
+assert.match(processHygieneSource, /tauri dev/, "process hygiene QA should detect stale Tauri dev servers");
+assert.match(processHygieneSource, /GradleDaemon/, "process hygiene QA should detect stale build daemons");
 
 console.log("qa:logic ok");

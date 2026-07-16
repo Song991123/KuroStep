@@ -13,6 +13,7 @@
     "qa:logic": "node --experimental-strip-types scripts/qa-logic-check.ts",
     "qa:korean-live": "node --experimental-strip-types scripts/qa-korean-live.ts",
     "qa:native-status": "node --experimental-strip-types scripts/qa-native-status.ts",
+    "qa:process-hygiene": "node --experimental-strip-types scripts/qa-process-hygiene.ts",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },
