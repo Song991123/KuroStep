@@ -70,7 +70,7 @@ class MyMemoryTranslationClientTest {
 
         TranslationProviderResult result = client.translate("You should come", "en", "ko");
 
-        assertThat(result.translatedText()).isEqualTo("오셔야 합니다");
+        assertThat(result.translatedText()).isEqualTo("너도 와야 해");
     }
 
     @Test

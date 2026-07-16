@@ -34,3 +34,4 @@ kurostep:
     mymemory-base-url: ${KUROSTEP_MYMEMORY_BASE_URL:https://api.mymemory.translated.net}
     deepl-base-url: ${KUROSTEP_DEEPL_BASE_URL:https://api-free.deepl.com}
     deepl-api-key: ${KUROSTEP_DEEPL_API_KEY:}
+    google-base-url: ${KUROSTEP_GOOGLE_TRANSLATE_BASE_URL:https://translate.googleapis.com}
